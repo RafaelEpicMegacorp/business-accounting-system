@@ -86,6 +86,77 @@ const DashboardModel = {
       // Team
       active_employees: parseInt(employees.active_employees || 0)
     };
+  },
+
+  // Get monthly income vs expense data for line chart
+  async getChartData(months = 12) {
+    const result = await pool.query(`
+      SELECT
+        TO_CHAR(entry_date, 'Mon') as month,
+        EXTRACT(YEAR FROM entry_date) as year,
+        EXTRACT(MONTH FROM entry_date) as month_num,
+        type,
+        SUM(total) as total
+      FROM entries
+      WHERE entry_date >= CURRENT_DATE - INTERVAL '${months} months'
+        AND (status = 'completed' OR (status = 'pending' AND entry_date < CURRENT_DATE))
+      GROUP BY EXTRACT(YEAR FROM entry_date), EXTRACT(MONTH FROM entry_date), TO_CHAR(entry_date, 'Mon'), type
+      ORDER BY year, month_num
+    `);
+
+    // Format data for frontend chart
+    const monthsMap = {};
+    result.rows.forEach(row => {
+      const key = `${row.month} ${row.year}`;
+      if (!monthsMap[key]) {
+        monthsMap[key] = { month: row.month, year: row.year, income: 0, expenses: 0 };
+      }
+      if (row.type === 'income') {
+        monthsMap[key].income = parseFloat(row.total);
+      } else {
+        monthsMap[key].expenses = parseFloat(row.total);
+      }
+    });
+
+    return Object.values(monthsMap);
+  },
+
+  // Get category breakdown for pie chart
+  async getCategoryBreakdown(startDate = null, endDate = null) {
+    let query = `
+      SELECT
+        category,
+        SUM(total) as total
+      FROM entries
+      WHERE type = 'expense'
+        AND (status = 'completed' OR (status = 'pending' AND entry_date < CURRENT_DATE))
+    `;
+
+    const params = [];
+    if (startDate) {
+      params.push(startDate);
+      query += ` AND entry_date >= $${params.length}`;
+    }
+    if (endDate) {
+      params.push(endDate);
+      query += ` AND entry_date <= $${params.length}`;
+    }
+
+    query += `
+      GROUP BY category
+      ORDER BY total DESC
+    `;
+
+    const result = await pool.query(query, params);
+
+    // Calculate total for percentages
+    const total = result.rows.reduce((sum, row) => sum + parseFloat(row.total), 0);
+
+    return result.rows.map(row => ({
+      name: row.category,
+      value: parseFloat(row.total),
+      percentage: total > 0 ? ((parseFloat(row.total) / total) * 100).toFixed(1) : 0
+    }));
   }
 };
 

@@ -2,13 +2,35 @@ const pool = require('../config/database');
 
 const EntryModel = {
   // Get all entries, sorted by date (most recent first) with employee info
-  async getAll() {
-    const result = await pool.query(
-      `SELECT e.*, emp.name as employee_name, emp.pay_type
-       FROM entries e
-       LEFT JOIN employees emp ON e.employee_id = emp.id
-       ORDER BY e.entry_date DESC, e.id DESC`
-    );
+  // Supports optional date range filtering
+  async getAll(filters = {}) {
+    const { startDate, endDate } = filters;
+    let query = `
+      SELECT e.*, emp.name as employee_name, emp.pay_type
+      FROM entries e
+      LEFT JOIN employees emp ON e.employee_id = emp.id
+    `;
+
+    const params = [];
+    const conditions = [];
+
+    if (startDate) {
+      params.push(startDate);
+      conditions.push(`e.entry_date >= $${params.length}`);
+    }
+
+    if (endDate) {
+      params.push(endDate);
+      conditions.push(`e.entry_date <= $${params.length}`);
+    }
+
+    if (conditions.length > 0) {
+      query += ` WHERE ${conditions.join(' AND ')}`;
+    }
+
+    query += ` ORDER BY e.entry_date DESC, e.id DESC`;
+
+    const result = await pool.query(query, params);
     return result.rows;
   },
 

@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { TrendingUp, TrendingDown, DollarSign, Users, FileText, Calendar, Briefcase } from 'lucide-react';
 import dashboardService from '../services/dashboardService';
 import entryService from '../services/entryService';
+import IncomeVsExpenseChart from './IncomeVsExpenseChart';
+import CategoryBreakdownChart from './CategoryBreakdownChart';
 
 function DashboardView() {
   const [stats, setStats] = useState(null);
@@ -215,6 +217,12 @@ function DashboardView() {
           </div>
         </div>
       )}
+
+      {/* Charts Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <IncomeVsExpenseChart months={12} />
+        <CategoryBreakdownChart />
+      </div>
     </div>
   );
 }

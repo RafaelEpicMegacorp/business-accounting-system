@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Edit2, DollarSign, TrendingUp, TrendingDown, CheckSquare, Square } from 'lucide-react';
+import { Plus, Trash2, Edit2, DollarSign, TrendingUp, TrendingDown, CheckSquare, Square, Download, X, Filter } from 'lucide-react';
 import entryService from '../services/entryService';
 import contractService from '../services/contractService';
 import EmployeeList from './EmployeeList';
@@ -8,6 +8,7 @@ import ContractList from './ContractList';
 import ContractForm from './ContractForm';
 import DashboardView from './DashboardView';
 import SalaryCalendar from './SalaryCalendar';
+import { exportEntriesToCSV, exportEmployeesToCSV, exportContractsToCSV } from '../utils/csvExport';
 
 export default function AccountingApp() {
   const [currentView, setCurrentView] = useState('dashboard'); // 'dashboard', 'income', 'expenses', 'salaries', 'employees', or 'contracts'
@@ -46,6 +47,10 @@ export default function AccountingApp() {
   // Bulk selection state
   const [selectedEntries, setSelectedEntries] = useState([]);
 
+  // Date filtering state
+  const [dateFilters, setDateFilters] = useState({ startDate: '', endDate: '' });
+  const [showFilters, setShowFilters] = useState(false);
+
   // Employee management state
   const [showEmployeeForm, setShowEmployeeForm] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState(null);
@@ -57,25 +62,25 @@ export default function AccountingApp() {
 
   const categories = ['Employee', 'Administration', 'Software', 'Marketing', 'Equipment', 'Other'];
 
-  // Load entries on mount and when view changes
+  // Load entries on mount and when view or filters change
   useEffect(() => {
     loadEntries();
-  }, [currentView]);
+  }, [currentView, dateFilters]);
 
   const loadEntries = async () => {
     try {
       setLoading(true);
 
-      // Load data based on current view
+      // Load data based on current view with date filters
       let entriesData;
       if (currentView === 'dashboard') {
         entriesData = [];
       } else if (currentView === 'income') {
-        entriesData = await entryService.getIncome();
+        entriesData = await entryService.getIncome(dateFilters);
       } else if (currentView === 'expenses') {
-        entriesData = await entryService.getExpenses();
+        entriesData = await entryService.getExpenses(dateFilters);
       } else if (currentView === 'salaries') {
-        entriesData = await entryService.getSalaries();
+        entriesData = await entryService.getSalaries(dateFilters);
       } else if (currentView === 'contracts') {
         entriesData = [];
         const contractsData = await contractService.getAll();
@@ -408,8 +413,76 @@ export default function AccountingApp() {
 
           {(currentView === 'income' || currentView === 'expenses' || currentView === 'salaries') && (
             <>
+              {/* Filters and Export Toolbar */}
+              <div className="flex flex-wrap items-center gap-3 mt-6 mb-4">
+                <button
+                  onClick={() => setShowFilters(!showFilters)}
+                  className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition"
+                >
+                  <Filter size={18} />
+                  {showFilters ? 'Hide Filters' : 'Show Filters'}
+                </button>
+
+                <button
+                  onClick={() => exportEntriesToCSV(entries)}
+                  className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
+                >
+                  <Download size={18} />
+                  Export to CSV
+                </button>
+
+                {(dateFilters.startDate || dateFilters.endDate) && (
+                  <div className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-lg text-sm">
+                    <span className="font-medium">Active Filters:</span>
+                    {dateFilters.startDate && <span>From: {new Date(dateFilters.startDate).toLocaleDateString()}</span>}
+                    {dateFilters.endDate && <span>To: {new Date(dateFilters.endDate).toLocaleDateString()}</span>}
+                    <button
+                      onClick={() => setDateFilters({ startDate: '', endDate: '' })}
+                      className="ml-2 p-1 hover:bg-blue-100 rounded"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Date Range Filters */}
+              {showFilters && (
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
+                  <h3 className="text-sm font-semibold text-gray-700 mb-3">Filter by Date Range</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Start Date</label>
+                      <input
+                        type="date"
+                        value={dateFilters.startDate}
+                        onChange={(e) => setDateFilters({ ...dateFilters, startDate: e.target.value })}
+                        className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">End Date</label>
+                      <input
+                        type="date"
+                        value={dateFilters.endDate}
+                        onChange={(e) => setDateFilters({ ...dateFilters, endDate: e.target.value })}
+                        className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                    <div className="flex items-end">
+                      <button
+                        onClick={() => setDateFilters({ startDate: '', endDate: '' })}
+                        className="w-full bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700 text-sm"
+                      >
+                        Clear Filters
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Summary Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="bg-green-50 border border-green-200 rounded-lg p-4">
               <div className="flex items-center justify-between">
                 <div>

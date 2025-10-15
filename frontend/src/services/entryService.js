@@ -67,21 +67,33 @@ const entryService = {
     return response.data;
   },
 
-  // Get income entries only
-  async getIncome() {
-    const response = await api.get('/entries/income');
+  // Get income entries only (with optional date filters)
+  async getIncome(filters = {}) {
+    const params = new URLSearchParams();
+    if (filters.startDate) params.append('startDate', filters.startDate);
+    if (filters.endDate) params.append('endDate', filters.endDate);
+    const queryString = params.toString();
+    const response = await api.get(`/entries/income${queryString ? `?${queryString}` : ''}`);
     return response.data;
   },
 
-  // Get non-employee expense entries
-  async getExpenses() {
-    const response = await api.get('/entries/expenses');
+  // Get non-employee expense entries (with optional date filters)
+  async getExpenses(filters = {}) {
+    const params = new URLSearchParams();
+    if (filters.startDate) params.append('startDate', filters.startDate);
+    if (filters.endDate) params.append('endDate', filters.endDate);
+    const queryString = params.toString();
+    const response = await api.get(`/entries/expenses${queryString ? `?${queryString}` : ''}`);
     return response.data;
   },
 
-  // Get salary entries only
-  async getSalaries() {
-    const response = await api.get('/entries/salaries');
+  // Get salary entries only (with optional date filters)
+  async getSalaries(filters = {}) {
+    const params = new URLSearchParams();
+    if (filters.startDate) params.append('startDate', filters.startDate);
+    if (filters.endDate) params.append('endDate', filters.endDate);
+    const queryString = params.toString();
+    const response = await api.get(`/entries/salaries${queryString ? `?${queryString}` : ''}`);
     return response.data;
   },
 

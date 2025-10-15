@@ -1,10 +1,11 @@
 const EntryModel = require('../models/entryModel');
 
 const EntryController = {
-  // GET /api/entries
+  // GET /api/entries?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
   async getAll(req, res, next) {
     try {
-      const entries = await EntryModel.getAll();
+      const { startDate, endDate } = req.query;
+      const entries = await EntryModel.getAll({ startDate, endDate });
       res.json(entries);
     } catch (error) {
       next(error);
