@@ -1,0 +1,794 @@
+import React, { useState, useEffect } from 'react';
+import { Plus, Trash2, Edit2, DollarSign, TrendingUp, TrendingDown, CheckSquare, Square } from 'lucide-react';
+import entryService from '../services/entryService';
+import contractService from '../services/contractService';
+import EmployeeList from './EmployeeList';
+import EmployeeForm from './EmployeeForm';
+import ContractList from './ContractList';
+import ContractForm from './ContractForm';
+import DashboardView from './DashboardView';
+import SalaryCalendar from './SalaryCalendar';
+
+export default function AccountingApp() {
+  const [currentView, setCurrentView] = useState('dashboard'); // 'dashboard', 'income', 'expenses', 'salaries', 'employees', or 'contracts'
+  const [entries, setEntries] = useState([]);
+  const [totals, setTotals] = useState({
+    total_income: '0',
+    total_expenses: '0',
+    net_balance: '0',
+    pending_income: '0',
+    pending_expenses: '0'
+  });
+  const [forecast, setForecast] = useState({
+    current_balance: '0',
+    weekly_payments: '0',
+    monthly_payments: '0',
+    total_forecasted_expenses: '0',
+    forecasted_balance: '0',
+    weeks_remaining: 0,
+    days_remaining: 0
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [formData, setFormData] = useState({
+    type: 'expense',
+    category: 'Employee',
+    description: '',
+    detail: '',
+    baseAmount: '',
+    total: '',
+    entryDate: new Date().toISOString().split('T')[0],
+    status: 'completed'
+  });
+
+  // Bulk selection state
+  const [selectedEntries, setSelectedEntries] = useState([]);
+
+  // Employee management state
+  const [showEmployeeForm, setShowEmployeeForm] = useState(false);
+  const [editingEmployee, setEditingEmployee] = useState(null);
+
+  // Contract management state
+  const [contracts, setContracts] = useState([]);
+  const [showContractForm, setShowContractForm] = useState(false);
+  const [editingContract, setEditingContract] = useState(null);
+
+  const categories = ['Employee', 'Administration', 'Software', 'Marketing', 'Equipment', 'Other'];
+
+  // Load entries on mount and when view changes
+  useEffect(() => {
+    loadEntries();
+  }, [currentView]);
+
+  const loadEntries = async () => {
+    try {
+      setLoading(true);
+
+      // Load data based on current view
+      let entriesData;
+      if (currentView === 'dashboard') {
+        entriesData = [];
+      } else if (currentView === 'income') {
+        entriesData = await entryService.getIncome();
+      } else if (currentView === 'expenses') {
+        entriesData = await entryService.getExpenses();
+      } else if (currentView === 'salaries') {
+        entriesData = await entryService.getSalaries();
+      } else if (currentView === 'contracts') {
+        entriesData = [];
+        const contractsData = await contractService.getAll();
+        setContracts(contractsData);
+      } else {
+        entriesData = [];
+      }
+
+      const [totalsData, forecastData] = await Promise.all([
+        entryService.getTotals(),
+        entryService.getForecast()
+      ]);
+
+      setEntries(entriesData);
+      setTotals(totalsData);
+      setForecast(forecastData);
+      setSelectedEntries([]); // Clear selections on reload
+      setError(null);
+    } catch (err) {
+      setError('Failed to load data. Please try again.');
+      console.error('Load error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!formData.description || !formData.baseAmount || !formData.total) {
+      alert('Please fill in all required fields');
+      return;
+    }
+
+    try {
+      if (editingId) {
+        await entryService.update(editingId, formData);
+      } else {
+        await entryService.create(formData);
+      }
+      await loadEntries();
+      resetForm();
+    } catch (err) {
+      alert('Failed to save entry. Please try again.');
+      console.error('Save error:', err);
+    }
+  };
+
+  const resetForm = () => {
+    setFormData({
+      type: 'expense',
+      category: 'Employee',
+      description: '',
+      detail: '',
+      baseAmount: '',
+      total: '',
+      entryDate: new Date().toISOString().split('T')[0],
+      status: 'completed'
+    });
+    setShowForm(false);
+    setEditingId(null);
+  };
+
+  const handleEdit = (entry) => {
+    setFormData({
+      type: entry.type,
+      category: entry.category,
+      description: entry.description,
+      detail: entry.detail || '',
+      baseAmount: entry.base_amount,
+      total: entry.total,
+      entryDate: entry.entry_date.split('T')[0],
+      status: entry.status || 'completed'
+    });
+    setEditingId(entry.id);
+    setShowForm(true);
+  };
+
+  const handleDelete = async (id) => {
+    if (window.confirm('Are you sure you want to delete this entry?')) {
+      try {
+        await entryService.delete(id);
+        await loadEntries();
+      } catch (err) {
+        alert('Failed to delete entry. Please try again.');
+        console.error('Delete error:', err);
+      }
+    }
+  };
+
+  // Calculate totals from completed entries only
+  // Use totals from API (includes auto-calculation for past pending entries)
+  const totalIncome = parseFloat(totals.total_income || 0);
+  const totalExpenses = parseFloat(totals.total_expenses || 0);
+  const netBalance = parseFloat(totals.net_balance || 0);
+
+  // Forecast data
+  const weeklyPayments = parseFloat(forecast.weekly_payments || 0);
+  const monthlyPayments = parseFloat(forecast.monthly_payments || 0);
+  const totalForecastedExpenses = parseFloat(forecast.total_forecasted_expenses || 0);
+  const forecastedBalance = parseFloat(forecast.forecasted_balance || 0);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-6 max-w-md">
+          <h2 className="text-red-800 font-bold text-xl mb-2">Error</h2>
+          <p className="text-red-600 mb-4">{error}</p>
+          <button
+            onClick={loadEntries}
+            className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const handleEmployeeEdit = (employee = null) => {
+    setEditingEmployee(employee);
+    setShowEmployeeForm(true);
+  };
+
+  const handleEmployeeFormClose = () => {
+    setShowEmployeeForm(false);
+    setEditingEmployee(null);
+  };
+
+  // Contract handlers
+  const handleContractEdit = (contract = null) => {
+    setEditingContract(contract);
+    setShowContractForm(true);
+  };
+
+  const handleContractSave = async (contractData) => {
+    try {
+      if (editingContract) {
+        await contractService.update(editingContract.id, contractData);
+      } else {
+        await contractService.create(contractData);
+      }
+      await loadEntries();
+      setShowContractForm(false);
+      setEditingContract(null);
+    } catch (err) {
+      alert('Failed to save contract. Please try again.');
+      console.error('Contract save error:', err);
+    }
+  };
+
+  const handleContractDelete = async (id) => {
+    if (window.confirm('Are you sure you want to delete this contract?')) {
+      try {
+        await contractService.delete(id);
+        await loadEntries();
+      } catch (err) {
+        alert('Failed to delete contract. Please try again.');
+        console.error('Contract delete error:', err);
+      }
+    }
+  };
+
+  // Bulk selection handlers
+  const toggleEntrySelection = (id) => {
+    setSelectedEntries(prev =>
+      prev.includes(id) ? prev.filter(entryId => entryId !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedEntries.length === entries.length) {
+      setSelectedEntries([]);
+    } else {
+      setSelectedEntries(entries.map(e => e.id));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    // Count contract entries in selection
+    const contractEntries = entries.filter(e => selectedEntries.includes(e.id) && e.contract_id);
+    const warningMessage = contractEntries.length > 0
+      ? `Are you sure you want to delete ${selectedEntries.length} entries?\n\nThis includes ${contractEntries.length} contract-generated entries. These entries can be regenerated from the Contracts tab if needed.`
+      : `Are you sure you want to delete ${selectedEntries.length} entries?`;
+
+    if (!window.confirm(warningMessage)) {
+      return;
+    }
+
+    try {
+      const result = await entryService.bulkDelete(selectedEntries);
+      if (result.failed.length > 0) {
+        alert(`Deleted ${result.affected} entries. Failed to delete ${result.failed.length} entries:\n${result.failed.map(f => `ID ${f.id}: ${f.reason}`).join('\n')}`);
+      } else {
+        alert(`Successfully deleted ${result.affected} entries.`);
+      }
+      await loadEntries();
+    } catch (err) {
+      alert('Failed to delete entries. Please try again.');
+      console.error('Bulk delete error:', err);
+    }
+  };
+
+  const handleBulkUpdateStatus = async (status) => {
+    if (!window.confirm(`Are you sure you want to mark ${selectedEntries.length} entries as ${status}?`)) {
+      return;
+    }
+
+    try {
+      const result = await entryService.bulkUpdateStatus(selectedEntries, status);
+      if (result.failed.length > 0) {
+        alert(`Updated ${result.affected} entries. Failed to update ${result.failed.length} entries:\n${result.failed.map(f => `ID ${f.id}: ${f.reason}`).join('\n')}`);
+      } else {
+        alert(`Successfully updated ${result.affected} entries to ${status}.`);
+      }
+      await loadEntries();
+    } catch (err) {
+      alert('Failed to update entries. Please try again.');
+      console.error('Bulk update error:', err);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50 p-6">
+      <div className="max-w-7xl mx-auto">
+        {/* Header Section */}
+        <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+          <div className="flex justify-between items-center mb-6">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">Business Accounting</h1>
+              <p className="text-gray-600 mt-1">Track your income, expenses, and employees</p>
+            </div>
+            {(currentView === 'income' || currentView === 'expenses' || currentView === 'salaries') && (
+              <button
+                onClick={() => setShowForm(!showForm)}
+                className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition"
+              >
+                <Plus size={20} />
+                Add Entry
+              </button>
+            )}
+            {currentView === 'contracts' && (
+              <button
+                onClick={() => handleContractEdit(null)}
+                className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition"
+              >
+                <Plus size={20} />
+                Add Contract
+              </button>
+            )}
+            {currentView === 'dashboard' && (
+              <div className="text-sm text-gray-600">
+                Overview of all metrics and forecasts
+              </div>
+            )}
+          </div>
+
+          {/* Navigation Tabs */}
+          <div className="flex gap-2 border-b border-gray-200">
+            <button
+              onClick={() => setCurrentView('dashboard')}
+              className={`px-4 py-2 font-medium transition ${
+                currentView === 'dashboard'
+                  ? 'text-blue-600 border-b-2 border-blue-600'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Dashboard
+            </button>
+            <button
+              onClick={() => setCurrentView('income')}
+              className={`px-4 py-2 font-medium transition ${
+                currentView === 'income'
+                  ? 'text-blue-600 border-b-2 border-blue-600'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Income
+            </button>
+            <button
+              onClick={() => setCurrentView('expenses')}
+              className={`px-4 py-2 font-medium transition ${
+                currentView === 'expenses'
+                  ? 'text-blue-600 border-b-2 border-blue-600'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Expenses
+            </button>
+            <button
+              onClick={() => setCurrentView('salaries')}
+              className={`px-4 py-2 font-medium transition ${
+                currentView === 'salaries'
+                  ? 'text-blue-600 border-b-2 border-blue-600'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Salaries
+            </button>
+            <button
+              onClick={() => setCurrentView('contracts')}
+              className={`px-4 py-2 font-medium transition ${
+                currentView === 'contracts'
+                  ? 'text-blue-600 border-b-2 border-blue-600'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Contracts
+            </button>
+            <button
+              onClick={() => setCurrentView('employees')}
+              className={`px-4 py-2 font-medium transition ${
+                currentView === 'employees'
+                  ? 'text-blue-600 border-b-2 border-blue-600'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Employees
+            </button>
+          </div>
+
+          {(currentView === 'income' || currentView === 'expenses' || currentView === 'salaries') && (
+            <>
+              {/* Summary Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-green-600 font-medium">Actual Income</p>
+                  <p className="text-xs text-green-500 mt-0.5">Received</p>
+                  <p className="text-2xl font-bold text-green-700 mt-1">
+                    ${totalIncome.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  </p>
+                </div>
+                <TrendingUp className="text-green-600" size={32} />
+              </div>
+            </div>
+
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-red-600 font-medium">Actual Expenses</p>
+                  <p className="text-xs text-red-500 mt-0.5">Paid</p>
+                  <p className="text-2xl font-bold text-red-700 mt-1">
+                    ${totalExpenses.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  </p>
+                </div>
+                <TrendingDown className="text-red-600" size={32} />
+              </div>
+            </div>
+
+            <div className={`${netBalance >= 0 ? 'bg-blue-50 border-blue-200' : 'bg-orange-50 border-orange-200'} border rounded-lg p-4`}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className={`text-sm font-medium ${netBalance >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>
+                    Actual Balance
+                  </p>
+                  <p className={`text-xs ${netBalance >= 0 ? 'text-blue-500' : 'text-orange-500'} mt-0.5`}>Current</p>
+                  <p className={`text-2xl font-bold mt-1 ${netBalance >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>
+                    ${netBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  </p>
+                </div>
+                <DollarSign className={netBalance >= 0 ? 'text-blue-600' : 'text-orange-600'} size={32} />
+              </div>
+            </div>
+
+            <div className={`${forecastedBalance >= 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'} border rounded-lg p-4`}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className={`text-sm font-medium ${forecastedBalance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    End-of-Month Forecast
+                  </p>
+                  <p className={`text-xs ${forecastedBalance >= 0 ? 'text-green-500' : 'text-red-500'} mt-0.5`}>
+                    {forecast.weeks_remaining} weeks remaining
+                  </p>
+                  <p className={`text-2xl font-bold mt-1 ${forecastedBalance >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                    ${forecastedBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  </p>
+                  <div className="mt-2 text-xs text-gray-600">
+                    <div>Weekly: ${weeklyPayments.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+                    <div>Monthly: ${monthlyPayments.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+                  </div>
+                </div>
+                <DollarSign className={forecastedBalance >= 0 ? 'text-green-600' : 'text-red-600'} size={32} />
+              </div>
+            </div>
+          </div>
+            </>
+          )}
+        </div>
+
+        {/* Dashboard View */}
+        {currentView === 'dashboard' && (
+          <DashboardView />
+        )}
+
+        {/* Employee View */}
+        {currentView === 'employees' && (
+          <EmployeeList
+            onEmployeeSelect={null}
+            onEdit={handleEmployeeEdit}
+          />
+        )}
+
+        {/* Contracts View */}
+        {currentView === 'contracts' && (
+          <ContractList
+            contracts={contracts}
+            onEdit={handleContractEdit}
+            onDelete={handleContractDelete}
+          />
+        )}
+
+        {/* Employee Form Modal */}
+        {showEmployeeForm && (
+          <EmployeeForm
+            employee={editingEmployee}
+            onClose={handleEmployeeFormClose}
+            onSuccess={loadEntries}
+          />
+        )}
+
+        {/* Contract Form Modal */}
+        {showContractForm && (
+          <ContractForm
+            contract={editingContract}
+            onSave={handleContractSave}
+            onCancel={() => {
+              setShowContractForm(false);
+              setEditingContract(null);
+            }}
+          />
+        )}
+
+        {(currentView === 'income' || currentView === 'expenses' || currentView === 'salaries') && (
+          <>
+            {/* Entry Form with Date Picker */}
+        {showForm && (
+          <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">
+              {editingId ? 'Edit Entry' : 'Add New Entry'}
+            </h2>
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                  <select
+                    value={formData.type}
+                    onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="expense">Expense</option>
+                    <option value="income">Income</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                  <input
+                    type="date"
+                    value={formData.entryDate}
+                    onChange={(e) => setFormData({ ...formData, entryDate: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                  <select
+                    value={formData.status}
+                    onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="completed">Completed (Received/Paid)</option>
+                    <option value="pending">Pending (Scheduled)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                  <select
+                    value={formData.category}
+                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    {categories.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                  <input
+                    type="text"
+                    value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="e.g., John Doe, Office Rent"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Detail (optional)</label>
+                  <input
+                    type="text"
+                    value={formData.detail}
+                    onChange={(e) => setFormData({ ...formData, detail: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Additional details"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Base Amount</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={formData.baseAmount}
+                    onChange={(e) => setFormData({ ...formData, baseAmount: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="0.00"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Total (with taxes/fees)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={formData.total}
+                    onChange={(e) => setFormData({ ...formData, total: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="0.00"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={handleSubmit}
+                  className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition"
+                >
+                  {editingId ? 'Update Entry' : 'Add Entry'}
+                </button>
+                <button
+                  onClick={resetForm}
+                  className="bg-gray-200 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-300 transition"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Salary Calendar View */}
+        {currentView === 'salaries' ? (
+          <SalaryCalendar
+            entries={entries}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
+          />
+        ) : (
+          <>
+            {/* Bulk Actions Toolbar */}
+            {selectedEntries.length > 0 && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4 flex items-center justify-between">
+                <span className="text-blue-700 font-medium">{selectedEntries.length} entries selected</span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleBulkUpdateStatus('completed')}
+                    className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 text-sm"
+                  >
+                    Mark Completed
+                  </button>
+                  <button
+                    onClick={() => handleBulkUpdateStatus('pending')}
+                    className="bg-yellow-600 text-white px-4 py-2 rounded hover:bg-yellow-700 text-sm"
+                  >
+                    Mark Pending
+                  </button>
+                  <button
+                    onClick={handleBulkDelete}
+                    className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 text-sm"
+                  >
+                    Delete Selected
+                  </button>
+                  <button
+                    onClick={() => setSelectedEntries([])}
+                    className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600 text-sm"
+                  >
+                    Clear Selection
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Entries Table with Date Column */}
+            <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <button onClick={toggleSelectAll} className="hover:text-gray-700">
+                      {selectedEntries.length === entries.length && entries.length > 0 ? (
+                        <CheckSquare size={18} />
+                      ) : (
+                        <Square size={18} />
+                      )}
+                    </button>
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Detail</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Base Amount</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {entries.map((entry) => (
+                  <tr key={entry.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap text-center">
+                      <button onClick={() => toggleEntrySelection(entry.id)} className="hover:text-blue-600">
+                        {selectedEntries.includes(entry.id) ? (
+                          <CheckSquare size={18} className="text-blue-600" />
+                        ) : (
+                          <Square size={18} />
+                        )}
+                      </button>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {new Date(entry.entry_date).toLocaleDateString()}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        entry.status === 'completed'
+                          ? 'bg-blue-100 text-blue-800'
+                          : 'bg-yellow-100 text-yellow-800'
+                      }`}>
+                        {entry.status === 'completed' ? '✓ Completed' : '⏳ Pending'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        entry.type === 'income'
+                          ? 'bg-green-100 text-green-800'
+                          : 'bg-red-100 text-red-800'
+                      }`}>
+                        {entry.type}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {entry.category}
+                      {entry.contract_id && (
+                        <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
+                          Contract
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{entry.description}</td>
+                    <td className="px-6 py-4 text-sm text-gray-600">{entry.detail}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
+                      ${parseFloat(entry.base_amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 text-right">
+                      ${parseFloat(entry.total).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      {entry.contract_id ? (
+                        <span className="text-gray-400 text-xs">Contract-generated</span>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => handleEdit(entry)}
+                            className="text-blue-600 hover:text-blue-900 mr-3"
+                          >
+                            <Edit2 size={16} />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(entry.id)}
+                            className="text-red-600 hover:text-red-900"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+          </>
+        )}
+        </>
+        )}
+      </div>
+    </div>
+  );
+}
