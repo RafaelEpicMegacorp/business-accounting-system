@@ -1,7 +1,36 @@
-import AccountingApp from './components/AccountingApp'
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import Login from './components/Login';
+import AccountingApp from './components/AccountingApp';
+import ProtectedRoute from './components/ProtectedRoute';
 
-function App() {
-  return <AccountingApp />
+function AppRoutes() {
+  const { login } = useAuth();
+
+  return (
+    <Routes>
+      <Route path="/login" element={<Login onLoginSuccess={login} />} />
+      <Route
+        path="/*"
+        element={
+          <ProtectedRoute>
+            <AccountingApp />
+          </ProtectedRoute>
+        }
+      />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
 }
 
-export default App
+function App() {
+  return (
+    <AuthProvider>
+      <Router>
+        <AppRoutes />
+      </Router>
+    </AuthProvider>
+  );
+}
+
+export default App;

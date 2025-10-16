@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Edit2, DollarSign, TrendingUp, TrendingDown, CheckSquare, Square, Download, X, Filter } from 'lucide-react';
+import { Plus, Trash2, Edit2, DollarSign, TrendingUp, TrendingDown, CheckSquare, Square, Download, X, Filter, LogOut } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 import entryService from '../services/entryService';
 import contractService from '../services/contractService';
 import EmployeeList from './EmployeeList';
@@ -11,6 +12,7 @@ import SalaryCalendar from './SalaryCalendar';
 import { exportEntriesToCSV, exportEmployeesToCSV, exportContractsToCSV } from '../utils/csvExport';
 
 export default function AccountingApp() {
+  const { user, logout } = useAuth();
   const [currentView, setCurrentView] = useState('dashboard'); // 'dashboard', 'income', 'expenses', 'salaries', 'employees', or 'contracts'
   const [entries, setEntries] = useState([]);
   const [totals, setTotals] = useState({
@@ -322,6 +324,20 @@ export default function AccountingApp() {
               <h1 className="text-3xl font-bold text-gray-900">Business Accounting</h1>
               <p className="text-gray-600 mt-1">Track your income, expenses, and employees</p>
             </div>
+            <div className="flex items-center gap-4">
+              <div className="text-right">
+                <p className="text-sm text-gray-600">Logged in as</p>
+                <p className="font-medium text-gray-900">{user?.name || user?.username}</p>
+              </div>
+              <button
+                onClick={logout}
+                className="flex items-center gap-2 bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition"
+              >
+                <LogOut size={18} />
+                Logout
+              </button>
+            </div>
+            <div className="hidden">{/* Spacer for original button layout */}</div>
             {(currentView === 'income' || currentView === 'expenses' || currentView === 'salaries') && (
               <button
                 onClick={() => setShowForm(!showForm)}

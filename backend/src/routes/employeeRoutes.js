@@ -1,6 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const EmployeeController = require('../controllers/employeeController');
+const authMiddleware = require('../middleware/auth');
+
+// Apply auth middleware to all routes
+router.use(authMiddleware);
 
 // Bulk operations (must come before parameterized routes)
 router.delete('/bulk', EmployeeController.bulkDelete);
