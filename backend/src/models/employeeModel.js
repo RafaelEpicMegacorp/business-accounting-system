@@ -28,25 +28,48 @@ const EmployeeModel = {
 
   // Create new employee
   async create(employee) {
-    const { name, email, payType, payRate, payMultiplier, startDate } = employee;
+    const {
+      name, email, payType, payRate, payMultiplier, startDate,
+      role, birthday, location, linkedinUrl, cvUrl,
+      contractSigned, ndaSigned, fullTime, comments
+    } = employee;
     const result = await pool.query(
-      `INSERT INTO employees (name, email, pay_type, pay_rate, pay_multiplier, start_date, is_active)
-       VALUES ($1, $2, $3, $4, $5, $6, true)
+      `INSERT INTO employees (
+        name, email, pay_type, pay_rate, pay_multiplier, start_date, is_active,
+        role, birthday, location, linkedin_url, cv_url,
+        contract_signed, nda_signed, full_time, comments
+      )
+       VALUES ($1, $2, $3, $4, $5, $6, true, $7, $8, $9, $10, $11, $12, $13, $14, $15)
        RETURNING *`,
-      [name, email || null, payType, payRate, payMultiplier || 1.0, startDate || new Date()]
+      [
+        name, email || null, payType, payRate, payMultiplier || 1.0, startDate || new Date(),
+        role || null, birthday || null, location || null, linkedinUrl || null, cvUrl || null,
+        contractSigned || false, ndaSigned || false, fullTime !== undefined ? fullTime : true, comments || null
+      ]
     );
     return result.rows[0];
   },
 
   // Update employee
   async update(id, employee) {
-    const { name, email, payType, payRate, payMultiplier, startDate } = employee;
+    const {
+      name, email, payType, payRate, payMultiplier, startDate,
+      role, birthday, location, linkedinUrl, cvUrl,
+      contractSigned, ndaSigned, fullTime, comments
+    } = employee;
     const result = await pool.query(
       `UPDATE employees
-       SET name = $1, email = $2, pay_type = $3, pay_rate = $4, pay_multiplier = $5, start_date = $6
-       WHERE id = $7
+       SET name = $1, email = $2, pay_type = $3, pay_rate = $4, pay_multiplier = $5, start_date = $6,
+           role = $7, birthday = $8, location = $9, linkedin_url = $10, cv_url = $11,
+           contract_signed = $12, nda_signed = $13, full_time = $14, comments = $15
+       WHERE id = $16
        RETURNING *`,
-      [name, email || null, payType, payRate, payMultiplier || 1.0, startDate, id]
+      [
+        name, email || null, payType, payRate, payMultiplier || 1.0, startDate,
+        role || null, birthday || null, location || null, linkedinUrl || null, cvUrl || null,
+        contractSigned || false, ndaSigned || false, fullTime !== undefined ? fullTime : true, comments || null,
+        id
+      ]
     );
     return result.rows[0];
   },

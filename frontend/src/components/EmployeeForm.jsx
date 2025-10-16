@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, DollarSign, Calendar, Mail, User, TrendingUp } from 'lucide-react';
+import { X, DollarSign, Calendar, Mail, User, TrendingUp, Briefcase, MapPin, Linkedin, FileText, CheckCircle, MessageSquare } from 'lucide-react';
 import employeeService from '../services/employeeService';
 
 export default function EmployeeForm({ employee, onClose, onSuccess }) {
@@ -9,7 +9,16 @@ export default function EmployeeForm({ employee, onClose, onSuccess }) {
     payType: 'monthly',
     payRate: '',
     payMultiplier: '1.12',
-    startDate: new Date().toISOString().split('T')[0]
+    startDate: new Date().toISOString().split('T')[0],
+    role: '',
+    birthday: '',
+    location: '',
+    linkedinUrl: '',
+    cvUrl: '',
+    contractSigned: false,
+    ndaSigned: false,
+    fullTime: true,
+    comments: ''
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -22,14 +31,23 @@ export default function EmployeeForm({ employee, onClose, onSuccess }) {
         payType: employee.pay_type || 'monthly',
         payRate: employee.pay_rate || '',
         payMultiplier: employee.pay_multiplier || '1.12',
-        startDate: employee.start_date ? new Date(employee.start_date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+        startDate: employee.start_date ? new Date(employee.start_date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+        role: employee.role || '',
+        birthday: employee.birthday ? new Date(employee.birthday).toISOString().split('T')[0] : '',
+        location: employee.location || '',
+        linkedinUrl: employee.linkedin_url || '',
+        cvUrl: employee.cv_url || '',
+        contractSigned: employee.contract_signed || false,
+        ndaSigned: employee.nda_signed || false,
+        fullTime: employee.full_time !== undefined ? employee.full_time : true,
+        comments: employee.comments || ''
       });
     }
   }, [employee]);
 
   const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    const { name, value, type, checked } = e.target;
+    setFormData(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
   };
 
   const calculateTotal = () => {
@@ -221,6 +239,163 @@ export default function EmployeeForm({ employee, onClose, onSuccess }) {
                   ? '⚠️ Editing start date will affect severance calculations'
                   : 'When did this employee start working?'}
               </p>
+            </div>
+
+            {/* Section Divider */}
+            <div className="border-t border-gray-300 pt-4 mt-2">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Additional Information</h3>
+            </div>
+
+            {/* Role */}
+            <div>
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-1">
+                <Briefcase size={16} />
+                Role / Position
+              </label>
+              <input
+                type="text"
+                name="role"
+                value={formData.role}
+                onChange={handleChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="e.g., Senior Developer, Marketing Manager"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              {/* Birthday */}
+              <div>
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-1">
+                  <Calendar size={16} />
+                  Birthday
+                </label>
+                <input
+                  type="date"
+                  name="birthday"
+                  value={formData.birthday}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
+              {/* Location */}
+              <div>
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-1">
+                  <MapPin size={16} />
+                  Location
+                </label>
+                <input
+                  type="text"
+                  name="location"
+                  value={formData.location}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="City, Country"
+                />
+              </div>
+            </div>
+
+            {/* LinkedIn URL */}
+            <div>
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-1">
+                <Linkedin size={16} />
+                LinkedIn Profile
+              </label>
+              <input
+                type="url"
+                name="linkedinUrl"
+                value={formData.linkedinUrl}
+                onChange={handleChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="https://linkedin.com/in/username"
+              />
+            </div>
+
+            {/* CV URL */}
+            <div>
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-1">
+                <FileText size={16} />
+                CV / Resume URL
+              </label>
+              <input
+                type="url"
+                name="cvUrl"
+                value={formData.cvUrl}
+                onChange={handleChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Link to CV or resume file"
+              />
+            </div>
+
+            {/* Checkboxes Section */}
+            <div className="border-t border-gray-300 pt-4 mt-2">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Status & Documents</h3>
+            </div>
+
+            <div className="space-y-3">
+              {/* Contract Signed */}
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  id="contractSigned"
+                  name="contractSigned"
+                  checked={formData.contractSigned}
+                  onChange={handleChange}
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <label htmlFor="contractSigned" className="flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer">
+                  <CheckCircle size={16} />
+                  Contract Signed
+                </label>
+              </div>
+
+              {/* NDA Signed */}
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  id="ndaSigned"
+                  name="ndaSigned"
+                  checked={formData.ndaSigned}
+                  onChange={handleChange}
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <label htmlFor="ndaSigned" className="flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer">
+                  <CheckCircle size={16} />
+                  NDA Signed
+                </label>
+              </div>
+
+              {/* Full Time */}
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  id="fullTime"
+                  name="fullTime"
+                  checked={formData.fullTime}
+                  onChange={handleChange}
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <label htmlFor="fullTime" className="flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer">
+                  <CheckCircle size={16} />
+                  Full-Time Employee
+                </label>
+              </div>
+            </div>
+
+            {/* Comments */}
+            <div>
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-1">
+                <MessageSquare size={16} />
+                Comments / Notes
+              </label>
+              <textarea
+                name="comments"
+                value={formData.comments}
+                onChange={handleChange}
+                rows="4"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Any additional notes about this employee..."
+              />
             </div>
           </div>
 
