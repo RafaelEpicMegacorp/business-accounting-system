@@ -53,38 +53,71 @@ class WiseService {
   /**
    * Get transactions for a specific balance account
    * @param {number} balanceId - The balance account ID
+   * @param {string} currency - The currency code (e.g., 'EUR', 'USD', 'GBP')
    * @param {Object} options - Query options
    * @param {string} options.intervalStart - Start date (ISO 8601)
    * @param {string} options.intervalEnd - End date (ISO 8601)
-   * @param {string} options.type - Transaction type ('CREDIT', 'DEBIT', or 'ALL')
-   * @param {number} options.limit - Max results per page (default 100)
+   * @param {string} options.type - Transaction type ('COMPACT' or 'FLAT')
    * @returns {Promise<Object>} Transactions data with pagination
    */
-  async getBalanceTransactions(balanceId, options = {}) {
+  async getBalanceTransactions(balanceId, currency, options = {}) {
     try {
       const params = {
+        currency: currency,
         intervalStart: options.intervalStart || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(), // Last 30 days
         intervalEnd: options.intervalEnd || new Date().toISOString(),
-        type: options.type || 'ALL',
-        limit: options.limit || 100,
-        offset: options.offset || 0
+        type: options.type || 'COMPACT'
       };
 
       const response = await this.client.get(
-        `/v1/profiles/${this.profileId}/balance-accounts/${balanceId}/statement.json`,
+        `/v1/profiles/${this.profileId}/balance-statements/${balanceId}/statement.json`,
         { params }
       );
 
       return response.data;
     } catch (error) {
-      console.error(`Error fetching transactions for balance ${balanceId}:`, error.message);
+      console.error(`Error fetching transactions for balance ${balanceId} (${currency}):`, error.message);
       throw new Error(`Failed to fetch transactions: ${error.message}`);
     }
   }
 
   /**
+   * Split a date range into chunks of max 469 days each (Wise API limitation)
+   * @param {string} start - Start date ISO string
+   * @param {string} end - End date ISO string
+   * @returns {Array<{intervalStart: string, intervalEnd: string}>} Array of date range chunks
+   */
+  splitDateRange(start, end) {
+    const maxDays = 469;
+    const chunks = [];
+
+    let currentStart = new Date(start);
+    const endDate = new Date(end);
+
+    while (currentStart < endDate) {
+      let currentEnd = new Date(currentStart);
+      currentEnd.setDate(currentEnd.getDate() + maxDays);
+
+      if (currentEnd > endDate) {
+        currentEnd = endDate;
+      }
+
+      chunks.push({
+        intervalStart: currentStart.toISOString(),
+        intervalEnd: currentEnd.toISOString()
+      });
+
+      // Move to next chunk (add 1 day to avoid overlap)
+      currentStart = new Date(currentEnd);
+      currentStart.setDate(currentStart.getDate() + 1);
+    }
+
+    return chunks;
+  }
+
+  /**
    * Get all transactions across all balance accounts
-   * @param {Object} options - Query options (intervalStart, intervalEnd, type, limit)
+   * @param {Object} options - Query options (intervalStart, intervalEnd, type)
    * @returns {Promise<Array>} Combined list of all transactions
    */
   async getAllTransactions(options = {}) {
@@ -92,19 +125,52 @@ class WiseService {
       // Get all balance accounts first
       const balances = await this.getBalanceAccounts();
 
-      // Fetch transactions for each balance account
-      const transactionPromises = balances.map(balance =>
-        this.getBalanceTransactions(balance.id, options)
-          .catch(err => {
-            console.error(`Failed to fetch transactions for balance ${balance.id}:`, err.message);
-            return { transactions: [] }; // Return empty array on error
-          })
-      );
+      console.log(`Found ${balances.length} balance accounts to sync`);
 
-      const results = await Promise.all(transactionPromises);
+      const intervalStart = options.intervalStart || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+      const intervalEnd = options.intervalEnd || new Date().toISOString();
 
-      // Combine all transactions
-      const allTransactions = results.flatMap(result => result.transactions || []);
+      // Check if date range exceeds 469 days and split if needed
+      const dateRangeChunks = this.splitDateRange(intervalStart, intervalEnd);
+
+      if (dateRangeChunks.length > 1) {
+        console.log(`Date range exceeds 469 days, splitting into ${dateRangeChunks.length} chunks`);
+      }
+
+      const allTransactions = [];
+
+      // Fetch transactions for each balance account and each date range chunk
+      for (const balance of balances) {
+        // Extract currency from balance object
+        const currency = balance.currency;
+        if (!currency) {
+          console.warn(`Balance ${balance.id} has no currency, skipping`);
+          continue;
+        }
+
+        console.log(`Fetching transactions for balance ${balance.id} (${currency})`);
+
+        // Fetch all date range chunks for this balance
+        for (const chunk of dateRangeChunks) {
+          try {
+            const result = await this.getBalanceTransactions(balance.id, currency, {
+              ...options,
+              intervalStart: chunk.intervalStart,
+              intervalEnd: chunk.intervalEnd
+            });
+
+            if (result.transactions && result.transactions.length > 0) {
+              console.log(`  Fetched ${result.transactions.length} transactions for period ${chunk.intervalStart.substring(0, 10)} to ${chunk.intervalEnd.substring(0, 10)}`);
+              allTransactions.push(...result.transactions);
+            }
+          } catch (err) {
+            console.error(`Failed to fetch transactions for balance ${balance.id} (${currency}) in period ${chunk.intervalStart} to ${chunk.intervalEnd}:`, err.message);
+            // Continue with next chunk even if this one fails
+          }
+        }
+      }
+
+      console.log(`Total transactions fetched: ${allTransactions.length}`);
 
       // Sort by date (most recent first)
       allTransactions.sort((a, b) => new Date(b.date) - new Date(a.date));
