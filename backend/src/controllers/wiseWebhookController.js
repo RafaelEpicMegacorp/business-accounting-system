@@ -190,20 +190,41 @@ const WiseWebhookController = {
 
   /**
    * Manual sync of Wise transactions
-   * GET /api/wise/sync
+   * GET /api/wise/sync?days=7              - Last N days
+   * GET /api/wise/sync?from=2024-01-01&to=2025-10-17  - Custom range
+   * GET /api/wise/sync?all=true            - All history (last 2 years max)
    */
   async manualSync(req, res, next) {
     try {
-      const days = parseInt(req.query.days) || 7;
+      let intervalStart, intervalEnd;
 
-      console.log(`Starting manual Wise sync for last ${days} days...`);
+      // Determine date range based on query parameters
+      if (req.query.all === 'true') {
+        // All history mode: fetch last 2 years (Wise API limitation)
+        intervalStart = new Date(Date.now() - 730 * 24 * 60 * 60 * 1000).toISOString();
+        intervalEnd = new Date().toISOString();
+        console.log('Starting manual Wise sync for ALL HISTORY (last 2 years)...');
+      } else if (req.query.from && req.query.to) {
+        // Custom date range
+        intervalStart = new Date(req.query.from).toISOString();
+        intervalEnd = new Date(req.query.to).toISOString();
+        console.log(`Starting manual Wise sync from ${req.query.from} to ${req.query.to}...`);
+      } else {
+        // Days mode (default)
+        const days = parseInt(req.query.days) || 7;
+        intervalStart = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+        intervalEnd = new Date().toISOString();
+        console.log(`Starting manual Wise sync for last ${days} days...`);
+      }
+
       console.log(`WISE_API_TOKEN configured: ${!!process.env.WISE_API_TOKEN}`);
       console.log(`WISE_PROFILE_ID: ${process.env.WISE_PROFILE_ID}`);
+      console.log(`Date range: ${intervalStart} to ${intervalEnd}`);
 
-      // Fetch recent transactions from Wise
+      // Fetch transactions from Wise
       let transactions;
       try {
-        transactions = await wiseService.getRecentTransactions(days);
+        transactions = await wiseService.getAllTransactions({ intervalStart, intervalEnd });
         console.log(`Fetched ${transactions.length} transactions from Wise`);
       } catch (wiseError) {
         console.error('Error fetching transactions from Wise API:', wiseError.message);

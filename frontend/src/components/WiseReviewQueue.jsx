@@ -57,12 +57,30 @@ const WiseReviewQueue = () => {
   }, []);
 
   // Manual sync
-  const handleManualSync = async (days = 7) => {
+  const handleManualSync = async (syncMode = 'days', value = 7) => {
     try {
       setSyncing(true);
-      setMessage({ type: 'info', text: `Syncing last ${days} days...` });
 
-      const response = await api.get(`/wise/sync?days=${days}`);
+      let url;
+      let messageText;
+
+      if (syncMode === 'all') {
+        url = `/wise/sync?all=true`;
+        messageText = 'Syncing ALL HISTORY (last 2 years)...';
+      } else if (syncMode === 'days') {
+        url = `/wise/sync?days=${value}`;
+        messageText = `Syncing last ${value} days...`;
+      } else if (syncMode === 'custom' && value.from && value.to) {
+        url = `/wise/sync?from=${value.from}&to=${value.to}`;
+        messageText = `Syncing from ${value.from} to ${value.to}...`;
+      } else {
+        url = `/wise/sync?days=7`;
+        messageText = 'Syncing last 7 days...';
+      }
+
+      setMessage({ type: 'info', text: messageText });
+
+      const response = await api.get(url);
 
       setMessage({
         type: 'success',
@@ -165,14 +183,34 @@ const WiseReviewQueue = () => {
       {/* Header */}
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold">Wise Transaction Sync</h2>
-        <div className="space-x-2">
-          <button
-            onClick={() => handleManualSync(7)}
+        <div className="flex gap-2">
+          <select
+            onChange={(e) => {
+              const value = e.target.value;
+              if (value === 'all') {
+                handleManualSync('all');
+              } else if (value.startsWith('days-')) {
+                const days = parseInt(value.replace('days-', ''));
+                handleManualSync('days', days);
+              }
+            }}
             disabled={syncing}
-            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+            className="px-4 py-2 border rounded bg-white hover:bg-gray-50 disabled:opacity-50"
+          >
+            <option value="">Quick Sync...</option>
+            <option value="days-7">Last 7 days</option>
+            <option value="days-30">Last 30 days</option>
+            <option value="days-90">Last 90 days</option>
+            <option value="days-365">Last year</option>
+            <option value="all">ALL HISTORY (2 years)</option>
+          </select>
+          <button
+            onClick={() => handleManualSync('all')}
+            disabled={syncing}
+            className="px-6 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 flex items-center gap-2 font-semibold"
           >
             <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
-            Sync Last 7 Days
+            Sync All History
           </button>
         </div>
       </div>
