@@ -11,7 +11,7 @@ router.post('/webhook', wiseWebhookController.handleWebhook);
 // GET /api/wise/webhook
 // Wise expects empty response body during validation
 router.get('/webhook', (req, res) => {
-  res.status(200).send();
+  res.status(200).set('Content-Type', 'text/plain').end();
 });
 
 // Protected routes (require authentication)

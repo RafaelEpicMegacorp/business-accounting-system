@@ -189,11 +189,27 @@ const WiseWebhookController = {
       const days = parseInt(req.query.days) || 7;
 
       console.log(`Starting manual Wise sync for last ${days} days...`);
+      console.log(`WISE_API_TOKEN configured: ${!!process.env.WISE_API_TOKEN}`);
+      console.log(`WISE_PROFILE_ID: ${process.env.WISE_PROFILE_ID}`);
 
       // Fetch recent transactions from Wise
-      const transactions = await wiseService.getRecentTransactions(days);
-
-      console.log(`Fetched ${transactions.length} transactions from Wise`);
+      let transactions;
+      try {
+        transactions = await wiseService.getRecentTransactions(days);
+        console.log(`Fetched ${transactions.length} transactions from Wise`);
+      } catch (wiseError) {
+        console.error('Error fetching transactions from Wise API:', wiseError.message);
+        console.error('Wise API error details:', {
+          status: wiseError.response?.status,
+          statusText: wiseError.response?.statusText,
+          data: wiseError.response?.data
+        });
+        return res.status(500).json({
+          success: false,
+          error: 'Failed to fetch transactions from Wise API',
+          details: wiseError.message
+        });
+      }
 
       const results = {
         total: transactions.length,
@@ -240,6 +256,8 @@ const WiseWebhookController = {
 
         } catch (error) {
           console.error(`Error processing transaction:`, error);
+          console.error('Transaction data:', JSON.stringify(rawTransaction, null, 2));
+          console.error('Error stack:', error.stack);
           results.failed++;
         }
       }
@@ -251,6 +269,12 @@ const WiseWebhookController = {
       });
 
     } catch (error) {
+      console.error('Manual sync error:', error);
+      console.error('Error details:', {
+        message: error.message,
+        stack: error.stack,
+        response: error.response?.data
+      });
       next(error);
     }
   },
