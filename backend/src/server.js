@@ -6,6 +6,7 @@ const entryRoutes = require('./routes/entryRoutes');
 const employeeRoutes = require('./routes/employeeRoutes');
 const contractRoutes = require('./routes/contractRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
+const wiseRoutes = require('./routes/wiseRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -26,6 +27,7 @@ app.use('/api/entries', entryRoutes);
 app.use('/api/employees', employeeRoutes);
 app.use('/api/contracts', contractRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/wise', wiseRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

@@ -9,11 +9,12 @@ import ContractList from './ContractList';
 import ContractForm from './ContractForm';
 import DashboardView from './DashboardView';
 import SalaryCalendar from './SalaryCalendar';
+import WiseReviewQueue from './WiseReviewQueue';
 import { exportEntriesToCSV, exportEmployeesToCSV, exportContractsToCSV } from '../utils/csvExport';
 
 export default function AccountingApp() {
   const { user, logout } = useAuth();
-  const [currentView, setCurrentView] = useState('dashboard'); // 'dashboard', 'income', 'expenses', 'salaries', 'employees', or 'contracts'
+  const [currentView, setCurrentView] = useState('dashboard'); // 'dashboard', 'income', 'expenses', 'salaries', 'employees', 'contracts', or 'wise'
   const [entries, setEntries] = useState([]);
   const [totals, setTotals] = useState({
     total_income: '0',
@@ -425,6 +426,16 @@ export default function AccountingApp() {
             >
               Employees
             </button>
+            <button
+              onClick={() => setCurrentView('wise')}
+              className={`px-4 py-2 font-medium transition ${
+                currentView === 'wise'
+                  ? 'text-blue-600 border-b-2 border-blue-600'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Wise Sync
+            </button>
           </div>
 
           {(currentView === 'income' || currentView === 'expenses' || currentView === 'salaries') && (
@@ -585,6 +596,11 @@ export default function AccountingApp() {
             onEdit={handleContractEdit}
             onDelete={handleContractDelete}
           />
+        )}
+
+        {/* Wise Sync View */}
+        {currentView === 'wise' && (
+          <WiseReviewQueue />
         )}
 
         {/* Employee Form Modal */}
