@@ -14,6 +14,12 @@ router.post('/bulk/reactivate', EmployeeController.bulkReactivate);
 // Get all employees (with optional ?active=true/false filter)
 router.get('/', EmployeeController.getAll);
 
+// Get active employees specifically (must come before /:id)
+router.get('/active', (req, res, next) => {
+  req.query.active = 'true';
+  EmployeeController.getAll(req, res, next);
+});
+
 // Get single employee by ID
 router.get('/:id', EmployeeController.getById);
 
