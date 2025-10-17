@@ -6,14 +6,14 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm install
+# Install dependencies (production only)
+RUN npm ci --only=production
 
 # Copy application code
 COPY . .
 
-# Expose port
-EXPOSE 3001
+# Expose port (Railway uses PORT env var, defaults to 8080)
+EXPOSE 8080
 
 # Start application
-CMD ["npm", "run", "dev"]
+CMD ["npm", "start"]
