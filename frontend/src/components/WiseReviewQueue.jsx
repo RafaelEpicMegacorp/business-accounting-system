@@ -91,7 +91,11 @@ const WiseReviewQueue = () => {
       await Promise.all([fetchPendingTransactions(), fetchStats()]);
     } catch (error) {
       console.error('Error syncing:', error);
-      setMessage({ type: 'error', text: 'Failed to sync transactions' });
+      const errorMessage = error.response?.data?.error
+        || error.response?.data?.details
+        || error.message
+        || 'Failed to sync transactions';
+      setMessage({ type: 'error', text: `Sync failed: ${errorMessage}` });
     } finally {
       setSyncing(false);
     }
