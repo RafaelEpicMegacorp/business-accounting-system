@@ -35,10 +35,17 @@ class WiseService {
    */
   async getBalanceAccounts() {
     try {
-      const response = await this.client.get(`/v4/profiles/${this.profileId}/balances`);
+      // types parameter is required by Wise API v4
+      // STANDARD = regular balances, SAVINGS = savings pots
+      const response = await this.client.get(`/v4/profiles/${this.profileId}/balances`, {
+        params: {
+          types: 'STANDARD,SAVINGS'
+        }
+      });
       return response.data;
     } catch (error) {
       console.error('Error fetching Wise balance accounts:', error.message);
+      console.error('Error response:', error.response?.data);
       throw new Error(`Failed to fetch balance accounts: ${error.message}`);
     }
   }
