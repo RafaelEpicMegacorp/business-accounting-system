@@ -7,6 +7,16 @@ const authMiddleware = require('../middleware/auth');
 // POST /api/wise/webhook
 router.post('/webhook', wiseWebhookController.handleWebhook);
 
+// GET endpoint for webhook validation (used by Wise during registration)
+// GET /api/wise/webhook
+router.get('/webhook', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    message: 'Wise webhook endpoint is ready',
+    service: 'accounting-system-webhook'
+  });
+});
+
 // Protected routes (require authentication)
 
 // Manual sync of transactions
