@@ -28,6 +28,14 @@ const WiseWebhookController = {
       }
 
       // Validate webhook signature for real events
+      // Skip signature validation if X-Test-Notification header is present (webhook registration)
+      const isTestNotification = req.headers['x-test-notification'] === 'true';
+
+      if (isTestNotification) {
+        console.log('Received Wise webhook registration test (X-Test-Notification header present)');
+        return res.status(200).send();
+      }
+
       const webhookSecret = process.env.WISE_WEBHOOK_SECRET;
 
       if (webhookSecret) {
