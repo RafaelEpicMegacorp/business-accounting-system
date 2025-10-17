@@ -9,12 +9,9 @@ router.post('/webhook', wiseWebhookController.handleWebhook);
 
 // GET endpoint for webhook validation (used by Wise during registration)
 // GET /api/wise/webhook
+// Wise expects empty response body during validation
 router.get('/webhook', (req, res) => {
-  res.status(200).json({
-    status: 'ok',
-    message: 'Wise webhook endpoint is ready',
-    service: 'accounting-system-webhook'
-  });
+  res.status(200).send();
 });
 
 // Protected routes (require authentication)

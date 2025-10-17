@@ -14,15 +14,17 @@ const WiseWebhookController = {
       const payload = req.body;
 
       // Handle empty/test requests (during webhook registration)
+      // Wise expects empty response body
       if (!payload || Object.keys(payload).length === 0) {
         console.log('Received Wise webhook registration test (empty payload)');
-        return res.status(200).json({ status: 'ok', message: 'Webhook endpoint ready' });
+        return res.status(200).send();
       }
 
       // Handle test webhook events from Wise
+      // Wise expects empty response body
       if (payload.event_type === 'test' || payload.data?.resource?.type === 'test') {
         console.log('Received Wise test webhook event');
-        return res.status(200).json({ status: 'ok', message: 'Test webhook received' });
+        return res.status(200).send();
       }
 
       // Validate webhook signature for real events
@@ -51,12 +53,13 @@ const WiseWebhookController = {
 
       if (exists) {
         console.log(`Transaction ${transaction.wiseTransactionId} already processed - skipping`);
-        return res.json({ status: 'ok', message: 'Transaction already processed' });
+        return res.status(200).send();
       }
 
       // Process transaction asynchronously
       // Respond quickly to Wise (they expect 2xx within 5 seconds)
-      res.json({ status: 'ok', message: 'Webhook received and queued for processing' });
+      // Wise expects empty response body
+      res.status(200).send();
 
       // Process in background
       this.processTransaction(transaction).catch(err => {
