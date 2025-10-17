@@ -11,7 +11,21 @@ const WiseWebhookController = {
    */
   async handleWebhook(req, res, next) {
     try {
-      // Validate webhook signature
+      const payload = req.body;
+
+      // Handle empty/test requests (during webhook registration)
+      if (!payload || Object.keys(payload).length === 0) {
+        console.log('Received Wise webhook registration test (empty payload)');
+        return res.status(200).json({ status: 'ok', message: 'Webhook endpoint ready' });
+      }
+
+      // Handle test webhook events from Wise
+      if (payload.event_type === 'test' || payload.data?.resource?.type === 'test') {
+        console.log('Received Wise test webhook event');
+        return res.status(200).json({ status: 'ok', message: 'Test webhook received' });
+      }
+
+      // Validate webhook signature for real events
       const webhookSecret = process.env.WISE_WEBHOOK_SECRET;
 
       if (webhookSecret) {
@@ -23,14 +37,6 @@ const WiseWebhookController = {
         }
       } else {
         console.warn('WARN: WISE_WEBHOOK_SECRET not set - skipping signature validation');
-      }
-
-      const payload = req.body;
-
-      // Handle test webhook events from Wise
-      if (payload.event_type === 'test') {
-        console.log('Received Wise test webhook');
-        return res.json({ status: 'ok', message: 'Test webhook received' });
       }
 
       // Parse webhook payload
