@@ -1,4 +1,5 @@
 const axios = require('axios');
+const wiseScaSigner = require('../utils/wiseScaSigner');
 
 /**
  * Wise API Service
@@ -27,6 +28,46 @@ class WiseService {
       },
       timeout: 30000 // 30 second timeout
     });
+
+    // Add SCA (Strong Customer Authentication) response interceptor
+    this.client.interceptors.response.use(
+      response => response, // Pass through successful responses
+      async error => {
+        const originalRequest = error.config;
+
+        // Check if this is a 403 response with SCA requirement
+        if (error.response?.status === 403 && error.response?.headers['x-2fa-approval']) {
+          // Prevent infinite retry loops
+          if (originalRequest._scaRetryAttempted) {
+            console.error('SCA retry already attempted, failing request');
+            return Promise.reject(error);
+          }
+
+          const oneTimeToken = error.response.headers['x-2fa-approval'];
+          console.log('SCA required - received one-time-token from Wise API');
+
+          try {
+            // Sign the one-time-token with private key
+            const signature = wiseScaSigner.signToken(oneTimeToken);
+
+            // Mark this request as having attempted SCA
+            originalRequest._scaRetryAttempted = true;
+
+            // Add signature header and retry the request
+            originalRequest.headers['X-Signature'] = signature;
+            console.log('Retrying request with SCA signature...');
+
+            return this.client(originalRequest);
+          } catch (scaError) {
+            console.error('SCA signing failed:', scaError.message);
+            return Promise.reject(scaError);
+          }
+        }
+
+        // Not an SCA error, reject normally
+        return Promise.reject(error);
+      }
+    );
   }
 
   /**
