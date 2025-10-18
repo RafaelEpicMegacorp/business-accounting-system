@@ -61,14 +61,16 @@ class WiseScaSigner {
 
     try {
       // Create signature using RSA-SHA256
+      // Convert token to Buffer using 'ascii' encoding (matching Python example)
       const sign = crypto.createSign('RSA-SHA256');
-      sign.update(oneTimeToken);
+      sign.update(Buffer.from(oneTimeToken, 'ascii'));
       sign.end();
 
       // Sign with private key and encode as base64
       const signature = sign.sign(this.privateKey, 'base64');
 
       console.log(`SCA signature generated for token: ${oneTimeToken.substring(0, 20)}...`);
+      console.log(`Signature (first 30 chars): ${signature.substring(0, 30)}...`);
 
       return signature;
     } catch (error) {
