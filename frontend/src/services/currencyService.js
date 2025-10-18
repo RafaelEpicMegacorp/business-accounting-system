@@ -36,6 +36,12 @@ const currencyService = {
   recalculateBalances: async () => {
     const response = await axios.post(`${API_URL}/currency/recalculate`);
     return response.data;
+  },
+
+  // Get total balance in USD (all currencies converted)
+  getTotalBalanceInUSD: async () => {
+    const response = await axios.get(`${API_URL}/currency/total-usd`);
+    return response.data;
   }
 };
 

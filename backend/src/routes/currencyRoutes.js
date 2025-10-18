@@ -81,4 +81,15 @@ router.post('/recalculate', async (req, res) => {
   }
 });
 
+// Get total balance in USD (all currencies converted)
+router.get('/total-usd', async (req, res) => {
+  try {
+    const totalData = await CurrencyModel.getTotalBalanceInUSD();
+    res.json(totalData);
+  } catch (error) {
+    console.error('Error getting total USD balance:', error);
+    res.status(500).json({ error: 'Failed to get total USD balance' });
+  }
+});
+
 module.exports = router;

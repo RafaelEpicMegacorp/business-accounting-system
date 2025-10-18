@@ -95,6 +95,107 @@ class CurrencyModel {
       };
     });
   }
+
+  // Get total balance in USD (convert all currencies to USD)
+  static async getTotalBalanceInUSD() {
+    const balances = await this.getCurrencyBalances();
+    const axios = require('axios');
+
+    try {
+      // Fetch current exchange rates from exchangerate-api.com (free tier)
+      const response = await axios.get('https://api.exchangerate-api.com/v4/latest/USD');
+      const rates = response.data.rates;
+
+      let totalUSD = 0;
+      const breakdown = [];
+
+      for (const balance of balances) {
+        const amount = parseFloat(balance.balance);
+        let amountInUSD = amount;
+
+        if (balance.currency === 'USD') {
+          amountInUSD = amount;
+        } else if (balance.currency === 'PLN') {
+          // Convert PLN to USD
+          amountInUSD = amount / rates.PLN;
+        } else if (balance.currency === 'EUR') {
+          // Convert EUR to USD
+          amountInUSD = amount / rates.EUR;
+        } else if (balance.currency === 'GBP') {
+          // Convert GBP to USD
+          amountInUSD = amount / rates.GBP;
+        }
+
+        totalUSD += amountInUSD;
+
+        breakdown.push({
+          currency: balance.currency,
+          original_amount: amount,
+          usd_equivalent: amountInUSD,
+          exchange_rate: balance.currency === 'USD' ? 1.0 : (1 / rates[balance.currency])
+        });
+      }
+
+      return {
+        total_usd: totalUSD,
+        breakdown,
+        rates_updated: new Date().toISOString()
+      };
+    } catch (error) {
+      console.error('Error fetching exchange rates:', error);
+
+      // Fallback: use last known rates from currency_exchanges table
+      const fallbackQuery = `
+        SELECT from_currency, to_currency, exchange_rate
+        FROM currency_exchanges
+        WHERE to_currency = 'USD'
+        ORDER BY exchange_date DESC, created_at DESC
+        LIMIT 10
+      `;
+
+      const fallbackRates = await pool.query(fallbackQuery);
+      const rateMap = {};
+      fallbackRates.rows.forEach(row => {
+        if (!rateMap[row.from_currency]) {
+          rateMap[row.from_currency] = parseFloat(row.exchange_rate);
+        }
+      });
+
+      let totalUSD = 0;
+      const breakdown = [];
+
+      for (const balance of balances) {
+        const amount = parseFloat(balance.balance);
+        let amountInUSD = amount;
+
+        if (balance.currency === 'USD') {
+          amountInUSD = amount;
+        } else if (rateMap[balance.currency]) {
+          amountInUSD = amount * rateMap[balance.currency];
+        } else {
+          // Default fallback rates if no database data
+          const defaultRates = { PLN: 0.25, EUR: 1.1, GBP: 1.27 };
+          amountInUSD = amount * (defaultRates[balance.currency] || 1.0);
+        }
+
+        totalUSD += amountInUSD;
+
+        breakdown.push({
+          currency: balance.currency,
+          original_amount: amount,
+          usd_equivalent: amountInUSD,
+          exchange_rate: balance.currency === 'USD' ? 1.0 : (rateMap[balance.currency] || 0.25)
+        });
+      }
+
+      return {
+        total_usd: totalUSD,
+        breakdown,
+        rates_updated: new Date().toISOString(),
+        fallback_used: true
+      };
+    }
+  }
 }
 
 module.exports = CurrencyModel;

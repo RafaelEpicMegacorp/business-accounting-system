@@ -10,6 +10,7 @@ function DashboardView() {
   const [stats, setStats] = useState(null);
   const [forecast, setForecast] = useState(null);
   const [currencyBalances, setCurrencyBalances] = useState([]);
+  const [totalUSD, setTotalUSD] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -19,14 +20,16 @@ function DashboardView() {
   const loadDashboardData = async () => {
     try {
       setLoading(true);
-      const [statsData, forecastData, currencyData] = await Promise.all([
+      const [statsData, forecastData, currencyData, totalUSDData] = await Promise.all([
         dashboardService.getStats(),
         entryService.getForecast(),
-        currencyService.getCurrencyBalances()
+        currencyService.getCurrencyBalances(),
+        currencyService.getTotalBalanceInUSD()
       ]);
       setStats(statsData);
       setForecast(forecastData);
       setCurrencyBalances(currencyData);
+      setTotalUSD(totalUSDData);
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
     } finally {
@@ -51,33 +54,33 @@ function DashboardView() {
   }
 
   const forecastBalance = parseFloat(forecast.forecasted_balance);
-  const currentBalance = parseFloat(stats.current_balance);
   const contractIncome = parseFloat(forecast.contract_income || 0);
   const weeklyPayments = parseFloat(forecast.weekly_payments);
   const monthlyPayments = parseFloat(forecast.monthly_payments);
+
+  // Use total USD balance from Wise accounts
+  const currentBalance = totalUSD ? parseFloat(totalUSD.total_usd) : 0;
 
   return (
     <div className="space-y-6">
       {/* Main Stats Row */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Current Balance */}
+        {/* Total Wise Balance */}
         <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-lg shadow-lg p-6">
           <div className="flex items-center justify-between mb-2">
-            <h3 className="text-lg font-medium opacity-90">Current Balance</h3>
+            <h3 className="text-lg font-medium opacity-90">Total Wise Balance</h3>
             <DollarSign size={24} className="opacity-80" />
           </div>
           <p className="text-3xl font-bold">
             ${currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
           </p>
           <div className="mt-3 pt-3 border-t border-blue-400 opacity-90">
-            <div className="flex justify-between text-sm">
-              <span>Income:</span>
-              <span>${parseFloat(stats.total_income).toLocaleString()}</span>
-            </div>
-            <div className="flex justify-between text-sm mt-1">
-              <span>Expenses:</span>
-              <span>${parseFloat(stats.total_expenses).toLocaleString()}</span>
-            </div>
+            {totalUSD && totalUSD.breakdown && totalUSD.breakdown.map((item, index) => (
+              <div key={index} className="flex justify-between text-sm mt-1">
+                <span>{item.currency}:</span>
+                <span>${item.usd_equivalent.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              </div>
+            ))}
           </div>
         </div>
 
