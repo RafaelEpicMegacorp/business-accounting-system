@@ -7,6 +7,7 @@ const employeeRoutes = require('./routes/employeeRoutes');
 const contractRoutes = require('./routes/contractRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
 const wiseRoutes = require('./routes/wiseRoutes');
+const wiseDebugRoutes = require('./routes/wiseDebug');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -28,6 +29,7 @@ app.use('/api/employees', employeeRoutes);
 app.use('/api/contracts', contractRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/wise', wiseRoutes);
+app.use('/api/wise/debug', wiseDebugRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
