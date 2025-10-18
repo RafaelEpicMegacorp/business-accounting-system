@@ -53,9 +53,12 @@ class WiseService {
             // Mark this request as having attempted SCA
             originalRequest._scaRetryAttempted = true;
 
-            // Add signature header and retry the request
+            // Add BOTH required headers for SCA retry:
+            // 1. x-2fa-approval: the original one-time-token
+            // 2. X-Signature: the base64-encoded signature of the token
+            originalRequest.headers['x-2fa-approval'] = oneTimeToken;
             originalRequest.headers['X-Signature'] = signature;
-            console.log('Retrying request with SCA signature...');
+            console.log('Retrying request with SCA signature and one-time-token...');
 
             return this.client(originalRequest);
           } catch (scaError) {
