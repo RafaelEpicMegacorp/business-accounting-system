@@ -25,20 +25,27 @@ router.get('/test-connection', async (req, res) => {
       const balance = balances[0];
       console.log(`\n--- Test 2: Get Transactions for Balance ${balance.id} (${balance.currency}) ---`);
 
-      const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      // Test with last 30 days to ensure we get some transactions
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
       const today = new Date().toISOString();
+
+      console.log(`Fetching transactions from ${thirtyDaysAgo} to ${today}`);
 
       try {
         const result = await wiseService.getBalanceTransactions(balance.id, balance.currency, {
-          intervalStart: yesterday,
+          intervalStart: thirtyDaysAgo,
           intervalEnd: today
         });
 
         console.log(`✅ Got ${result.transactions?.length || 0} transactions`);
-        console.log('Transaction sample:', result.transactions?.[0] || 'No transactions');
+        if (result.transactions?.length > 0) {
+          console.log('First transaction sample:', JSON.stringify(result.transactions[0], null, 2));
+        } else {
+          console.log('No transactions found in the last 30 days');
+        }
       } catch (txError) {
         console.error('❌ Transaction fetch failed:', txError.message);
-        console.error('Error details:', txError.response?.data || txError);
+        console.error('Error details:', JSON.stringify(txError.response?.data || txError.message));
       }
     }
 
