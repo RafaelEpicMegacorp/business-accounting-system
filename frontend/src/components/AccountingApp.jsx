@@ -3,6 +3,7 @@ import { Plus, Trash2, Edit2, DollarSign, TrendingUp, TrendingDown, CheckSquare,
 import { useAuth } from '../contexts/AuthContext';
 import entryService from '../services/entryService';
 import contractService from '../services/contractService';
+import currencyService from '../services/currencyService';
 import EmployeeList from './EmployeeList';
 import EmployeeForm from './EmployeeForm';
 import ContractList from './ContractList';
@@ -32,6 +33,7 @@ export default function AccountingApp() {
     weeks_remaining: 0,
     days_remaining: 0
   });
+  const [totalUSD, setTotalUSD] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showForm, setShowForm] = useState(false);
@@ -92,14 +94,16 @@ export default function AccountingApp() {
         entriesData = [];
       }
 
-      const [totalsData, forecastData] = await Promise.all([
+      const [totalsData, forecastData, totalUSDData] = await Promise.all([
         entryService.getTotals(),
-        entryService.getForecast()
+        entryService.getForecast(),
+        currencyService.getTotalBalanceInUSD()
       ]);
 
       setEntries(entriesData);
       setTotals(totalsData);
       setForecast(forecastData);
+      setTotalUSD(totalUSDData);
       setSelectedEntries([]); // Clear selections on reload
       setError(null);
     } catch (err) {
@@ -176,7 +180,9 @@ export default function AccountingApp() {
   // Use totals from API (includes auto-calculation for past pending entries)
   const totalIncome = parseFloat(totals.total_income || 0);
   const totalExpenses = parseFloat(totals.total_expenses || 0);
-  const netBalance = parseFloat(totals.net_balance || 0);
+
+  // Use Wise balance instead of business balance
+  const wiseBalance = totalUSD ? parseFloat(totalUSD.total_usd) : 0;
 
   // Forecast data
   const weeklyPayments = parseFloat(forecast.weekly_payments || 0);
@@ -642,18 +648,27 @@ export default function AccountingApp() {
               </div>
             </div>
 
-            <div className={`${netBalance >= 0 ? 'bg-blue-50 border-blue-200' : 'bg-orange-50 border-orange-200'} border rounded-lg p-4`}>
+            <div className="bg-blue-50 border-blue-200 border rounded-lg p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className={`text-sm font-medium ${netBalance >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>
-                    Actual Balance
+                  <p className="text-sm font-medium text-blue-600">
+                    Total Wise Balance
                   </p>
-                  <p className={`text-xs ${netBalance >= 0 ? 'text-blue-500' : 'text-orange-500'} mt-0.5`}>Current</p>
-                  <p className={`text-2xl font-bold mt-1 ${netBalance >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>
-                    ${netBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  <p className="text-xs text-blue-500 mt-0.5">All currencies in USD</p>
+                  <p className="text-2xl font-bold mt-1 text-blue-700">
+                    ${wiseBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                   </p>
+                  {totalUSD && totalUSD.breakdown && (
+                    <div className="mt-2 text-xs text-blue-600">
+                      {totalUSD.breakdown.map((item, index) => (
+                        <div key={index}>
+                          {item.currency}: ${item.usd_equivalent.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                <DollarSign className={netBalance >= 0 ? 'text-blue-600' : 'text-orange-600'} size={32} />
+                <DollarSign className="text-blue-600" size={32} />
               </div>
             </div>
 
