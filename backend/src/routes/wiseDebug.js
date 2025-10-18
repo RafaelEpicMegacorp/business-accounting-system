@@ -106,4 +106,41 @@ router.get('/test-connection', async (req, res) => {
   }
 });
 
+/**
+ * Test private key decoding
+ * GET /api/wise/debug/test-key
+ */
+router.get('/test-key', (req, res) => {
+  const rawKey = process.env.WISE_PRIVATE_KEY;
+
+  if (!rawKey) {
+    return res.json({ error: 'WISE_PRIVATE_KEY not set' });
+  }
+
+  const startsWithPEM = rawKey.startsWith('-----BEGIN');
+  let decoded = null;
+  let decodedFormat = null;
+
+  if (!startsWithPEM) {
+    try {
+      decoded = Buffer.from(rawKey, 'base64').toString('utf8');
+      decodedFormat = {
+        startsWidth: decoded.substring(0, 30),
+        endsWidth: decoded.substring(decoded.length - 30),
+        length: decoded.length,
+        hasNewlines: decoded.includes('\n'),
+        newlineCount: (decoded.match(/\n/g) || []).length
+      };
+    } catch (error) {
+      return res.json({ error: 'Failed to decode', message: error.message });
+    }
+  }
+
+  res.json({
+    rawKeyFormat: rawKey.substring(0, 30) + '...',
+    startsWithPEM,
+    decodedFormat
+  });
+});
+
 module.exports = router;
