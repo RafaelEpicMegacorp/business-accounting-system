@@ -16,10 +16,28 @@ const crypto = require('crypto');
  */
 class WiseScaSigner {
   constructor() {
-    this.privateKey = process.env.WISE_PRIVATE_KEY;
+    let rawKey = process.env.WISE_PRIVATE_KEY;
 
-    if (!this.privateKey) {
+    if (!rawKey) {
       console.warn('WARNING: WISE_PRIVATE_KEY not configured - SCA signing will fail');
+      this.privateKey = null;
+      return;
+    }
+
+    // Handle both PEM format and base64-encoded single-line format
+    if (rawKey.startsWith('-----BEGIN')) {
+      // Already in PEM format
+      this.privateKey = rawKey;
+    } else {
+      // Assume base64-encoded single-line format - decode to PEM
+      try {
+        const decoded = Buffer.from(rawKey, 'base64').toString('utf8');
+        this.privateKey = decoded;
+        console.log('Decoded WISE_PRIVATE_KEY from base64 format');
+      } catch (error) {
+        console.error('Failed to decode WISE_PRIVATE_KEY:', error.message);
+        this.privateKey = rawKey; // Try using as-is
+      }
     }
   }
 
