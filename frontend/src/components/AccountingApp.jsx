@@ -184,6 +184,51 @@ export default function AccountingApp() {
   const totalForecastedExpenses = parseFloat(forecast.total_forecasted_expenses || 0);
   const forecastedBalance = parseFloat(forecast.forecasted_balance || 0);
 
+  // Calculate income-specific statistics
+  const incomeStats = React.useMemo(() => {
+    if (currentView !== 'income' || entries.length === 0) return null;
+
+    const completedIncome = entries
+      .filter(e => e.status === 'completed')
+      .reduce((sum, e) => sum + parseFloat(e.total), 0);
+
+    const pendingIncome = entries
+      .filter(e => e.status === 'pending')
+      .reduce((sum, e) => sum + parseFloat(e.total), 0);
+
+    const totalIncome = entries.reduce((sum, e) => sum + parseFloat(e.total), 0);
+
+    // Group by category
+    const byCategory = entries.reduce((acc, e) => {
+      const cat = e.category || 'Other';
+      acc[cat] = (acc[cat] || 0) + parseFloat(e.total);
+      return acc;
+    }, {});
+
+    const topCategory = Object.entries(byCategory)
+      .sort((a, b) => b[1] - a[1])[0];
+
+    // Calculate this month's income
+    const now = new Date();
+    const thisMonth = entries
+      .filter(e => {
+        const entryDate = new Date(e.entry_date);
+        return entryDate.getMonth() === now.getMonth() &&
+               entryDate.getFullYear() === now.getFullYear();
+      })
+      .reduce((sum, e) => sum + parseFloat(e.total), 0);
+
+    return {
+      completed: completedIncome,
+      pending: pendingIncome,
+      total: totalIncome,
+      count: entries.length,
+      average: totalIncome / entries.length,
+      thisMonth,
+      topCategory: topCategory ? { name: topCategory[0], amount: topCategory[1] } : null
+    };
+  }, [entries, currentView]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -503,6 +548,67 @@ export default function AccountingApp() {
                       >
                         Clear Filters
                       </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Income-Specific Widgets */}
+              {currentView === 'income' && incomeStats && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                  {/* Total Income */}
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-green-600 font-medium">Total Income</p>
+                        <p className="text-xs text-green-500 mt-0.5">{incomeStats.count} entries</p>
+                        <p className="text-2xl font-bold text-green-700 mt-1">
+                          ${incomeStats.total.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        </p>
+                      </div>
+                      <DollarSign className="text-green-600" size={32} />
+                    </div>
+                  </div>
+
+                  {/* This Month */}
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-blue-600 font-medium">This Month</p>
+                        <p className="text-xs text-blue-500 mt-0.5">{new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</p>
+                        <p className="text-2xl font-bold text-blue-700 mt-1">
+                          ${incomeStats.thisMonth.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        </p>
+                      </div>
+                      <TrendingUp className="text-blue-600" size={32} />
+                    </div>
+                  </div>
+
+                  {/* Completed vs Pending */}
+                  <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-purple-600 font-medium">Completed</p>
+                        <p className="text-xs text-purple-500 mt-0.5">Pending: ${incomeStats.pending.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+                        <p className="text-2xl font-bold text-purple-700 mt-1">
+                          ${incomeStats.completed.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        </p>
+                      </div>
+                      <TrendingUp className="text-purple-600" size={32} />
+                    </div>
+                  </div>
+
+                  {/* Top Category */}
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-amber-600 font-medium">Top Category</p>
+                        <p className="text-xs text-amber-500 mt-0.5">{incomeStats.topCategory?.name || 'N/A'}</p>
+                        <p className="text-2xl font-bold text-amber-700 mt-1">
+                          ${(incomeStats.topCategory?.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        </p>
+                      </div>
+                      <DollarSign className="text-amber-600" size={32} />
                     </div>
                   </div>
                 </div>
