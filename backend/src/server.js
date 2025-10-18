@@ -9,6 +9,7 @@ const dashboardRoutes = require('./routes/dashboardRoutes');
 const wiseRoutes = require('./routes/wiseRoutes');
 const wiseDebugRoutes = require('./routes/wiseDebug');
 const wiseImportRoutes = require('./routes/wiseImport');
+const currencyRoutes = require('./routes/currencyRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -32,6 +33,7 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/wise', wiseRoutes);
 app.use('/api/wise/debug', wiseDebugRoutes);
 app.use('/api/wise', wiseImportRoutes);
+app.use('/api/currency', currencyRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

@@ -2,12 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { TrendingUp, TrendingDown, DollarSign, Users, FileText, Calendar, Briefcase } from 'lucide-react';
 import dashboardService from '../services/dashboardService';
 import entryService from '../services/entryService';
+import currencyService from '../services/currencyService';
 import IncomeVsExpenseChart from './IncomeVsExpenseChart';
 import CategoryBreakdownChart from './CategoryBreakdownChart';
 
 function DashboardView() {
   const [stats, setStats] = useState(null);
   const [forecast, setForecast] = useState(null);
+  const [currencyBalances, setCurrencyBalances] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -17,12 +19,14 @@ function DashboardView() {
   const loadDashboardData = async () => {
     try {
       setLoading(true);
-      const [statsData, forecastData] = await Promise.all([
+      const [statsData, forecastData, currencyData] = await Promise.all([
         dashboardService.getStats(),
-        entryService.getForecast()
+        entryService.getForecast(),
+        currencyService.getCurrencyBalances()
       ]);
       setStats(statsData);
       setForecast(forecastData);
+      setCurrencyBalances(currencyData);
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
     } finally {
@@ -120,6 +124,47 @@ function DashboardView() {
           </div>
         </div>
       </div>
+
+      {/* Wise Currency Balances */}
+      {currencyBalances && currencyBalances.length > 0 && (
+        <div className="bg-gradient-to-br from-teal-50 to-cyan-50 rounded-lg shadow-lg p-6 border border-teal-200">
+          <div className="flex items-center gap-2 mb-4">
+            <DollarSign size={24} className="text-teal-700" />
+            <h3 className="text-xl font-bold text-teal-900">Wise Account Balances</h3>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {currencyBalances.map((balance) => {
+              const amount = parseFloat(balance.balance);
+              const currencyFlags = {
+                'USD': '🇺🇸',
+                'PLN': '🇵🇱',
+                'EUR': '🇪🇺',
+                'GBP': '🇬🇧'
+              };
+
+              return (
+                <div key={balance.currency} className="bg-white rounded-lg p-5 border-2 border-teal-200 shadow">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-3xl">{currencyFlags[balance.currency] || '💱'}</span>
+                      <span className="text-lg font-bold text-gray-700">{balance.currency}</span>
+                    </div>
+                  </div>
+                  <p className="text-3xl font-bold text-teal-700">
+                    {amount.toLocaleString('en-US', {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2
+                    })}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-2">
+                    Last updated: {new Date(balance.last_updated).toLocaleDateString()}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Secondary Stats Row */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
