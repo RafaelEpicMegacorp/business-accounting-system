@@ -620,79 +620,152 @@ export default function AccountingApp() {
                 </div>
               )}
 
-              {/* Summary Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-green-600 font-medium">Actual Income</p>
-                  <p className="text-xs text-green-500 mt-0.5">Received</p>
-                  <p className="text-2xl font-bold text-green-700 mt-1">
-                    ${totalIncome.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                  </p>
-                </div>
-                <TrendingUp className="text-green-600" size={32} />
-              </div>
-            </div>
-
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-red-600 font-medium">Actual Expenses</p>
-                  <p className="text-xs text-red-500 mt-0.5">Paid</p>
-                  <p className="text-2xl font-bold text-red-700 mt-1">
-                    ${totalExpenses.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                  </p>
-                </div>
-                <TrendingDown className="text-red-600" size={32} />
-              </div>
-            </div>
-
-            <div className="bg-blue-50 border-blue-200 border rounded-lg p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-blue-600">
-                    Total Wise Balance
-                  </p>
-                  <p className="text-xs text-blue-500 mt-0.5">All currencies in USD</p>
-                  <p className="text-2xl font-bold mt-1 text-blue-700">
-                    ${wiseBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                  </p>
-                  {totalUSD && totalUSD.breakdown && (
-                    <div className="mt-2 text-xs text-blue-600">
-                      {totalUSD.breakdown.map((item, index) => (
-                        <div key={index}>
-                          {item.currency}: ${item.usd_equivalent.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </div>
-                      ))}
+              {/* Conditional Summary Cards - Income tab shows only Wise Balance when no income stats */}
+              {currentView === 'income' && !incomeStats && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-1 gap-4">
+                  <div className="bg-blue-50 border-blue-200 border rounded-lg p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-blue-600">
+                          Total Wise Balance
+                        </p>
+                        <p className="text-xs text-blue-500 mt-0.5">All currencies in USD</p>
+                        <p className="text-2xl font-bold mt-1 text-blue-700">
+                          ${wiseBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        </p>
+                        {totalUSD && totalUSD.breakdown && (
+                          <div className="mt-2 text-xs text-blue-600">
+                            {totalUSD.breakdown.map((item, index) => (
+                              <div key={index}>
+                                {item.currency}: ${item.usd_equivalent.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <DollarSign className="text-blue-600" size={32} />
                     </div>
-                  )}
-                </div>
-                <DollarSign className="text-blue-600" size={32} />
-              </div>
-            </div>
-
-            <div className={`${forecastedBalance >= 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'} border rounded-lg p-4`}>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className={`text-sm font-medium ${forecastedBalance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    End-of-Month Forecast
-                  </p>
-                  <p className={`text-xs ${forecastedBalance >= 0 ? 'text-green-500' : 'text-red-500'} mt-0.5`}>
-                    {forecast.weeks_remaining} weeks remaining
-                  </p>
-                  <p className={`text-2xl font-bold mt-1 ${forecastedBalance >= 0 ? 'text-green-700' : 'text-red-700'}`}>
-                    ${forecastedBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                  </p>
-                  <div className="mt-2 text-xs text-gray-600">
-                    <div>Weekly: ${weeklyPayments.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
-                    <div>Monthly: ${monthlyPayments.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
                   </div>
                 </div>
-                <DollarSign className={forecastedBalance >= 0 ? 'text-green-600' : 'text-red-600'} size={32} />
-              </div>
-            </div>
-          </div>
+              )}
+
+              {/* Expenses tab shows Actual Expenses + Wise Balance */}
+              {currentView === 'expenses' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-red-600 font-medium">Actual Expenses</p>
+                        <p className="text-xs text-red-500 mt-0.5">Paid</p>
+                        <p className="text-2xl font-bold text-red-700 mt-1">
+                          ${totalExpenses.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        </p>
+                      </div>
+                      <TrendingDown className="text-red-600" size={32} />
+                    </div>
+                  </div>
+
+                  <div className="bg-blue-50 border-blue-200 border rounded-lg p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-blue-600">
+                          Total Wise Balance
+                        </p>
+                        <p className="text-xs text-blue-500 mt-0.5">All currencies in USD</p>
+                        <p className="text-2xl font-bold mt-1 text-blue-700">
+                          ${wiseBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        </p>
+                        {totalUSD && totalUSD.breakdown && (
+                          <div className="mt-2 text-xs text-blue-600">
+                            {totalUSD.breakdown.map((item, index) => (
+                              <div key={index}>
+                                {item.currency}: ${item.usd_equivalent.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <DollarSign className="text-blue-600" size={32} />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Salaries tab shows all 4 general summary cards */}
+              {currentView === 'salaries' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-green-600 font-medium">Actual Income</p>
+                        <p className="text-xs text-green-500 mt-0.5">Received</p>
+                        <p className="text-2xl font-bold text-green-700 mt-1">
+                          ${totalIncome.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        </p>
+                      </div>
+                      <TrendingUp className="text-green-600" size={32} />
+                    </div>
+                  </div>
+
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-red-600 font-medium">Actual Expenses</p>
+                        <p className="text-xs text-red-500 mt-0.5">Paid</p>
+                        <p className="text-2xl font-bold text-red-700 mt-1">
+                          ${totalExpenses.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        </p>
+                      </div>
+                      <TrendingDown className="text-red-600" size={32} />
+                    </div>
+                  </div>
+
+                  <div className="bg-blue-50 border-blue-200 border rounded-lg p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-blue-600">
+                          Total Wise Balance
+                        </p>
+                        <p className="text-xs text-blue-500 mt-0.5">All currencies in USD</p>
+                        <p className="text-2xl font-bold mt-1 text-blue-700">
+                          ${wiseBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        </p>
+                        {totalUSD && totalUSD.breakdown && (
+                          <div className="mt-2 text-xs text-blue-600">
+                            {totalUSD.breakdown.map((item, index) => (
+                              <div key={index}>
+                                {item.currency}: ${item.usd_equivalent.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <DollarSign className="text-blue-600" size={32} />
+                    </div>
+                  </div>
+
+                  <div className={`${forecastedBalance >= 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'} border rounded-lg p-4`}>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className={`text-sm font-medium ${forecastedBalance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          End-of-Month Forecast
+                        </p>
+                        <p className={`text-xs ${forecastedBalance >= 0 ? 'text-green-500' : 'text-red-500'} mt-0.5`}>
+                          {forecast.weeks_remaining} weeks remaining
+                        </p>
+                        <p className={`text-2xl font-bold mt-1 ${forecastedBalance >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                          ${forecastedBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        </p>
+                        <div className="mt-2 text-xs text-gray-600">
+                          <div>Weekly: ${weeklyPayments.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+                          <div>Monthly: ${monthlyPayments.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+                        </div>
+                      </div>
+                      <DollarSign className={forecastedBalance >= 0 ? 'text-green-600' : 'text-red-600'} size={32} />
+                    </div>
+                  </div>
+                </div>
+              )}
             </>
           )}
         </div>
