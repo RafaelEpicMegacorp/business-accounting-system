@@ -40,11 +40,14 @@ class WiseService {
           // Prevent infinite retry loops
           if (originalRequest._scaRetryAttempted) {
             console.error('SCA retry already attempted, failing request');
+            console.error('Second 403 response data:', JSON.stringify(error.response?.data));
+            console.error('Second 403 response headers:', JSON.stringify(error.response?.headers));
             return Promise.reject(error);
           }
 
           const oneTimeToken = error.response.headers['x-2fa-approval'];
           console.log('SCA required - received one-time-token from Wise API');
+          console.log('First 403 response data:', JSON.stringify(error.response?.data));
 
           try {
             // Sign the one-time-token with private key
@@ -59,6 +62,8 @@ class WiseService {
             originalRequest.headers['x-2fa-approval'] = oneTimeToken;
             originalRequest.headers['X-Signature'] = signature;
             console.log('Retrying request with SCA signature and one-time-token...');
+            console.log('Signature length:', signature.length, 'characters');
+            console.log('Signature start:', signature.substring(0, 20) + '...');
 
             return this.client(originalRequest);
           } catch (scaError) {
