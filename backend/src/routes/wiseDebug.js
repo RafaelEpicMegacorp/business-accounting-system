@@ -2,12 +2,32 @@ const express = require('express');
 const router = express.Router();
 const wiseService = require('../services/wiseService');
 
+// Capture logs for debugging
+let debugLogs = [];
+const originalLog = console.log;
+const originalError = console.error;
+
+const captureLog = (...args) => {
+  debugLogs.push({ type: 'log', message: args.join(' '), timestamp: new Date().toISOString() });
+  originalLog(...args);
+};
+
+const captureError = (...args) => {
+  debugLogs.push({ type: 'error', message: args.join(' '), timestamp: new Date().toISOString() });
+  originalError(...args);
+};
+
 /**
  * Debug endpoint to test Wise API connection and SCA
  * GET /api/wise/debug/test-connection
  */
 router.get('/test-connection', async (req, res) => {
   try {
+    // Reset and capture logs for this request
+    debugLogs = [];
+    console.log = captureLog;
+    console.error = captureError;
+
     console.log('=== WISE DEBUG TEST START ===');
     console.log('WISE_API_TOKEN configured:', !!process.env.WISE_API_TOKEN);
     console.log('WISE_PROFILE_ID:', process.env.WISE_PROFILE_ID);
@@ -51,6 +71,10 @@ router.get('/test-connection', async (req, res) => {
 
     console.log('=== WISE DEBUG TEST END ===');
 
+    // Restore original console functions
+    console.log = originalLog;
+    console.error = originalError;
+
     res.json({
       success: true,
       config: {
@@ -60,7 +84,7 @@ router.get('/test-connection', async (req, res) => {
         privateKeyFormat: process.env.WISE_PRIVATE_KEY?.substring(0, 30) + '...'
       },
       balances: balances.map(b => ({ id: b.id, currency: b.currency })),
-      message: 'Check Railway logs for detailed output'
+      logs: debugLogs
     });
 
   } catch (error) {
@@ -69,10 +93,15 @@ router.get('/test-connection', async (req, res) => {
     console.error('Stack:', error.stack);
     console.error('Response data:', error.response?.data);
 
+    // Restore original console functions
+    console.log = originalLog;
+    console.error = originalError;
+
     res.status(500).json({
       success: false,
       error: error.message,
-      details: error.response?.data || error.stack
+      details: error.response?.data || error.stack,
+      logs: debugLogs
     });
   }
 });
