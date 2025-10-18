@@ -28,12 +28,16 @@ class WiseScaSigner {
     if (rawKey.startsWith('-----BEGIN')) {
       // Already in PEM format
       this.privateKey = rawKey;
+      console.log('Using WISE_PRIVATE_KEY in PEM format directly');
     } else {
       // Assume base64-encoded single-line format - decode to PEM
       try {
         const decoded = Buffer.from(rawKey, 'base64').toString('utf8');
         this.privateKey = decoded;
         console.log('Decoded WISE_PRIVATE_KEY from base64 format');
+        console.log('Decoded key starts with:', decoded.substring(0, 30));
+        console.log('Decoded key ends with:', decoded.substring(decoded.length - 30));
+        console.log('Decoded key length:', decoded.length);
       } catch (error) {
         console.error('Failed to decode WISE_PRIVATE_KEY:', error.message);
         this.privateKey = rawKey; // Try using as-is
