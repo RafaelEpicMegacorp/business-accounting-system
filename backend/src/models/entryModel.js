@@ -316,6 +316,24 @@ const EntryModel = {
 
   // Generate missing salary entries for all active employees in a given month
   async generateMissingSalaryEntries(year, month) {
+    // First, clean up any incorrect Sunday entries for weekly employees in this month
+    const firstDay = new Date(year, month - 1, 1);
+    const lastDay = new Date(year, month, 0);
+
+    await pool.query(
+      `DELETE FROM entries
+       WHERE id IN (
+         SELECT e.id FROM entries e
+         JOIN employees emp ON e.employee_id = emp.id
+         WHERE emp.pay_type = 'weekly'
+         AND e.category = 'Employee'
+         AND EXTRACT(DOW FROM e.entry_date) = 0
+         AND e.entry_date >= $1
+         AND e.entry_date <= $2
+       )`,
+      [firstDay.toISOString().split('T')[0], lastDay.toISOString().split('T')[0]]
+    );
+
     // Get all active employees
     const employeesResult = await pool.query(
       'SELECT * FROM employees WHERE is_active = true'
@@ -323,8 +341,6 @@ const EntryModel = {
     const employees = employeesResult.rows;
 
     const generatedEntries = [];
-    const firstDay = new Date(year, month - 1, 1);
-    const lastDay = new Date(year, month, 0);
 
     for (const employee of employees) {
       const payRate = parseFloat(employee.pay_rate);
