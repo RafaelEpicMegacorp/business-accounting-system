@@ -329,27 +329,30 @@ const EntryModel = {
     for (const employee of employees) {
       const payRate = parseFloat(employee.pay_rate);
       const multiplier = parseFloat(employee.pay_multiplier);
-      const total = payRate * multiplier;
 
       if (employee.pay_type === 'weekly') {
-        // Generate weekly entries (one for each Sunday in the month)
-        const sundays = [];
+        // For weekly employees, pay_rate is monthly salary - divide by 4 for weekly
+        const weeklyBaseAmount = payRate / 4;
+        const weeklyTotal = weeklyBaseAmount * multiplier;
+
+        // Generate weekly entries (one for each Friday in the month)
+        const fridays = [];
         let currentDate = new Date(firstDay);
 
-        // Find first Sunday
-        while (currentDate.getDay() !== 0) {
+        // Find first Friday (day 5)
+        while (currentDate.getDay() !== 5) {
           currentDate.setDate(currentDate.getDate() + 1);
         }
 
-        // Collect all Sundays in the month
+        // Collect all Fridays in the month
         while (currentDate <= lastDay) {
-          sundays.push(new Date(currentDate));
+          fridays.push(new Date(currentDate));
           currentDate.setDate(currentDate.getDate() + 7);
         }
 
         // Check if entries already exist for these dates
-        for (const sunday of sundays) {
-          const dateString = sunday.toISOString().split('T')[0];
+        for (const friday of fridays) {
+          const dateString = friday.toISOString().split('T')[0];
 
           // Check if entry already exists
           const existingEntry = await pool.query(
@@ -372,8 +375,8 @@ const EntryModel = {
                 'Employee',
                 `Weekly salary - ${employee.name}`,
                 `Week ending ${dateString}`,
-                payRate,
-                total,
+                weeklyBaseAmount,
+                weeklyTotal,
                 dateString,
                 'pending',
                 employee.id
@@ -383,6 +386,9 @@ const EntryModel = {
           }
         }
       } else if (employee.pay_type === 'monthly') {
+        // For monthly employees, pay_rate is the monthly salary
+        const monthlyTotal = payRate * multiplier;
+
         // Generate monthly entry (last day of month)
         const dateString = lastDay.toISOString().split('T')[0];
 
@@ -408,7 +414,7 @@ const EntryModel = {
               `Monthly salary - ${employee.name}`,
               `Month ending ${dateString}`,
               payRate,
-              total,
+              monthlyTotal,
               dateString,
               'pending',
               employee.id
