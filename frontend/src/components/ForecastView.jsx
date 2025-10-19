@@ -45,7 +45,7 @@ function ForecastView() {
   }
 
   const forecastBalance = parseFloat(forecast.forecasted_balance);
-  const currentBalance = parseFloat(forecast.current_balance); // Now uses Wise balance from backend
+  const currentBalance = totalUSD ? parseFloat(totalUSD.total_usd) : 0; // Use same source as Dashboard
   const accountingBalance = parseFloat(forecast.accounting_balance || 0);
   const balanceDifference = parseFloat(forecast.balance_difference || 0);
   const contractIncome = parseFloat(forecast.contract_income || 0);
