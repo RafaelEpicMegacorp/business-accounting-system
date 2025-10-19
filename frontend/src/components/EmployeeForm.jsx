@@ -15,7 +15,10 @@ export default function EmployeeForm({ employee, onClose, onSuccess }) {
   const [error, setError] = useState(null);
 
   useEffect(() => {
+    console.log('EmployeeForm received employee:', employee);
     if (employee) {
+      console.log('Employee ID:', employee.id);
+      console.log('Employee keys:', Object.keys(employee));
       setFormData({
         name: employee.name || '',
         email: employee.email || '',
@@ -51,6 +54,10 @@ export default function EmployeeForm({ employee, onClose, onSuccess }) {
       setError(null);
 
       if (employee) {
+        // Defensive check: ensure employee has an id
+        if (!employee.id) {
+          throw new Error('Employee ID is missing. Cannot update employee.');
+        }
         await employeeService.update(employee.id, formData);
       } else {
         await employeeService.create(formData);
@@ -59,8 +66,9 @@ export default function EmployeeForm({ employee, onClose, onSuccess }) {
       onSuccess();
       onClose();
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to save employee');
-      console.error(err);
+      setError(err.response?.data?.error || err.message || 'Failed to save employee');
+      console.error('Employee form error:', err);
+      console.error('Employee object:', employee);
     } finally {
       setLoading(false);
     }
