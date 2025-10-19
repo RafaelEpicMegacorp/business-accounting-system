@@ -45,7 +45,6 @@ const DashboardModel = {
         SUM(CASE WHEN contract_type = 'monthly' THEN amount ELSE 0 END) as monthly_recurring_revenue
       FROM contracts
       WHERE status = 'active'
-        AND (end_date IS NULL OR end_date >= CURRENT_DATE)
     `);
 
     // Get employee count

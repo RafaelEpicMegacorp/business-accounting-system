@@ -14,7 +14,6 @@ const ContractModel = {
     const result = await pool.query(
       `SELECT * FROM contracts
        WHERE status = 'active'
-       AND (end_date IS NULL OR end_date >= CURRENT_DATE)
        ORDER BY client_name ASC`
     );
     return result.rows;
@@ -70,8 +69,7 @@ const ContractModel = {
       `SELECT SUM(amount) as total_monthly_revenue
        FROM contracts
        WHERE status = 'active'
-       AND contract_type = 'monthly'
-       AND (end_date IS NULL OR end_date >= CURRENT_DATE)`
+       AND contract_type = 'monthly'`
     );
     return parseFloat(result.rows[0].total_monthly_revenue || 0);
   },
@@ -86,7 +84,6 @@ const ContractModel = {
        WHERE status = 'active'
        AND contract_type = 'monthly'
        AND payment_day >= $1
-       AND (end_date IS NULL OR end_date >= CURRENT_DATE)
        ORDER BY payment_day ASC`,
       [currentDay]
     );
