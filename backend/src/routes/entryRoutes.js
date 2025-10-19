@@ -14,6 +14,7 @@ router.get('/income', EntryController.getIncome);
 router.get('/expenses', EntryController.getExpenses);
 router.get('/salaries', EntryController.getSalaries);
 router.post('/generate-salary-entries', EntryController.generateSalaryEntries);
+router.post('/cleanup-weekly', EntryController.cleanupWeeklyEntries);
 router.delete('/bulk', EntryController.bulkDelete);
 router.put('/bulk/status', EntryController.bulkUpdateStatus);
 router.get('/', EntryController.getAll);

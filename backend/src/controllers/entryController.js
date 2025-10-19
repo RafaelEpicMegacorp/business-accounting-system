@@ -1,4 +1,5 @@
 const EntryModel = require('../models/entryModel');
+const pool = require('../config/database');
 
 const EntryController = {
   // GET /api/entries?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
@@ -176,6 +177,46 @@ const EntryController = {
         success: true,
         affected: result.affected,
         failed: result.failed
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  // POST /api/entries/cleanup-weekly
+  async cleanupWeeklyEntries(req, res, next) {
+    try {
+      // Check what entries we'll delete
+      const checkResult = await pool.query(`
+        SELECT e.id, e.description, e.entry_date, e.total, emp.name
+        FROM entries e
+        JOIN employees emp ON e.employee_id = emp.id
+        WHERE emp.pay_type = 'weekly'
+        AND e.category = 'Employee'
+        AND EXTRACT(DOW FROM e.entry_date) = 0
+        ORDER BY emp.name, e.entry_date
+      `);
+
+      const entriesToDelete = checkResult.rows;
+
+      // Delete the incorrect Sunday entries
+      const deleteResult = await pool.query(`
+        DELETE FROM entries
+        WHERE id IN (
+          SELECT e.id FROM entries e
+          JOIN employees emp ON e.employee_id = emp.id
+          WHERE emp.pay_type = 'weekly'
+          AND e.category = 'Employee'
+          AND EXTRACT(DOW FROM e.entry_date) = 0
+        )
+        RETURNING id
+      `);
+
+      res.json({
+        success: true,
+        deleted: deleteResult.rows.length,
+        entries: entriesToDelete,
+        message: 'Successfully cleaned up Sunday entries for weekly employees. Visit Salaries tab to regenerate correct entries.'
       });
     } catch (error) {
       next(error);
