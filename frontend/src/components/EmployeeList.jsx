@@ -159,6 +159,16 @@ export default function EmployeeList({ onEmployeeSelect, onEdit }) {
     return labels[payType] || payType;
   };
 
+  // Calculate payroll totals
+  const activeEmployees = employees.filter(e => e.is_active);
+  const monthlyPayroll = activeEmployees
+    .filter(e => e.pay_type === 'monthly')
+    .reduce((sum, e) => sum + (parseFloat(e.pay_rate) * parseFloat(e.pay_multiplier)), 0);
+  const weeklyPayroll = activeEmployees
+    .filter(e => e.pay_type === 'weekly')
+    .reduce((sum, e) => sum + (parseFloat(e.pay_rate) * parseFloat(e.pay_multiplier)), 0);
+  const totalPaid = employees.reduce((sum, e) => sum + parseFloat(e.total_paid || 0), 0);
+
   if (loading) {
     return <div className="text-center py-8">Loading employees...</div>;
   }
@@ -215,6 +225,63 @@ export default function EmployeeList({ onEmployeeSelect, onEdit }) {
         >
           All
         </button>
+      </div>
+
+      {/* Payroll Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        {/* Monthly Payroll */}
+        <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-lg shadow-lg p-5">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-medium opacity-90">Monthly Payroll</h3>
+            <DollarSign size={20} className="opacity-80" />
+          </div>
+          <p className="text-2xl font-bold">
+            ${formatCurrency(monthlyPayroll)}
+          </p>
+          <p className="text-xs opacity-80 mt-1">
+            {activeEmployees.filter(e => e.pay_type === 'monthly').length} employees
+          </p>
+        </div>
+
+        {/* Weekly Payroll */}
+        <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-lg shadow-lg p-5">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-medium opacity-90">Weekly Payroll</h3>
+            <DollarSign size={20} className="opacity-80" />
+          </div>
+          <p className="text-2xl font-bold">
+            ${formatCurrency(weeklyPayroll)}
+          </p>
+          <p className="text-xs opacity-80 mt-1">
+            {activeEmployees.filter(e => e.pay_type === 'weekly').length} employees
+          </p>
+        </div>
+
+        {/* Total Paid */}
+        <div className="bg-gradient-to-br from-green-500 to-green-600 text-white rounded-lg shadow-lg p-5">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-medium opacity-90">Total Paid</h3>
+            <CheckCircle size={20} className="opacity-80" />
+          </div>
+          <p className="text-2xl font-bold">
+            ${formatCurrency(totalPaid)}
+          </p>
+          <p className="text-xs opacity-80 mt-1">Historical payments</p>
+        </div>
+
+        {/* Active Employees */}
+        <div className="bg-gradient-to-br from-orange-500 to-orange-600 text-white rounded-lg shadow-lg p-5">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-medium opacity-90">Active Team</h3>
+            <Users size={20} className="opacity-80" />
+          </div>
+          <p className="text-2xl font-bold">
+            {activeEmployees.length}
+          </p>
+          <p className="text-xs opacity-80 mt-1">
+            of {employees.length} total
+          </p>
+        </div>
       </div>
 
       {/* Bulk Actions Toolbar */}
