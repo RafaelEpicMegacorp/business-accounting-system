@@ -9,13 +9,14 @@ import EmployeeForm from './EmployeeForm';
 import ContractList from './ContractList';
 import ContractForm from './ContractForm';
 import DashboardView from './DashboardView';
+import ForecastView from './ForecastView';
 import SalaryCalendar from './SalaryCalendar';
 import WiseReviewQueue from './WiseReviewQueue';
 import { exportEntriesToCSV, exportEmployeesToCSV, exportContractsToCSV } from '../utils/csvExport';
 
 export default function AccountingApp() {
   const { user, logout } = useAuth();
-  const [currentView, setCurrentView] = useState('dashboard'); // 'dashboard', 'income', 'expenses', 'salaries', 'employees', 'contracts', or 'wise'
+  const [currentView, setCurrentView] = useState('dashboard'); // 'dashboard', 'forecast', 'income', 'expenses', 'salaries', 'employees', 'contracts', or 'wise'
   const [entries, setEntries] = useState([]);
   const [totals, setTotals] = useState({
     total_income: '0',
@@ -772,7 +773,12 @@ export default function AccountingApp() {
 
         {/* Dashboard View */}
         {currentView === 'dashboard' && (
-          <DashboardView />
+          <DashboardView onNavigateToForecast={() => setCurrentView('forecast')} />
+        )}
+
+        {/* Forecast View */}
+        {currentView === 'forecast' && (
+          <ForecastView />
         )}
 
         {/* Employee View */}

@@ -6,7 +6,7 @@ import currencyService from '../services/currencyService';
 import IncomeVsExpenseChart from './IncomeVsExpenseChart';
 import CategoryBreakdownChart from './CategoryBreakdownChart';
 
-function DashboardView() {
+function DashboardView({ onNavigateToForecast }) {
   const [stats, setStats] = useState(null);
   const [forecast, setForecast] = useState(null);
   const [currencyBalances, setCurrencyBalances] = useState([]);
@@ -85,7 +85,10 @@ function DashboardView() {
         </div>
 
         {/* End-of-Month Forecast */}
-        <div className={`${forecastBalance >= 0 ? 'bg-gradient-to-br from-green-500 to-green-600' : 'bg-gradient-to-br from-red-500 to-red-600'} text-white rounded-lg shadow-lg p-6`}>
+        <div
+          onClick={onNavigateToForecast}
+          className={`${forecastBalance >= 0 ? 'bg-gradient-to-br from-green-500 to-green-600' : 'bg-gradient-to-br from-red-500 to-red-600'} text-white rounded-lg shadow-lg p-6 cursor-pointer hover:shadow-xl transition-all duration-200 transform hover:scale-105`}
+        >
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-lg font-medium opacity-90">End-of-Month Forecast</h3>
             <Calendar size={24} className="opacity-80" />
@@ -103,6 +106,9 @@ function DashboardView() {
               <span>Monthly:</span>
               <span>${monthlyPayments.toLocaleString()}</span>
             </div>
+          </div>
+          <div className="mt-2 text-xs opacity-70 text-center">
+            Click to see detailed breakdown
           </div>
         </div>
 
