@@ -107,6 +107,12 @@ const entryService = {
   async bulkUpdateStatus(ids, status) {
     const response = await api.put('/entries/bulk/status', { ids, status });
     return response.data;
+  },
+
+  // Generate missing salary entries for a given month
+  async generateSalaryEntries(year, month) {
+    const response = await api.post('/entries/generate-salary-entries', { year, month });
+    return response.data;
   }
 };
 

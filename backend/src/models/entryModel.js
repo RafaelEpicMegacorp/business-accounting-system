@@ -312,6 +312,117 @@ const EntryModel = {
       weeks_remaining: weeksRemaining,
       days_remaining: daysRemaining
     };
+  },
+
+  // Generate missing salary entries for all active employees in a given month
+  async generateMissingSalaryEntries(year, month) {
+    // Get all active employees
+    const employeesResult = await pool.query(
+      'SELECT * FROM employees WHERE is_active = true'
+    );
+    const employees = employeesResult.rows;
+
+    const generatedEntries = [];
+    const firstDay = new Date(year, month - 1, 1);
+    const lastDay = new Date(year, month, 0);
+
+    for (const employee of employees) {
+      const payRate = parseFloat(employee.pay_rate);
+      const multiplier = parseFloat(employee.pay_multiplier);
+      const total = payRate * multiplier;
+
+      if (employee.pay_type === 'weekly') {
+        // Generate weekly entries (one for each Sunday in the month)
+        const sundays = [];
+        let currentDate = new Date(firstDay);
+
+        // Find first Sunday
+        while (currentDate.getDay() !== 0) {
+          currentDate.setDate(currentDate.getDate() + 1);
+        }
+
+        // Collect all Sundays in the month
+        while (currentDate <= lastDay) {
+          sundays.push(new Date(currentDate));
+          currentDate.setDate(currentDate.getDate() + 7);
+        }
+
+        // Check if entries already exist for these dates
+        for (const sunday of sundays) {
+          const dateString = sunday.toISOString().split('T')[0];
+
+          // Check if entry already exists
+          const existingEntry = await pool.query(
+            `SELECT id FROM entries
+             WHERE employee_id = $1
+             AND entry_date = $2
+             AND type = 'expense'
+             AND category = 'Employee'`,
+            [employee.id, dateString]
+          );
+
+          if (existingEntry.rows.length === 0) {
+            // Create new entry
+            const result = await pool.query(
+              `INSERT INTO entries (type, category, description, detail, base_amount, total, entry_date, status, employee_id)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+               RETURNING *`,
+              [
+                'expense',
+                'Employee',
+                `Weekly salary - ${employee.name}`,
+                `Week ending ${dateString}`,
+                payRate,
+                total,
+                dateString,
+                'pending',
+                employee.id
+              ]
+            );
+            generatedEntries.push(result.rows[0]);
+          }
+        }
+      } else if (employee.pay_type === 'monthly') {
+        // Generate monthly entry (last day of month)
+        const dateString = lastDay.toISOString().split('T')[0];
+
+        // Check if entry already exists
+        const existingEntry = await pool.query(
+          `SELECT id FROM entries
+           WHERE employee_id = $1
+           AND entry_date = $2
+           AND type = 'expense'
+           AND category = 'Employee'`,
+          [employee.id, dateString]
+        );
+
+        if (existingEntry.rows.length === 0) {
+          // Create new entry
+          const result = await pool.query(
+            `INSERT INTO entries (type, category, description, detail, base_amount, total, entry_date, status, employee_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+             RETURNING *`,
+            [
+              'expense',
+              'Employee',
+              `Monthly salary - ${employee.name}`,
+              `Month ending ${dateString}`,
+              payRate,
+              total,
+              dateString,
+              'pending',
+              employee.id
+            ]
+          );
+          generatedEntries.push(result.rows[0]);
+        }
+      }
+    }
+
+    return {
+      generated: generatedEntries.length,
+      entries: generatedEntries
+    };
   }
 };
 

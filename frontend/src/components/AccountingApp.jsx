@@ -86,6 +86,10 @@ export default function AccountingApp() {
       } else if (currentView === 'expenses') {
         entriesData = await entryService.getExpenses(dateFilters);
       } else if (currentView === 'salaries') {
+        // Auto-generate missing salary entries for current month
+        const now = new Date();
+        await entryService.generateSalaryEntries(now.getFullYear(), now.getMonth() + 1);
+        // Then fetch all salary entries
         entriesData = await entryService.getSalaries(dateFilters);
       } else if (currentView === 'contracts') {
         entriesData = [];

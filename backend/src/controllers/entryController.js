@@ -121,6 +121,23 @@ const EntryController = {
     }
   },
 
+  // POST /api/entries/generate-salary-entries
+  async generateSalaryEntries(req, res, next) {
+    try {
+      const { year, month } = req.body;
+
+      // Default to current month if not provided
+      const now = new Date();
+      const targetYear = year || now.getFullYear();
+      const targetMonth = month || (now.getMonth() + 1);
+
+      const result = await EntryModel.generateMissingSalaryEntries(targetYear, targetMonth);
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  },
+
   // DELETE /api/entries/bulk
   async bulkDelete(req, res, next) {
     try {
