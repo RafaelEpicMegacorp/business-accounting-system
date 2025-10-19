@@ -3,6 +3,7 @@ import { X, DollarSign, Calendar, Mail, User, TrendingUp } from 'lucide-react';
 import employeeService from '../services/employeeService';
 
 export default function EmployeeForm({ employee, onClose, onSuccess }) {
+  const [employeeId, setEmployeeId] = useState(null); // Store employee ID separately
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -19,6 +20,10 @@ export default function EmployeeForm({ employee, onClose, onSuccess }) {
     if (employee) {
       console.log('Employee ID:', employee.id);
       console.log('Employee keys:', Object.keys(employee));
+
+      // Store the employee ID in local state to prevent losing it
+      setEmployeeId(employee.id);
+
       setFormData({
         name: employee.name || '',
         email: employee.email || '',
@@ -27,6 +32,9 @@ export default function EmployeeForm({ employee, onClose, onSuccess }) {
         payMultiplier: employee.pay_multiplier || '1.12',
         startDate: employee.start_date ? new Date(employee.start_date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
       });
+    } else {
+      // Reset employeeId if no employee (creating new)
+      setEmployeeId(null);
     }
   }, [employee]);
 
@@ -53,13 +61,13 @@ export default function EmployeeForm({ employee, onClose, onSuccess }) {
       setLoading(true);
       setError(null);
 
-      if (employee) {
-        // Defensive check: ensure employee has an id
-        if (!employee.id) {
-          throw new Error('Employee ID is missing. Cannot update employee.');
-        }
-        await employeeService.update(employee.id, formData);
+      if (employeeId) {
+        // Updating existing employee using stored employeeId
+        console.log('Updating employee with ID:', employeeId);
+        await employeeService.update(employeeId, formData);
       } else {
+        // Creating new employee
+        console.log('Creating new employee');
         await employeeService.create(formData);
       }
 
@@ -68,7 +76,8 @@ export default function EmployeeForm({ employee, onClose, onSuccess }) {
     } catch (err) {
       setError(err.response?.data?.error || err.message || 'Failed to save employee');
       console.error('Employee form error:', err);
-      console.error('Employee object:', employee);
+      console.error('Employee ID used:', employeeId);
+      console.error('Form data:', formData);
     } finally {
       setLoading(false);
     }
@@ -80,7 +89,7 @@ export default function EmployeeForm({ employee, onClose, onSuccess }) {
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b">
           <h2 className="text-2xl font-bold text-gray-900">
-            {employee ? 'Edit Employee' : 'Add New Employee'}
+            {employeeId ? 'Edit Employee' : 'Add New Employee'}
           </h2>
           <button
             onClick={onClose}
@@ -225,7 +234,7 @@ export default function EmployeeForm({ employee, onClose, onSuccess }) {
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
               <p className="mt-1 text-xs text-gray-500">
-                {employee
+                {employeeId
                   ? '⚠️ Editing start date will affect severance calculations'
                   : 'When did this employee start working?'}
               </p>
@@ -246,7 +255,7 @@ export default function EmployeeForm({ employee, onClose, onSuccess }) {
               disabled={loading}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
             >
-              {loading ? 'Saving...' : employee ? 'Update Employee' : 'Create Employee'}
+              {loading ? 'Saving...' : employeeId ? 'Update Employee' : 'Create Employee'}
             </button>
           </div>
         </form>
