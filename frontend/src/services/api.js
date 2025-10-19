@@ -26,7 +26,23 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response) {
+    // Handle 401 Unauthorized (expired or invalid token)
+    if (error.response?.status === 401) {
+      console.error('Authentication Error:', error.response.data);
+
+      // Check if error is due to expired or invalid token
+      const errorMessage = error.response.data?.error || '';
+      if (errorMessage.includes('expired') || errorMessage.includes('Invalid token') || errorMessage.includes('No token')) {
+        // Clear authentication data
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+
+        // Redirect to login page (only if not already there)
+        if (!window.location.pathname.includes('/login')) {
+          window.location.href = '/login';
+        }
+      }
+    } else if (error.response) {
       console.error('API Error:', error.response.data);
     } else if (error.request) {
       console.error('Network Error:', error.request);
