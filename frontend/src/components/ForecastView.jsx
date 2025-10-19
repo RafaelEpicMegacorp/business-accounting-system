@@ -44,7 +44,7 @@ function ForecastView() {
     );
   }
 
-  const forecastBalance = parseFloat(forecast.forecasted_balance);
+  // Get balances and details from API responses
   const currentBalance = totalUSD ? parseFloat(totalUSD.total_usd) : 0; // Use same source as Dashboard
   const accountingBalance = parseFloat(forecast.accounting_balance || 0);
   const balanceDifference = parseFloat(forecast.balance_difference || 0);
@@ -52,6 +52,9 @@ function ForecastView() {
   const weeklyPayments = parseFloat(forecast.weekly_payments);
   const monthlyPayments = parseFloat(forecast.monthly_payments);
   const totalExpenses = weeklyPayments + monthlyPayments;
+
+  // Calculate forecast on frontend using correct balance from totalUSD
+  const forecastBalance = currentBalance + contractIncome - totalExpenses;
 
   const isPositive = forecastBalance >= 0;
   const hasBalanceDifference = Math.abs(balanceDifference) > 0.01; // Show reconciliation if difference > 1 cent
