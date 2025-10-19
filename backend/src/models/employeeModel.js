@@ -187,6 +187,24 @@ const EmployeeModel = {
 
     const totalSeverance = baseSeverance * multiplier;
 
+    // Calculate payment due date based on pay type
+    let paymentDueDate;
+    if (employee.pay_type === 'monthly') {
+      // Payment due at end of termination month
+      const termYear = endDate.getFullYear();
+      const termMonth = endDate.getMonth();
+      paymentDueDate = new Date(termYear, termMonth + 1, 0); // Last day of month
+    } else if (employee.pay_type === 'weekly') {
+      // Payment due at end of week (Sunday)
+      const dayOfWeek = endDate.getDay(); // 0 = Sunday, 6 = Saturday
+      const daysUntilSunday = dayOfWeek === 0 ? 0 : (7 - dayOfWeek);
+      paymentDueDate = new Date(endDate);
+      paymentDueDate.setDate(endDate.getDate() + daysUntilSunday);
+    } else {
+      // Hourly: payment due on termination date
+      paymentDueDate = endDate;
+    }
+
     return {
       employee_id: employee.id,
       employee_name: employee.name,
@@ -195,6 +213,7 @@ const EmployeeModel = {
       pay_multiplier: multiplier,
       start_date: startDate.toISOString().split('T')[0],
       termination_date: endDate.toISOString().split('T')[0],
+      payment_due_date: paymentDueDate.toISOString().split('T')[0],
       days_worked: daysWorked,
       period_description: periodDescription,
       base_severance: parseFloat(baseSeverance.toFixed(2)),

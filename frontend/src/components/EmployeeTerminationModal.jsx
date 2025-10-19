@@ -179,6 +179,18 @@ export default function EmployeeTerminationModal({ employee, onClose, onSuccess 
                   <span className="font-medium text-blue-900">{(severance.pay_multiplier * 100).toFixed(2)}%</span>
                 </div>
 
+                <div className="flex justify-between text-sm">
+                  <span className="text-blue-700">Payment Due:</span>
+                  <span className="font-medium text-blue-900">{formatDate(severance.payment_due_date)}</span>
+                </div>
+                <p className="text-xs text-blue-600 mt-1">
+                  {employee.pay_type === 'monthly'
+                    ? '💼 Payment at end of month'
+                    : employee.pay_type === 'weekly'
+                    ? '📅 Payment at end of week (Sunday)'
+                    : '⏱️ Payment on termination date'}
+                </p>
+
                 <div className="border-t-2 border-blue-300 my-3"></div>
 
                 <div className="flex justify-between">
