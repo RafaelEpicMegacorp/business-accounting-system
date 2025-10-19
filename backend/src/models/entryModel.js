@@ -262,15 +262,45 @@ const EntryModel = {
       });
     });
 
-    // Get current balance
-    const totalsResult = await this.getTotals();
-    const currentBalance = parseFloat(totalsResult.net_balance || 0);
+    // Get Wise balance (actual bank balance) - use this for forecast
+    let wiseBalance = 0;
+    try {
+      const wiseBalanceResult = await pool.query(`
+        SELECT
+          SUM(
+            CASE cb.currency
+              WHEN 'USD' THEN cb.balance
+              WHEN 'EUR' THEN cb.balance * COALESCE(er.rate, 1.0)
+              WHEN 'GBP' THEN cb.balance * COALESCE(er2.rate, 1.0)
+              WHEN 'PLN' THEN cb.balance * COALESCE(er3.rate, 1.0)
+              ELSE cb.balance
+            END
+          ) as total_usd
+        FROM currency_balances cb
+        LEFT JOIN exchange_rates er ON er.from_currency = 'EUR' AND er.to_currency = 'USD' AND er.is_active = true
+        LEFT JOIN exchange_rates er2 ON er2.from_currency = 'GBP' AND er2.to_currency = 'USD' AND er2.is_active = true
+        LEFT JOIN exchange_rates er3 ON er3.from_currency = 'PLN' AND er3.to_currency = 'USD' AND er3.is_active = true
+      `);
+      wiseBalance = parseFloat(wiseBalanceResult.rows[0]?.total_usd || 0);
+    } catch (error) {
+      console.error('Error fetching Wise balance for forecast:', error);
+      // Fallback to zero if Wise balance unavailable
+      wiseBalance = 0;
+    }
 
+    // Also get accounting balance (from entries) for reconciliation
+    const totalsResult = await this.getTotals();
+    const accountingBalance = parseFloat(totalsResult.net_balance || 0);
+
+    // Use Wise balance for forecast calculation (actual bank balance)
+    const currentBalance = wiseBalance;
     const totalForecastedExpenses = weeklyPayments + monthlyPayments;
     const forecastedBalance = currentBalance + contractIncome - totalForecastedExpenses;
 
     return {
       current_balance: currentBalance.toFixed(2),
+      accounting_balance: accountingBalance.toFixed(2), // For reconciliation reference
+      balance_difference: (currentBalance - accountingBalance).toFixed(2),
       weekly_payments: weeklyPayments.toFixed(2),
       weekly_details: weeklyDetails,
       monthly_payments: monthlyPayments.toFixed(2),

@@ -45,13 +45,16 @@ function ForecastView() {
   }
 
   const forecastBalance = parseFloat(forecast.forecasted_balance);
-  const currentBalance = totalUSD ? parseFloat(totalUSD.total_usd) : parseFloat(forecast.current_balance);
+  const currentBalance = parseFloat(forecast.current_balance); // Now uses Wise balance from backend
+  const accountingBalance = parseFloat(forecast.accounting_balance || 0);
+  const balanceDifference = parseFloat(forecast.balance_difference || 0);
   const contractIncome = parseFloat(forecast.contract_income || 0);
   const weeklyPayments = parseFloat(forecast.weekly_payments);
   const monthlyPayments = parseFloat(forecast.monthly_payments);
   const totalExpenses = weeklyPayments + monthlyPayments;
 
   const isPositive = forecastBalance >= 0;
+  const hasBalanceDifference = Math.abs(balanceDifference) > 0.01; // Show reconciliation if difference > 1 cent
 
   return (
     <div className="space-y-6">
@@ -169,6 +172,35 @@ function ForecastView() {
           </div>
         </div>
       </div>
+
+      {/* Balance Reconciliation Note (only show if there's a difference) */}
+      {hasBalanceDifference && (
+        <div className="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-5">
+          <div className="flex items-start gap-3">
+            <Info size={24} className="text-yellow-700 mt-1 flex-shrink-0" />
+            <div className="space-y-2">
+              <h3 className="text-lg font-bold text-yellow-900">Balance Reconciliation Note</h3>
+              <p className="text-sm text-yellow-800">
+                There is a <span className="font-semibold">${Math.abs(balanceDifference).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span> difference between your Wise bank balance and accounting records:
+              </p>
+              <div className="grid grid-cols-2 gap-4 mt-3 p-3 bg-white rounded border border-yellow-200">
+                <div>
+                  <p className="text-xs text-gray-600">Wise Bank Balance</p>
+                  <p className="text-lg font-bold text-gray-900">${currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-600">Accounting Balance (Entries)</p>
+                  <p className="text-lg font-bold text-gray-900">${accountingBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+                </div>
+              </div>
+              <p className="text-xs text-yellow-700 mt-2">
+                This difference may be due to unsynced Wise transactions or manual entries not yet reconciled.
+                The forecast uses your actual Wise bank balance for accuracy.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Contract Details */}
       {forecast.contract_details && forecast.contract_details.length > 0 && (
@@ -305,7 +337,7 @@ function ForecastView() {
               </p>
               <ul className="list-disc list-inside space-y-1 text-sm ml-2">
                 <li>
-                  <span className="font-semibold">Starting Balance</span> - Your current total Wise balance in USD
+                  <span className="font-semibold">Starting Balance</span> - Your actual Wise bank balance in USD (live balance from your Wise account)
                 </li>
                 <li>
                   <span className="font-semibold">Expected Contract Income</span> - All active monthly contracts with payment dates remaining in this month
@@ -318,10 +350,10 @@ function ForecastView() {
                 </li>
               </ul>
               <p className="text-sm mt-3">
-                <span className="font-semibold">Formula:</span> Starting Balance + Contract Income - (Weekly Payments + Monthly Payments)
+                <span className="font-semibold">Formula:</span> Wise Balance + Contract Income - (Weekly Payments + Monthly Payments)
               </p>
               <p className="text-xs text-gray-600 mt-3 italic">
-                Note: This forecast assumes all scheduled contract payments will be received and all employee payments will be made as scheduled. Actual results may vary.
+                <strong>Note:</strong> This forecast uses your actual Wise bank balance to ensure accuracy. It assumes all scheduled contract payments will be received and all employee payments will be made as scheduled. Actual results may vary.
               </p>
             </div>
           </div>
