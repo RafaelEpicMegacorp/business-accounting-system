@@ -413,35 +413,46 @@ const WiseWebhookController = {
   async getDiagnostics(req, res, next) {
     try {
       const pool = require('../db');
-
-      // Get counts from database
-      const transactionsResult = await pool.query('SELECT COUNT(*) as count FROM wise_transactions');
-      const auditLogResult = await pool.query('SELECT COUNT(*) as count FROM wise_sync_audit_log');
-      const pendingResult = await pool.query('SELECT COUNT(*) as count FROM wise_transactions WHERE needs_review = true');
-      const processedResult = await pool.query('SELECT COUNT(*) as count FROM wise_transactions WHERE sync_status = $1', ['processed']);
-
-      // Get most recent transaction
-      const recentResult = await pool.query('SELECT transaction_date, type, amount, currency, description FROM wise_transactions ORDER BY transaction_date DESC LIMIT 1');
-
-      // Get configuration status
       const wiseScaSigner = require('../utils/wiseScaSigner');
 
-      res.json({
-        success: true,
-        database: {
+      // Get configuration status first (always works)
+      const configuration = {
+        api_token_set: !!process.env.WISE_API_TOKEN,
+        profile_id: process.env.WISE_PROFILE_ID || 'NOT SET',
+        private_key_set: !!process.env.WISE_PRIVATE_KEY,
+        sca_configured: wiseScaSigner.isConfigured(),
+        webhook_secret_set: !!process.env.WISE_WEBHOOK_SECRET
+      };
+
+      // Try to get database counts (may fail if tables don't exist)
+      let database = {};
+      try {
+        const transactionsResult = await pool.query('SELECT COUNT(*) as count FROM wise_transactions');
+        const auditLogResult = await pool.query('SELECT COUNT(*) as count FROM wise_sync_audit_log');
+        const pendingResult = await pool.query('SELECT COUNT(*) as count FROM wise_transactions WHERE needs_review = true');
+        const processedResult = await pool.query('SELECT COUNT(*) as count FROM wise_transactions WHERE sync_status = $1', ['processed']);
+        const recentResult = await pool.query('SELECT transaction_date, type, amount, currency, description FROM wise_transactions ORDER BY transaction_date DESC LIMIT 1');
+
+        database = {
           total_transactions: parseInt(transactionsResult.rows[0].count),
           pending_review: parseInt(pendingResult.rows[0].count),
           processed: parseInt(processedResult.rows[0].count),
           audit_log_entries: parseInt(auditLogResult.rows[0].count),
-          most_recent_transaction: recentResult.rows[0] || null
-        },
-        configuration: {
-          api_token_set: !!process.env.WISE_API_TOKEN,
-          profile_id: process.env.WISE_PROFILE_ID || 'NOT SET',
-          private_key_set: !!process.env.WISE_PRIVATE_KEY,
-          sca_configured: wiseScaSigner.isConfigured(),
-          webhook_secret_set: !!process.env.WISE_WEBHOOK_SECRET
-        }
+          most_recent_transaction: recentResult.rows[0] || null,
+          tables_exist: true
+        };
+      } catch (dbError) {
+        database = {
+          error: 'Database tables may not exist or migration not run',
+          details: dbError.message,
+          tables_exist: false
+        };
+      }
+
+      res.json({
+        success: true,
+        configuration,
+        database
       });
     } catch (error) {
       next(error);
