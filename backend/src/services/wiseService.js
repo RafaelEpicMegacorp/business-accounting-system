@@ -123,6 +123,14 @@ class WiseService {
         { params }
       );
 
+      // DEBUG: Log the actual response structure
+      console.log(`[DEBUG] Balance ${balanceId} (${currency}) API response structure:`, {
+        dataType: typeof response.data,
+        isArray: Array.isArray(response.data),
+        keys: response.data ? Object.keys(response.data).slice(0, 10) : 'null',
+        sampleData: response.data ? JSON.stringify(response.data).substring(0, 500) : 'null'
+      });
+
       return response.data;
     } catch (error) {
       console.error(`Error fetching transactions for balance ${balanceId} (${currency}):`, error.message);
@@ -208,9 +216,19 @@ class WiseService {
               intervalEnd: chunk.intervalEnd
             });
 
+            // DEBUG: Log what we're checking
+            console.log(`[DEBUG] Checking result for ${currency}:`, {
+              hasTransactionsProperty: 'transactions' in result,
+              transactionsType: typeof result.transactions,
+              transactionsLength: result.transactions ? result.transactions.length : 'N/A',
+              resultKeys: Object.keys(result).slice(0, 10)
+            });
+
             if (result.transactions && result.transactions.length > 0) {
               console.log(`  Fetched ${result.transactions.length} transactions for period ${chunk.intervalStart.substring(0, 10)} to ${chunk.intervalEnd.substring(0, 10)}`);
               allTransactions.push(...result.transactions);
+            } else {
+              console.log(`[DEBUG] No transactions found in result.transactions for ${currency}`);
             }
           } catch (err) {
             console.error(`Failed to fetch transactions for balance ${balance.id} (${currency}) in period ${chunk.intervalStart} to ${chunk.intervalEnd}:`, err.message);
