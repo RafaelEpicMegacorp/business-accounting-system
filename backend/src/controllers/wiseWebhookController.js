@@ -233,10 +233,28 @@ const WiseWebhookController = {
           statusText: wiseError.response?.statusText,
           data: wiseError.response?.data
         });
+
+        // Get configuration status for diagnostics
+        const wiseScaSigner = require('../utils/wiseScaSigner');
+        const configStatus = {
+          apiTokenConfigured: !!process.env.WISE_API_TOKEN,
+          profileIdConfigured: !!process.env.WISE_PROFILE_ID,
+          privateKeyConfigured: !!process.env.WISE_PRIVATE_KEY,
+          scaSignerConfigured: wiseScaSigner.isConfigured()
+        };
+
         return res.status(500).json({
           success: false,
           error: 'Failed to fetch transactions from Wise API',
-          details: wiseError.message
+          details: wiseError.message,
+          wiseApiStatus: wiseError.response?.status,
+          wiseApiError: wiseError.response?.data,
+          configStatus: configStatus,
+          hint: !configStatus.privateKeyConfigured
+            ? 'WISE_PRIVATE_KEY environment variable is not set. Transactions API requires SCA authentication with private key.'
+            : !configStatus.scaSignerConfigured
+            ? 'SCA signer is not properly configured. Check WISE_PRIVATE_KEY format.'
+            : `Wise API returned error: ${wiseError.response?.status || 'Unknown'}. Check if the private key matches the public key uploaded to Wise.`
         });
       }
 
