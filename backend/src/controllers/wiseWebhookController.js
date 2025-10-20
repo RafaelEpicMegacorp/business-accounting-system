@@ -394,12 +394,39 @@ const WiseWebhookController = {
    */
   async testConnection(req, res, next) {
     try {
+      // Get configuration status
+      const wiseScaSigner = require('../utils/wiseScaSigner');
+      const config = {
+        apiTokenConfigured: !!process.env.WISE_API_TOKEN,
+        profileIdConfigured: !!process.env.WISE_PROFILE_ID,
+        privateKeyConfigured: !!process.env.WISE_PRIVATE_KEY,
+        scaSignerConfigured: wiseScaSigner.isConfigured(),
+        profileId: process.env.WISE_PROFILE_ID || 'NOT SET'
+      };
+
+      console.log('Wise configuration check:', config);
+
       const isConnected = await wiseService.testConnection();
 
       if (isConnected) {
-        res.json({ success: true, message: 'Wise API connection successful' });
+        res.json({
+          success: true,
+          message: 'Wise API connection successful',
+          config: config
+        });
       } else {
-        res.status(500).json({ success: false, message: 'Wise API connection failed' });
+        res.status(500).json({
+          success: false,
+          message: 'Wise API connection failed',
+          config: config,
+          hint: !config.privateKeyConfigured
+            ? 'WISE_PRIVATE_KEY is not set in environment variables'
+            : !config.apiTokenConfigured
+            ? 'WISE_API_TOKEN is not set in environment variables'
+            : !config.profileIdConfigured
+            ? 'WISE_PROFILE_ID is not set in environment variables'
+            : 'Check Railway logs for detailed error messages'
+        });
       }
     } catch (error) {
       next(error);
