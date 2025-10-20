@@ -33,6 +33,10 @@ router.get('/stats', authMiddleware, wiseWebhookController.getStats);
 // Body: { action: 'approve' | 'skip', category?: string, employeeId?: number }
 router.post('/review/:id', authMiddleware, wiseWebhookController.reviewTransaction);
 
+// Get diagnostic information
+// GET /api/wise/diagnostics
+router.get('/diagnostics', authMiddleware, wiseWebhookController.getDiagnostics);
+
 // Test Wise API connection
 // GET /api/wise/test-connection
 router.get('/test-connection', authMiddleware, wiseWebhookController.testConnection);
