@@ -48,3 +48,9 @@ TASKS/
 # Testing
 coverage/
 .nyc_output/
+
+# Wise SCA keys (NEVER commit private keys!)
+wise_sca_key
+wise_sca_key.pub
+*.pem
+*.key
