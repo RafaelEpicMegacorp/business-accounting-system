@@ -41,4 +41,48 @@ router.get('/diagnostics', authMiddleware, wiseWebhookController.getDiagnostics)
 // GET /api/wise/test-connection
 router.get('/test-connection', authMiddleware, wiseWebhookController.testConnection);
 
+// DEBUG endpoint - Get raw API response for balance statement
+// GET /api/wise/debug-statement?balanceId=134500343&currency=USD
+router.get('/debug-statement', authMiddleware, async (req, res, next) => {
+  try {
+    const wiseService = require('../services/wiseService');
+    const { balanceId, currency } = req.query;
+
+    if (!balanceId || !currency) {
+      return res.status(400).json({
+        error: 'Missing required parameters',
+        hint: 'Provide balanceId and currency query parameters'
+      });
+    }
+
+    console.log(`[DEBUG ENDPOINT] Fetching statement for balance ${balanceId} (${currency})`);
+
+    const result = await wiseService.getBalanceTransactions(balanceId, currency, {
+      intervalStart: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+      intervalEnd: new Date().toISOString(),
+      type: 'COMPACT'
+    });
+
+    res.json({
+      success: true,
+      balanceId,
+      currency,
+      responseType: typeof result,
+      isArray: Array.isArray(result),
+      keys: Object.keys(result),
+      hasTransactionsProperty: 'transactions' in result,
+      transactionsCount: result.transactions ? result.transactions.length : 'N/A',
+      fullResponse: result
+    });
+
+  } catch (error) {
+    console.error('[DEBUG ENDPOINT] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      stack: error.stack
+    });
+  }
+});
+
 module.exports = router;
