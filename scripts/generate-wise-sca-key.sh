@@ -23,8 +23,9 @@ if [ -f "wise_sca_key" ] || [ -f "wise_sca_key.pub" ]; then
   rm -f wise_sca_key wise_sca_key.pub
 fi
 
-# Generate 4096-bit RSA key pair without passphrase
-ssh-keygen -t rsa -b 4096 -f wise_sca_key -N "" -C "wise-sca-accounting-system"
+# Generate 4096-bit RSA key pair in OpenSSL PEM format (required for Wise SCA)
+# Using -m pem ensures OpenSSL format instead of default OpenSSH format
+ssh-keygen -t rsa -b 4096 -m pem -f wise_sca_key -N "" -C "wise-sca-accounting-system"
 
 echo ""
 echo "✅ Keys generated successfully!"
