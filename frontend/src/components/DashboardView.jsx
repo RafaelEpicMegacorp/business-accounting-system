@@ -53,13 +53,16 @@ function DashboardView({ onNavigateToForecast }) {
     );
   }
 
-  const forecastBalance = parseFloat(forecast.forecasted_balance);
+  // Use total USD balance from Wise accounts
+  const currentBalance = totalUSD ? parseFloat(totalUSD.total_usd) : 0;
+
   const contractIncome = parseFloat(forecast.contract_income || 0);
   const weeklyPayments = parseFloat(forecast.weekly_payments);
   const monthlyPayments = parseFloat(forecast.monthly_payments);
+  const totalExpenses = weeklyPayments + monthlyPayments;
 
-  // Use total USD balance from Wise accounts
-  const currentBalance = totalUSD ? parseFloat(totalUSD.total_usd) : 0;
+  // Calculate forecast on frontend using correct balance from totalUSD (same as ForecastView)
+  const forecastBalance = currentBalance + contractIncome - totalExpenses;
 
   return (
     <div className="space-y-6">
