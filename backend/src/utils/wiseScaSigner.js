@@ -61,9 +61,9 @@ class WiseScaSigner {
 
     try {
       // Create signature using RSA-SHA256
-      // Convert token to Buffer using 'ascii' encoding (matching Python example)
+      // Convert token to Buffer using UTF-8 encoding (required by Wise API)
       const sign = crypto.createSign('RSA-SHA256');
-      sign.update(Buffer.from(oneTimeToken, 'ascii'));
+      sign.update(Buffer.from(oneTimeToken, 'utf-8'));
       sign.end();
 
       // Sign with private key and encode as base64
