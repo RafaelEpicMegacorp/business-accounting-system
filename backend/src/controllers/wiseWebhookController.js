@@ -3,6 +3,7 @@ const wiseClassifier = require('../services/wiseClassifier');
 const WiseTransactionModel = require('../models/wiseTransactionModel');
 const EntryModel = require('../models/entryModel');
 const WiseSignatureValidator = require('../utils/wiseSignatureValidator');
+const webhookMonitor = require('../webhookMonitor');
 
 const WiseWebhookController = {
   /**
@@ -40,6 +41,17 @@ const WiseWebhookController = {
 
       console.log('\n' + '─'.repeat(80) + '\n');
       // ============================================================================
+
+      // Log to webhook monitor for web interface
+      webhookMonitor.logWebhook({
+        timestamp: new Date().toISOString(),
+        ip: req.ip || req.connection?.remoteAddress || 'unknown',
+        url: req.originalUrl || req.url,
+        method: req.method,
+        headers: req.headers,
+        payload: payload,
+        isTest: !payload || Object.keys(payload).length === 0 || payload.event_type === 'test' || req.headers['x-test-notification'] === 'true'
+      });
 
       // Handle empty/test requests (during webhook registration)
       // Wise expects empty response body
