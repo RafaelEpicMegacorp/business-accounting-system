@@ -424,7 +424,17 @@ function generateMonitorHTML() {
         return;
       }
 
-      container.innerHTML = webhooks.map(webhook => \`
+      container.innerHTML = webhooks.map(webhook => {
+        // Extract transaction details
+        const resource = webhook.payload?.data?.resource;
+        const amount = resource?.amount?.value;
+        const currency = resource?.amount?.currency;
+        const type = resource?.type;
+        const description = resource?.description;
+        const merchant = resource?.merchant?.name;
+        const status = resource?.status;
+
+        return \`
         <div class="webhook-item \${webhook.isTest ? 'test' : 'production'}">
           <div class="webhook-header">
             <div class="webhook-time">\${formatTime(webhook.timestamp)}</div>
@@ -432,6 +442,22 @@ function generateMonitorHTML() {
               \${webhook.isTest ? 'TEST' : 'PRODUCTION'}
             </div>
           </div>
+
+          \${resource ? \`
+          <div style="background: #f9fafb; padding: 15px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid \${type === 'CREDIT' ? '#10b981' : '#ef4444'};">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+              <div style="font-size: 24px; font-weight: bold; color: \${type === 'CREDIT' ? '#10b981' : '#ef4444'};">
+                \${amount !== undefined ? (amount > 0 ? '+' : '') + amount : 'N/A'} \${currency || ''}
+              </div>
+              <div style="padding: 4px 12px; background: \${type === 'CREDIT' ? '#d1fae5' : '#fee2e2'}; color: \${type === 'CREDIT' ? '#065f46' : '#991b1b'}; border-radius: 12px; font-size: 12px; font-weight: bold;">
+                \${type || 'UNKNOWN'}
+              </div>
+            </div>
+            \${merchant ? \`<div style="font-size: 14px; color: #374151; margin-bottom: 5px;"><strong>🏪 Merchant:</strong> \${merchant}</div>\` : ''}
+            \${description ? \`<div style="font-size: 14px; color: #6b7280;"><strong>📝 Description:</strong> \${description}</div>\` : ''}
+            \${status ? \`<div style="font-size: 12px; color: #9ca3af; margin-top: 8px;">Status: \${status}</div>\` : ''}
+          </div>
+          \` : ''}
 
           <div class="webhook-meta">
             <div class="meta-item">
@@ -447,14 +473,15 @@ function generateMonitorHTML() {
 
           <details>
             <summary style="cursor: pointer; padding: 10px; background: #f3f4f6; border-radius: 5px; margin-bottom: 10px;">
-              <strong>View Full Payload</strong>
+              <strong>View Full Payload & Headers</strong>
             </summary>
             <div class="webhook-payload">
               <pre>\${JSON.stringify(webhook.payload, null, 2)}</pre>
             </div>
           </details>
         </div>
-      \`).join('');
+      \`;
+      }).join('');
     }
 
     function formatTime(timestamp) {
