@@ -353,21 +353,48 @@ class WiseService {
    * @returns {Object} Normalized transaction data
    */
   parseWebhookPayload(payload) {
-    // Wise webhook payload structure
     const data = payload.data;
     const resource = data?.resource;
+    const eventType = payload.event_type;
 
+    // Handle balances#update events (new structure with amounts)
+    if (eventType === 'balances#update') {
+      // balances#update structure:
+      // data.amount, data.currency, data.transaction_type, data.balance_id, etc.
+      return {
+        wiseTransactionId: data?.transfer_reference || data?.step_id || resource?.id,
+        resourceId: data?.balance_id,
+        profileId: resource?.profile_id || this.profileId,
+        accountId: resource?.id, // balance account ID
+        balanceId: data?.balance_id,
+        type: data?.transaction_type?.toUpperCase() === 'CREDIT' ? 'CREDIT' : 'DEBIT',
+        state: 'COMPLETED', // balances#update only fires for completed transactions
+        amount: Math.abs(data?.amount || 0),
+        currency: data?.currency || 'USD',
+        description: data?.channel_name || 'Balance update',
+        merchantName: null, // Not available in balances#update
+        referenceNumber: data?.transfer_reference,
+        transactionDate: data?.occurred_at,
+        valueDate: data?.occurred_at,
+        postTransactionBalance: data?.post_transaction_balance_amount,
+        stepId: data?.step_id,
+        rawPayload: payload
+      };
+    }
+
+    // Handle old test payload structure and other event types
+    // (balance-account-transactions#created, transfers#state-change, etc.)
     return {
       wiseTransactionId: data?.resource_id || resource?.id,
       resourceId: data?.resource_id,
-      profileId: data?.profile_id || this.profileId,
+      profileId: data?.profile_id || resource?.profile_id || this.profileId,
       accountId: resource?.account_id,
       type: resource?.type, // 'CREDIT' or 'DEBIT'
-      state: resource?.state, // 'COMPLETED', 'PENDING', etc.
+      state: resource?.state || resource?.status, // 'COMPLETED', 'PENDING', etc.
       amount: Math.abs(resource?.amount?.value || 0),
       currency: resource?.amount?.currency || 'USD',
       description: resource?.description || resource?.details?.description,
-      merchantName: resource?.details?.merchant?.name,
+      merchantName: resource?.details?.merchant?.name || resource?.merchant?.name,
       referenceNumber: resource?.reference_number || resource?.details?.reference,
       transactionDate: resource?.date || resource?.created_at,
       valueDate: resource?.value_date,
