@@ -1,0 +1,163 @@
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔑 WISE SCA KEY SETUP - COMPLETE INSTRUCTIONS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ NEW RSA KEY PAIR GENERATED IN CORRECT OPENSSL FORMAT
+✅ THIS WILL FIX THE 403 SCA ERROR AND ENABLE TRANSACTION SYNC
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+STEP 1: UPDATE PUBLIC KEY IN WISE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Go to: https://wise.com/settings/api-tokens
+2. Click: "Manage public keys"
+3. Click: "Add new public key"
+4. Copy EVERYTHING between the lines below (including "ssh-rsa" and ending "...system"):
+
+━━━━━━━━━━━━━━━━━━━━ COPY FROM HERE ━━━━━━━━━━━━━━━━━━━━━━━━━━
+ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQCccJ1qxpIy0iXYJLP6zqdUTTqjIufWCdAfI/+o1P+55RtNvFPuSXiZSHFS0b4aLK67JhUwqSdAh7uOy+jUDIJgrox3pCFVEfVmb9xc+76pcYcGPpaVa1j2PHJ3re/ERaNAzM61biFJrJJ50Zykk+wGllathcRabUNNM7wdxa3vrvDPrqInKpZ9SAvvLLgjA+qqATOALGiFWvLFgrDvOHRG5XY9Lb7UH1g/zoVGVwecJTYPD+KwPg4Ci+A+slh3nZrzHqepSDOGLhL6IAw1skxvp9YDu/IpWClwZAF4+6XkIh4BUqCZrn/PisgurT8YgzJSSUX5QhI7u7hRVUpkhKwSFL+y3ZBIt/5U0Bm449gebn/S1v7Q0dwtzzYMhyGu434qKMVGbvyqYrAXM9LUnPH2ZqopenTypY2x8+zP9h4k0ZXCMAds4/qvSqfg8p9i8buQLQohmOdL9o+9w8zeVrhOcYiCjm4rsW6bL+P0BAK3XpE5n7fHTbptqMR+Qt6YDIpA758SF4TkV0lcKJYK/NAviBYyJ56qo1N990MxSzEaEVO89IyUMcLqde0vyZyoo8u0qDLdP+yeXtyeo282WDK7e5U2BSfNpPjnoVc85t1BW4zTn+H13tG1Ludy2l+tMtGysK9AK+0qzyD1V9cw63R5UbYp8rZwz+wxmxuM28+I4Q== wise-sca-accounting-system
+━━━━━━━━━━━━━━━━━━━━ COPY TO HERE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+5. Paste into Wise
+6. Click "Add public key"
+7. ✅ Done! Public key uploaded to Wise
+
+
+STEP 2: UPDATE PRIVATE KEY IN RAILWAY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Go to: https://railway.com/
+2. Select project: "business-accounting-system"
+3. Click: "Variables" tab
+4. Find variable: WISE_PRIVATE_KEY
+5. Click to edit it
+6. Copy EVERYTHING between the lines below (including "-----BEGIN" and "-----END"):
+
+━━━━━━━━━━━━━━━━━━━━ COPY FROM HERE ━━━━━━━━━━━━━━━━━━━━━━━━━━
+-----BEGIN RSA PRIVATE KEY-----
+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
+-----END RSA PRIVATE KEY-----
+━━━━━━━━━━━━━━━━━━━━ COPY TO HERE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+7. Paste into Railway WISE_PRIVATE_KEY variable
+8. Click "Save" or close the modal
+9. ✅ Railway will automatically redeploy (~2 minutes)
+
+
+STEP 3: WAIT FOR DEPLOYMENT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⏳ Wait approximately 2 minutes for Railway to redeploy with the new key.
+
+You can monitor deployment at: https://railway.com/
+
+
+STEP 4: TEST THE SYNC
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Go to: https://ds-accounting.netlify.app
+2. Login if needed
+3. Click: "Wise Sync" tab
+4. Click: "Sync All History" button
+5. ✅ You should now see all 255+ transactions sync successfully! 🎉
+
+
+WHAT WAS FIXED
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+❌ OLD KEY FORMAT (SSH):
+   -----BEGIN OPENSSH PRIVATE KEY-----
+   (Node.js crypto.sign() cannot use this format)
+
+✅ NEW KEY FORMAT (OpenSSL PEM):
+   -----BEGIN RSA PRIVATE KEY-----
+   (Correct format for Wise SCA authentication)
+
+ROOT CAUSE: The SCA (Strong Customer Authentication) was failing because:
+1. Wise API returns 403 with one-time-token
+2. Backend signs token with private key
+3. Backend retries with signature
+4. ❌ SSH format key produces invalid signature
+5. ✅ OpenSSL format key produces valid signature
+6. 🎉 Transactions sync successfully
+
+
+SECURITY NOTES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚠️  The private key in this file is SECRET - never share it publicly!
+✅  This file is in .gitignore and won't be committed to git
+✅  Store a backup copy in your password manager
+✅  Delete this file after setup is complete
+
+
+TROUBLESHOOTING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+If sync still returns 0 transactions:
+1. Check Railway deployment logs for errors
+2. Verify WISE_PRIVATE_KEY was saved correctly (no extra spaces/newlines)
+3. Verify public key in Wise matches the private key
+4. Check Railway environment shows new deployment timestamp
+
+If you see 403 errors:
+1. Public key in Wise might not match private key in Railway
+2. Try regenerating a completely new key pair
+3. Contact support if issue persists
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Generated: 2025-10-20
+Key Format: OpenSSL PEM (RSA 4096-bit)
+Purpose: Wise SCA Authentication
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
