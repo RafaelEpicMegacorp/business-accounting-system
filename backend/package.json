@@ -9,7 +9,10 @@
     "migrate": "node-pg-migrate",
     "migrate:up": "node-pg-migrate up",
     "migrate:down": "node-pg-migrate down",
-    "migrate:create": "node-pg-migrate create"
+    "migrate:create": "node-pg-migrate create",
+    "logs": "node ../scripts/logs.js",
+    "logs:webhook": "node ../scripts/logs.js webhook",
+    "logs:error": "node ../scripts/logs.js error"
   },
   "dependencies": {
     "axios": "^1.12.2",
