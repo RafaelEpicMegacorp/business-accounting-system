@@ -93,6 +93,28 @@ const WiseWebhookController = {
         console.warn('⚠️  WISE_WEBHOOK_SECRET not set - Skipping signature validation (INSECURE!)');
       }
 
+      // Enrich transfers#state-change events with full transfer details
+      if (payload.event_type === 'transfers#state-change') {
+        const transferId = payload.data?.resource?.id;
+
+        if (transferId) {
+          console.log(`\n🔍 Fetching full transfer details for ID: ${transferId}...`);
+
+          try {
+            const transferDetails = await wiseService.getTransferDetails(transferId);
+            console.log(`✅ Transfer details fetched successfully`);
+            console.log(`   Amount: ${transferDetails.targetCurrency} ${transferDetails.targetValue}`);
+            console.log(`   Status: ${transferDetails.status}`);
+
+            // Enrich payload with transfer details
+            payload.data.resource.transferDetails = transferDetails;
+          } catch (error) {
+            console.warn(`⚠️  Failed to fetch transfer details: ${error.message}`);
+            // Continue processing without enrichment
+          }
+        }
+      }
+
       // Parse webhook payload
       console.log('\n⚙️  Parsing webhook payload...');
       const transaction = wiseService.parseWebhookPayload(payload);

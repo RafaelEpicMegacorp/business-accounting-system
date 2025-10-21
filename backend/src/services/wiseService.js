@@ -348,6 +348,22 @@ class WiseService {
   }
 
   /**
+   * Get transfer details by ID
+   * Used to fetch full details (including amount) when transfer webhook arrives
+   * @param {number} transferId - Transfer ID from webhook
+   * @returns {Object} Transfer details including amount
+   */
+  async getTransferDetails(transferId) {
+    try {
+      const response = await this.makeRequest('GET', `/v1/transfers/${transferId}`);
+      return response;
+    } catch (error) {
+      console.error(`Error fetching transfer ${transferId}:`, error.message);
+      throw error;
+    }
+  }
+
+  /**
    * Parse webhook payload
    * @param {Object} payload - Raw webhook payload from Wise
    * @returns {Object} Normalized transaction data
@@ -382,8 +398,29 @@ class WiseService {
       };
     }
 
+    // Handle transfers#state-change with enriched transfer details
+    if (eventType === 'transfers#state-change' && resource?.transferDetails) {
+      const details = resource.transferDetails;
+      return {
+        wiseTransactionId: resource.id,
+        resourceId: resource.id,
+        profileId: resource.profile_id || this.profileId,
+        accountId: resource.account_id,
+        type: 'DEBIT', // Outgoing transfer
+        state: details.status || data.current_state,
+        amount: Math.abs(details.targetValue || details.sourceValue || 0),
+        currency: details.targetCurrency || details.sourceCurrency || 'USD',
+        description: details.reference || `Transfer to ${details.recipientName || 'recipient'}`,
+        merchantName: details.recipientName,
+        referenceNumber: details.reference,
+        transactionDate: details.created || data.occurred_at,
+        valueDate: details.created,
+        rawPayload: payload
+      };
+    }
+
     // Handle old test payload structure and other event types
-    // (balance-account-transactions#created, transfers#state-change, etc.)
+    // (balance-account-transactions#created, etc.)
     return {
       wiseTransactionId: data?.resource_id || resource?.id,
       resourceId: data?.resource_id,
