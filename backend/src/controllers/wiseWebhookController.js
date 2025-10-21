@@ -13,17 +13,46 @@ const WiseWebhookController = {
     try {
       const payload = req.body;
 
+      // ============================================================================
+      // ENHANCED WEBHOOK LOGGING - Capture everything Wise sends
+      // ============================================================================
+      console.log('\n' + '╔' + '═'.repeat(78) + '╗');
+      console.log('║' + ' '.repeat(25) + 'WISE WEBHOOK RECEIVED' + ' '.repeat(32) + '║');
+      console.log('╚' + '═'.repeat(78) + '╝\n');
+
+      console.log('📅 Timestamp:', new Date().toISOString());
+      console.log('🌐 IP Address:', req.ip || req.connection?.remoteAddress || 'unknown');
+      console.log('🔗 URL:', req.originalUrl || req.url);
+      console.log('📨 Method:', req.method);
+
+      console.log('\n📋 Headers:');
+      Object.entries(req.headers).forEach(([key, value]) => {
+        // Mask sensitive values but show structure
+        if (key.toLowerCase().includes('signature') || key.toLowerCase().includes('authorization')) {
+          console.log(`  ${key}: ${value.substring(0, 30)}...`);
+        } else {
+          console.log(`  ${key}: ${value}`);
+        }
+      });
+
+      console.log('\n📦 Payload:');
+      console.log(JSON.stringify(payload, null, 2));
+
+      console.log('\n' + '─'.repeat(80) + '\n');
+      // ============================================================================
+
       // Handle empty/test requests (during webhook registration)
       // Wise expects empty response body
       if (!payload || Object.keys(payload).length === 0) {
-        console.log('Received Wise webhook registration test (empty payload)');
+        console.log('ℹ️  Empty payload - Webhook registration test');
         return res.status(200).send();
       }
 
       // Handle test webhook events from Wise
       // Wise expects empty response body
       if (payload.event_type === 'test' || payload.data?.resource?.type === 'test') {
-        console.log('Received Wise test webhook event');
+        console.log('ℹ️  Test webhook event detected');
+        console.log('✅ Responding with 200 OK\n');
         return res.status(200).send();
       }
 
@@ -32,46 +61,61 @@ const WiseWebhookController = {
       const isTestNotification = req.headers['x-test-notification'] === 'true';
 
       if (isTestNotification) {
-        console.log('Received Wise webhook registration test (X-Test-Notification header present)');
+        console.log('ℹ️  X-Test-Notification header present - Webhook registration test');
+        console.log('✅ Responding with 200 OK\n');
         return res.status(200).send();
       }
 
       const webhookSecret = process.env.WISE_WEBHOOK_SECRET;
 
+      console.log('\n🔐 Signature Validation:');
       if (webhookSecret) {
         const isValid = WiseSignatureValidator.validateRequest(req, webhookSecret);
 
         if (!isValid) {
-          console.error('Invalid Wise webhook signature');
+          console.error('❌ Invalid signature - Request rejected\n');
           return res.status(401).json({ error: 'Invalid signature' });
         }
+        console.log('✅ Signature valid');
       } else {
-        console.warn('WARN: WISE_WEBHOOK_SECRET not set - skipping signature validation');
+        console.warn('⚠️  WISE_WEBHOOK_SECRET not set - Skipping signature validation (INSECURE!)');
       }
 
       // Parse webhook payload
+      console.log('\n⚙️  Parsing webhook payload...');
       const transaction = wiseService.parseWebhookPayload(payload);
 
       if (!transaction.wiseTransactionId) {
+        console.error('❌ Invalid payload: missing transaction ID\n');
         return res.status(400).json({ error: 'Invalid webhook payload: missing transaction ID' });
       }
+
+      console.log(`📝 Transaction ID: ${transaction.wiseTransactionId}`);
+      console.log(`💰 Amount: ${transaction.currency} ${transaction.amount}`);
+      console.log(`📊 Type: ${transaction.type}`);
+      console.log(`📅 Date: ${transaction.transactionDate}`);
 
       // Check for duplicates
       const exists = await WiseTransactionModel.exists(transaction.wiseTransactionId);
 
       if (exists) {
-        console.log(`Transaction ${transaction.wiseTransactionId} already processed - skipping`);
+        console.log(`ℹ️  Transaction ${transaction.wiseTransactionId} already exists - Skipping`);
+        console.log('✅ Responding with 200 OK\n');
         return res.status(200).send();
       }
+
+      console.log('🆕 New transaction - Processing in background');
 
       // Process transaction asynchronously
       // Respond quickly to Wise (they expect 2xx within 5 seconds)
       // Wise expects empty response body
+      console.log('✅ Responding with 200 OK (processing asynchronously)\n');
       res.status(200).send();
 
       // Process in background
+      console.log('🔄 Starting background processing...');
       this.processTransaction(transaction).catch(err => {
-        console.error(`Error processing transaction ${transaction.wiseTransactionId}:`, err);
+        console.error(`❌ Error processing transaction ${transaction.wiseTransactionId}:`, err);
       });
 
     } catch (error) {
