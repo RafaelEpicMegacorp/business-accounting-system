@@ -12,7 +12,8 @@
     "migrate:create": "node-pg-migrate create",
     "logs": "node ../scripts/logs.js",
     "logs:webhook": "node ../scripts/logs.js webhook",
-    "logs:error": "node ../scripts/logs.js error"
+    "logs:error": "node ../scripts/logs.js error",
+    "logs:web": "node ../scripts/log-viewer-server.js"
   },
   "dependencies": {
     "axios": "^1.12.2",

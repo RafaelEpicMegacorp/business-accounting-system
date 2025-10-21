@@ -2,7 +2,28 @@
 
 Quick guide to viewing Railway logs in real-time.
 
-## 🚀 Quick Start (Easiest)
+## 🚀 Quick Start (Easiest - Web Interface!)
+
+```bash
+# From backend directory
+cd backend
+npm run logs:web
+```
+
+Then open **http://localhost:4001** in your browser!
+
+### Features:
+- ✨ Beautiful web interface
+- 🔄 Auto-refreshing every 2 seconds
+- 🔍 Real-time search
+- 🎯 Filter by webhook/error/all
+- 📊 Statistics dashboard
+- 🎨 Color-coded log types
+- 📜 Auto-scroll toggle
+
+---
+
+## 📝 Alternative: Terminal-Based Viewing
 
 ```bash
 # From backend directory
