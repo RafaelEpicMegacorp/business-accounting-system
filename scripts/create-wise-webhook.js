@@ -16,9 +16,9 @@
  *   - WISE_PROFILE_ID environment variable
  */
 
-require('dotenv').config({ path: require('path').join(__dirname, '../backend/.env') });
 const https = require('https');
 
+// Get environment variables from command line or environment
 const WISE_API_TOKEN = process.env.WISE_API_TOKEN;
 const WISE_PROFILE_ID = process.env.WISE_PROFILE_ID;
 const WEBHOOK_URL = 'https://business-accounting-system-production.up.railway.app/api/wise/webhook';

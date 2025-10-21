@@ -357,9 +357,9 @@ class WiseService {
     const resource = data?.resource;
     const eventType = payload.event_type;
 
-    // Handle balances#update events (new structure with amounts)
-    if (eventType === 'balances#update') {
-      // balances#update structure:
+    // Handle balances#update and balances#credit events (both have amounts)
+    if (eventType === 'balances#update' || eventType === 'balances#credit') {
+      // balances#update and balances#credit structure:
       // data.amount, data.currency, data.transaction_type, data.balance_id, etc.
       return {
         wiseTransactionId: data?.transfer_reference || data?.step_id || resource?.id,
