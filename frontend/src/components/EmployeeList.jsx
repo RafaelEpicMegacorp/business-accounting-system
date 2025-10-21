@@ -241,6 +241,9 @@ export default function EmployeeList({ onEmployeeSelect, onEdit }) {
           <p className="text-xs opacity-80 mt-1">
             {activeEmployees.filter(e => e.pay_type === 'monthly').length} employees
           </p>
+          <p className="text-xs opacity-70 mt-1 border-t border-white/20 pt-2">
+            Rate × {(parseFloat(activeEmployees[0]?.pay_multiplier || 1.12) * 100).toFixed(0)}% multiplier
+          </p>
         </div>
 
         {/* Weekly Payroll */}
@@ -255,6 +258,9 @@ export default function EmployeeList({ onEmployeeSelect, onEdit }) {
           <p className="text-xs opacity-80 mt-1">
             {activeEmployees.filter(e => e.pay_type === 'weekly').length} employees
           </p>
+          <p className="text-xs opacity-70 mt-1 border-t border-white/20 pt-2">
+            Rate × {(parseFloat(activeEmployees[0]?.pay_multiplier || 1.12) * 100).toFixed(0)}% multiplier
+          </p>
         </div>
 
         {/* Total Paid */}
@@ -267,6 +273,9 @@ export default function EmployeeList({ onEmployeeSelect, onEdit }) {
             ${formatCurrency(totalPaid)}
           </p>
           <p className="text-xs opacity-80 mt-1">Historical payments</p>
+          <p className="text-xs opacity-70 mt-1 border-t border-white/20 pt-2">
+            Actual payments made (not rate-based)
+          </p>
         </div>
 
         {/* Active Employees */}
