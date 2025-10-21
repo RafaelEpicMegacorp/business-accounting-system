@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Plus, Edit2, Ban, CheckCircle, Trash2, DollarSign, CheckSquare, Square } from 'lucide-react';
+import { Users, Plus, Edit2, Ban, CheckCircle, Trash2, DollarSign, CheckSquare, Square, Info, X } from 'lucide-react';
 import employeeService from '../services/employeeService';
 import EmployeeTerminationModal from './EmployeeTerminationModal';
 
@@ -9,6 +9,13 @@ export default function EmployeeList({ onEmployeeSelect, onEdit }) {
   const [filter, setFilter] = useState('active'); // 'active', 'terminated', 'all'
   const [terminatingEmployee, setTerminatingEmployee] = useState(null);
   const [selectedEmployees, setSelectedEmployees] = useState([]);
+  const [infoModal, setInfoModal] = useState({
+    isOpen: false,
+    title: '',
+    explanation: '',
+    example: '',
+    formula: ''
+  });
 
   useEffect(() => {
     loadEmployees();
@@ -167,7 +174,87 @@ export default function EmployeeList({ onEmployeeSelect, onEdit }) {
   const weeklyPayroll = activeEmployees
     .filter(e => e.pay_type === 'weekly')
     .reduce((sum, e) => sum + (parseFloat(e.pay_rate) * parseFloat(e.pay_multiplier)), 0);
+  const totalPayroll = monthlyPayroll + weeklyPayroll;
   const totalPaid = employees.reduce((sum, e) => sum + parseFloat(e.total_paid || 0), 0);
+
+  // Helper function to open info modal
+  const openInfoModal = (title, explanation, example, formula) => {
+    setInfoModal({
+      isOpen: true,
+      title,
+      explanation,
+      example,
+      formula
+    });
+  };
+
+  // Helper function to close info modal
+  const closeInfoModal = () => {
+    setInfoModal({
+      isOpen: false,
+      title: '',
+      explanation: '',
+      example: '',
+      formula: ''
+    });
+  };
+
+  // InfoModal Component
+  const InfoModal = () => {
+    if (!infoModal.isOpen) return null;
+
+    return (
+      <div
+        className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+        onClick={closeInfoModal}
+      >
+        <div
+          className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 p-6"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xl font-bold text-gray-900">{infoModal.title}</h3>
+            <button
+              onClick={closeInfoModal}
+              className="text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <X size={24} />
+            </button>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <h4 className="font-semibold text-gray-700 mb-2">What this means:</h4>
+              <p className="text-gray-600">{infoModal.explanation}</p>
+            </div>
+
+            {infoModal.example && (
+              <div>
+                <h4 className="font-semibold text-gray-700 mb-2">Example calculation:</h4>
+                <p className="text-gray-600 whitespace-pre-line">{infoModal.example}</p>
+              </div>
+            )}
+
+            {infoModal.formula && (
+              <div>
+                <h4 className="font-semibold text-gray-700 mb-2">Formula:</h4>
+                <p className="text-sm font-mono bg-gray-100 p-3 rounded text-gray-800">
+                  {infoModal.formula}
+                </p>
+              </div>
+            )}
+          </div>
+
+          <button
+            onClick={closeInfoModal}
+            className="mt-6 w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Got it!
+          </button>
+        </div>
+      </div>
+    );
+  };
 
   if (loading) {
     return <div className="text-center py-8">Loading employees...</div>;
@@ -175,6 +262,9 @@ export default function EmployeeList({ onEmployeeSelect, onEdit }) {
 
   return (
     <div className="bg-white rounded-lg shadow-sm p-6">
+      {/* Info Modal */}
+      <InfoModal />
+
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-2">
@@ -228,12 +318,52 @@ export default function EmployeeList({ onEmployeeSelect, onEdit }) {
       </div>
 
       {/* Payroll Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+        {/* Total Payroll - NEW */}
+        <div className="bg-gradient-to-br from-teal-500 to-teal-600 text-white rounded-lg shadow-lg p-5">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-medium opacity-90">Total Payroll</h3>
+            <button
+              onClick={() => openInfoModal(
+                'Combined Payroll Total',
+                'Sum of all payroll costs across monthly and weekly employees. This represents your total recurring salary expense.',
+                `Monthly Payroll: $${formatCurrency(monthlyPayroll)}\n+ Weekly Payroll: $${formatCurrency(weeklyPayroll)}\n= Total: $${formatCurrency(totalPayroll)}`,
+                'Monthly Payroll + Weekly Payroll'
+              )}
+              className="hover:opacity-80 transition-opacity"
+            >
+              <Info size={18} className="opacity-80" />
+            </button>
+          </div>
+          <p className="text-2xl font-bold">
+            ${formatCurrency(totalPayroll)}
+          </p>
+          <p className="text-xs opacity-80 mt-1">
+            {activeEmployees.length} active employees
+          </p>
+        </div>
+
         {/* Monthly Payroll */}
         <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-lg shadow-lg p-5">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-sm font-medium opacity-90">Monthly Payroll</h3>
-            <DollarSign size={20} className="opacity-80" />
+            <button
+              onClick={() => {
+                const monthlyEmps = activeEmployees.filter(e => e.pay_type === 'monthly');
+                const examples = monthlyEmps.slice(0, 3).map(e =>
+                  `${e.name}: $${formatCurrency(parseFloat(e.pay_rate))} × ${(parseFloat(e.pay_multiplier) * 100).toFixed(0)}% = $${formatCurrency(parseFloat(e.pay_rate) * parseFloat(e.pay_multiplier))}`
+                ).join('\n');
+                openInfoModal(
+                  'Monthly Payroll Calculation',
+                  'Total monthly salary cost for all active monthly employees including tax multiplier (typically 112% to account for employer taxes and benefits).',
+                  examples + (monthlyEmps.length > 3 ? `\n... and ${monthlyEmps.length - 3} more` : ''),
+                  'Sum of (Pay Rate × Pay Multiplier) for monthly employees'
+                );
+              }}
+              className="hover:opacity-80 transition-opacity"
+            >
+              <Info size={18} className="opacity-80" />
+            </button>
           </div>
           <p className="text-2xl font-bold">
             ${formatCurrency(monthlyPayroll)}
@@ -241,16 +371,29 @@ export default function EmployeeList({ onEmployeeSelect, onEdit }) {
           <p className="text-xs opacity-80 mt-1">
             {activeEmployees.filter(e => e.pay_type === 'monthly').length} employees
           </p>
-          <p className="text-xs opacity-70 mt-1 border-t border-white/20 pt-2">
-            Rate × {(parseFloat(activeEmployees[0]?.pay_multiplier || 1.12) * 100).toFixed(0)}% multiplier
-          </p>
         </div>
 
         {/* Weekly Payroll */}
         <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-lg shadow-lg p-5">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-sm font-medium opacity-90">Weekly Payroll</h3>
-            <DollarSign size={20} className="opacity-80" />
+            <button
+              onClick={() => {
+                const weeklyEmps = activeEmployees.filter(e => e.pay_type === 'weekly');
+                const examples = weeklyEmps.map(e =>
+                  `${e.name}: $${formatCurrency(parseFloat(e.pay_rate))} × ${(parseFloat(e.pay_multiplier) * 100).toFixed(0)}% = $${formatCurrency(parseFloat(e.pay_rate) * parseFloat(e.pay_multiplier))}`
+                ).join('\n');
+                openInfoModal(
+                  'Weekly Payroll Calculation',
+                  'Total weekly salary cost for all active weekly employees including tax multiplier (typically 112% to account for employer taxes and benefits).',
+                  examples || 'No weekly employees',
+                  'Sum of (Pay Rate × Pay Multiplier) for weekly employees'
+                );
+              }}
+              className="hover:opacity-80 transition-opacity"
+            >
+              <Info size={18} className="opacity-80" />
+            </button>
           </div>
           <p className="text-2xl font-bold">
             ${formatCurrency(weeklyPayroll)}
@@ -258,31 +401,54 @@ export default function EmployeeList({ onEmployeeSelect, onEdit }) {
           <p className="text-xs opacity-80 mt-1">
             {activeEmployees.filter(e => e.pay_type === 'weekly').length} employees
           </p>
-          <p className="text-xs opacity-70 mt-1 border-t border-white/20 pt-2">
-            Rate × {(parseFloat(activeEmployees[0]?.pay_multiplier || 1.12) * 100).toFixed(0)}% multiplier
-          </p>
         </div>
 
         {/* Total Paid */}
         <div className="bg-gradient-to-br from-green-500 to-green-600 text-white rounded-lg shadow-lg p-5">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-sm font-medium opacity-90">Total Paid</h3>
-            <CheckCircle size={20} className="opacity-80" />
+            <button
+              onClick={() => {
+                const paidEmps = employees.filter(e => parseFloat(e.total_paid || 0) > 0);
+                const examples = paidEmps.slice(0, 5).map(e =>
+                  `${e.name}: $${formatCurrency(parseFloat(e.total_paid || 0))}`
+                ).join('\n');
+                openInfoModal(
+                  'Historical Payments Made',
+                  'Actual money paid to employees from completed transactions in the database. This is NOT calculated from pay rates - it comes from actual payment entries that have been recorded.',
+                  examples + (paidEmps.length > 5 ? `\n... and ${paidEmps.length - 5} more` : ''),
+                  'Sum of total_paid column (actual payments, not rate-based)'
+                );
+              }}
+              className="hover:opacity-80 transition-opacity"
+            >
+              <Info size={18} className="opacity-80" />
+            </button>
           </div>
           <p className="text-2xl font-bold">
             ${formatCurrency(totalPaid)}
           </p>
           <p className="text-xs opacity-80 mt-1">Historical payments</p>
-          <p className="text-xs opacity-70 mt-1 border-t border-white/20 pt-2">
-            Actual payments made (not rate-based)
-          </p>
         </div>
 
         {/* Active Employees */}
         <div className="bg-gradient-to-br from-orange-500 to-orange-600 text-white rounded-lg shadow-lg p-5">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-sm font-medium opacity-90">Active Team</h3>
-            <Users size={20} className="opacity-80" />
+            <button
+              onClick={() => {
+                const terminatedEmps = employees.filter(e => !e.is_active);
+                openInfoModal(
+                  'Active Employees Count',
+                  'Number of employees currently working (not terminated). An employee is considered active if they have no termination date or if is_active is true.',
+                  `Active: ${activeEmployees.length} employees\nTerminated: ${terminatedEmps.length} employees\nTotal: ${employees.length} employees`,
+                  'Count of employees where is_active = true'
+                );
+              }}
+              className="hover:opacity-80 transition-opacity"
+            >
+              <Info size={18} className="opacity-80" />
+            </button>
           </div>
           <p className="text-2xl font-bold">
             {activeEmployees.length}
