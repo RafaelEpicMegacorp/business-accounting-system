@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { TrendingUp, TrendingDown, DollarSign, Users, FileText, Calendar, Briefcase } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, Users, FileText, Calendar, Briefcase, Upload } from 'lucide-react';
 import dashboardService from '../services/dashboardService';
 import entryService from '../services/entryService';
 import currencyService from '../services/currencyService';
 import IncomeVsExpenseChart from './IncomeVsExpenseChart';
 import CategoryBreakdownChart from './CategoryBreakdownChart';
+import WiseImport from './WiseImport';
 
 function DashboardView({ onNavigateToForecast }) {
   const [stats, setStats] = useState(null);
@@ -12,6 +13,7 @@ function DashboardView({ onNavigateToForecast }) {
   const [currencyBalances, setCurrencyBalances] = useState([]);
   const [totalUSD, setTotalUSD] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showImportModal, setShowImportModal] = useState(false);
 
   useEffect(() => {
     loadDashboardData();
@@ -35,6 +37,11 @@ function DashboardView({ onNavigateToForecast }) {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleImportSuccess = () => {
+    // Reload dashboard data after successful import
+    loadDashboardData();
   };
 
   if (loading) {
@@ -140,9 +147,18 @@ function DashboardView({ onNavigateToForecast }) {
       {/* Wise Currency Balances */}
       {currencyBalances && currencyBalances.length > 0 && (
         <div className="bg-gradient-to-br from-teal-50 to-cyan-50 rounded-lg shadow-lg p-6 border border-teal-200">
-          <div className="flex items-center gap-2 mb-4">
-            <DollarSign size={24} className="text-teal-700" />
-            <h3 className="text-xl font-bold text-teal-900">Wise Account Balances</h3>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <DollarSign size={24} className="text-teal-700" />
+              <h3 className="text-xl font-bold text-teal-900">Wise Account Balances</h3>
+            </div>
+            <button
+              onClick={() => setShowImportModal(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition shadow-md"
+            >
+              <Upload size={18} />
+              Import CSV
+            </button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {currencyBalances.map((balance) => {
@@ -280,6 +296,14 @@ function DashboardView({ onNavigateToForecast }) {
         <IncomeVsExpenseChart months={12} />
         <CategoryBreakdownChart />
       </div>
+
+      {/* Import Modal */}
+      {showImportModal && (
+        <WiseImport
+          onClose={() => setShowImportModal(false)}
+          onSuccess={handleImportSuccess}
+        />
+      )}
     </div>
   );
 }

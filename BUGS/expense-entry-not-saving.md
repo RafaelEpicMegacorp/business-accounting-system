@@ -120,3 +120,16 @@ After fix, user can verify by:
 - Backend code is working perfectly
 - Frontend code is working perfectly
 - Connection between them was never properly configured
+
+## Related Feature Added (2025-10-22)
+While investigating this issue, discovered that Wise CSV import functionality was inaccessible after removing Wise API sync tab. Added new CSV import UI:
+- **New Component**: `WiseImport.jsx` - Modal with file upload and import results
+- **Dashboard Button**: "Import CSV" button in Wise Account Balances section
+- **Backend Endpoint**: `POST /api/wise/import` (already existed, now accessible)
+- **Features**:
+  - Drag-and-drop CSV upload
+  - Automatic transaction classification
+  - Duplicate prevention by Wise ID
+  - Import statistics (imported/skipped/errors)
+  - Balance auto-update after import
+- **User Benefit**: Can now manually import Wise transactions to update balances and entries
