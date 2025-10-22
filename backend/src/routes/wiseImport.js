@@ -91,6 +91,66 @@ const EXPECTED_HEADERS = [
   'Exchange rate', 'Reference', 'Batch', 'Created by', 'Category', 'Note'
 ];
 
+// GET /api/wise/test-connection - Test database connection
+router.get('/test-connection', auth, async (req, res) => {
+  console.log('=== Testing Database Connection ===');
+  try {
+    // Test 1: Pool query (simple)
+    console.log('Test 1: Testing pool.query()...');
+    const queryResult = await pool.query('SELECT NOW() as time, current_database() as db');
+    console.log('✓ pool.query() success:', queryResult.rows[0]);
+
+    // Test 2: Get client (complex)
+    console.log('Test 2: Testing pool.getClient()...');
+    const client = await pool.getClient();
+    console.log('✓ pool.getClient() success');
+
+    try {
+      const clientResult = await client.query('SELECT NOW() as time');
+      console.log('✓ client.query() success:', clientResult.rows[0]);
+    } finally {
+      client.release();
+      console.log('✓ client.release() success');
+    }
+
+    // Test 3: Pool stats
+    console.log('Test 3: Checking pool stats...');
+    const poolStats = {
+      totalCount: pool.totalCount,
+      idleCount: pool.idleCount,
+      waitingCount: pool.waitingCount
+    };
+    console.log('Pool stats:', poolStats);
+
+    res.json({
+      success: true,
+      message: 'Database connection test passed',
+      tests: {
+        poolQuery: 'PASSED',
+        getClient: 'PASSED',
+        clientQuery: 'PASSED'
+      },
+      poolStats,
+      database: queryResult.rows[0].db,
+      timestamp: queryResult.rows[0].time
+    });
+  } catch (error) {
+    console.error('=== Database Connection Test Failed ===');
+    console.error('Error type:', error.constructor.name);
+    console.error('Error message:', error.message);
+    console.error('Error code:', error.code);
+    console.error('Full error:', error);
+
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      errorType: error.constructor.name,
+      errorCode: error.code,
+      stack: error.stack
+    });
+  }
+});
+
 // POST /api/wise/import - Upload and import Wise CSV
 router.post('/import', auth, upload.single('csvFile'), async (req, res) => {
   console.log('=== CSV Import Started ===');
