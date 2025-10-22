@@ -1,7 +1,7 @@
 const express = require('express');
 const multer = require('multer');
 const router = express.Router();
-const db = require('../config/database');
+const pool = require('../config/database');
 const auth = require('../middleware/auth');
 
 // Configure multer for CSV upload
@@ -167,7 +167,7 @@ router.post('/import', auth, upload.single('csvFile'), async (req, res) => {
     // Get database client
     let client;
     try {
-      client = await db.getClient();
+      client = await pool.getClient();
       console.log('✓ Database connection established');
     } catch (err) {
       console.error('ERROR: Failed to connect to database:', err.message);
