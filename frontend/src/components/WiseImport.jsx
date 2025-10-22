@@ -50,7 +50,19 @@ export default function WiseImport({ onClose, onSuccess }) {
       }
     } catch (err) {
       console.error('Import error:', err);
-      setError(err.response?.data?.error || err.message || 'Failed to import CSV file');
+
+      // Get detailed error information from backend
+      const errorData = err.response?.data || {};
+      const errorMessage = errorData.error || err.message || 'Failed to import CSV file';
+      const errorDetails = errorData.details;
+
+      // Combine error message and details
+      let fullError = errorMessage;
+      if (errorDetails && errorDetails !== errorMessage) {
+        fullError += '\n\n' + errorDetails;
+      }
+
+      setError(fullError);
     } finally {
       setUploading(false);
     }
@@ -127,9 +139,19 @@ export default function WiseImport({ onClose, onSuccess }) {
           {error && (
             <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
               <AlertCircle className="text-red-600 flex-shrink-0 mt-0.5" size={20} />
-              <div>
+              <div className="flex-1">
                 <h4 className="text-sm font-semibold text-red-900">Import Failed</h4>
-                <p className="text-sm text-red-700 mt-1">{error}</p>
+                <div className="text-sm text-red-700 mt-2 whitespace-pre-line">
+                  {error}
+                </div>
+                <div className="mt-3 p-2 bg-red-100 rounded text-xs text-red-800">
+                  <strong>Troubleshooting:</strong>
+                  <ul className="list-disc list-inside mt-1 space-y-1">
+                    <li>Make sure you're uploading the correct Wise CSV export</li>
+                    <li>Check that your session hasn't expired (try logging out and back in)</li>
+                    <li>Verify the CSV file isn't corrupted or empty</li>
+                  </ul>
+                </div>
               </div>
             </div>
           )}
