@@ -28,25 +28,25 @@ const EmployeeModel = {
 
   // Create new employee
   async create(employee) {
-    const { name, email, payType, payRate, payMultiplier, startDate } = employee;
+    const { name, email, payType, payRate, payMultiplier, startDate, position } = employee;
     const result = await pool.query(
-      `INSERT INTO employees (name, email, pay_type, pay_rate, pay_multiplier, start_date, is_active)
-       VALUES ($1, $2, $3, $4, $5, $6, true)
+      `INSERT INTO employees (name, email, pay_type, pay_rate, pay_multiplier, start_date, position, is_active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, true)
        RETURNING *`,
-      [name, email || null, payType, payRate, payMultiplier || 1.0, startDate || new Date()]
+      [name, email || null, payType, payRate, payMultiplier || 1.0, startDate || new Date(), position || null]
     );
     return result.rows[0];
   },
 
   // Update employee
   async update(id, employee) {
-    const { name, email, payType, payRate, payMultiplier, startDate } = employee;
+    const { name, email, payType, payRate, payMultiplier, startDate, position } = employee;
     const result = await pool.query(
       `UPDATE employees
-       SET name = $1, email = $2, pay_type = $3, pay_rate = $4, pay_multiplier = $5, start_date = $6
-       WHERE id = $7
+       SET name = $1, email = $2, pay_type = $3, pay_rate = $4, pay_multiplier = $5, start_date = $6, position = $7
+       WHERE id = $8
        RETURNING *`,
-      [name, email || null, payType, payRate, payMultiplier || 1.0, startDate, id]
+      [name, email || null, payType, payRate, payMultiplier || 1.0, startDate, position || null, id]
     );
     return result.rows[0];
   },

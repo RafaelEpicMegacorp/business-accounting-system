@@ -166,6 +166,24 @@ export default function EmployeeList({ onEmployeeSelect, onEdit }) {
     return labels[payType] || payType;
   };
 
+  const calculateTenure = (startDate) => {
+    const start = new Date(startDate);
+    const now = new Date();
+    const diffTime = Math.abs(now - start);
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    const years = Math.floor(diffDays / 365);
+    const months = Math.floor((diffDays % 365) / 30);
+
+    if (years > 0) {
+      return months > 0 ? `${years}y ${months}m` : `${years}y`;
+    } else if (months > 0) {
+      return `${months}m`;
+    } else {
+      return `${diffDays}d`;
+    }
+  };
+
   // Calculate payroll totals
   const activeEmployees = employees.filter(e => e.is_active);
   const monthlyPayroll = activeEmployees
@@ -507,7 +525,9 @@ export default function EmployeeList({ onEmployeeSelect, onEdit }) {
                 </button>
               </th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Name</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Position</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Pay Type</th>
+              <th className="px-4 py-3 text-center text-xs font-medium text-gray-700 uppercase">Tenure</th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-700 uppercase">Pay Rate</th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-700 uppercase">Multiplier</th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-700 uppercase">Total Paid</th>
@@ -529,9 +549,17 @@ export default function EmployeeList({ onEmployeeSelect, onEdit }) {
                   </button>
                 </td>
                 <td className="px-4 py-3 font-medium text-gray-900">{employee.name}</td>
+                <td className="px-4 py-3 text-gray-600">
+                  {employee.position || <span className="text-gray-400 italic">Not set</span>}
+                </td>
                 <td className="px-4 py-3 text-gray-700">
                   <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">
                     {getPayTypeLabel(employee.pay_type)}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-center">
+                  <span className="px-2 py-1 bg-purple-100 text-purple-800 text-xs font-medium rounded">
+                    {calculateTenure(employee.start_date)}
                   </span>
                 </td>
                 <td className="px-4 py-3 text-right text-gray-700">${formatCurrency(employee.pay_rate)}</td>

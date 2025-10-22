@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, DollarSign, Calendar, Mail, User, TrendingUp } from 'lucide-react';
+import { X, DollarSign, Calendar, Mail, User, TrendingUp, Briefcase } from 'lucide-react';
 import employeeService from '../services/employeeService';
 
 export default function EmployeeForm({ employee, onClose, onSuccess }) {
@@ -7,6 +7,7 @@ export default function EmployeeForm({ employee, onClose, onSuccess }) {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
+    position: '',
     payType: 'monthly',
     payRate: '',
     payMultiplier: '1.12',
@@ -27,6 +28,7 @@ export default function EmployeeForm({ employee, onClose, onSuccess }) {
       setFormData({
         name: employee.name || '',
         email: employee.email || '',
+        position: employee.position || '',
         payType: employee.pay_type || 'monthly',
         payRate: employee.pay_rate || '',
         payMultiplier: employee.pay_multiplier || '1.12',
@@ -138,6 +140,22 @@ export default function EmployeeForm({ employee, onClose, onSuccess }) {
                 onChange={handleChange}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 placeholder="employee@example.com"
+              />
+            </div>
+
+            {/* Position */}
+            <div>
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-1">
+                <Briefcase size={16} />
+                Position
+              </label>
+              <input
+                type="text"
+                name="position"
+                value={formData.position}
+                onChange={handleChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="e.g., Software Engineer, Designer, Manager"
               />
             </div>
 
