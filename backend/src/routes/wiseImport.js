@@ -167,7 +167,7 @@ router.post('/import', auth, upload.single('csvFile'), async (req, res) => {
     // Get database client
     let client;
     try {
-      client = await db.pool.getClient();
+      client = await db.getClient();
       console.log('✓ Database connection established');
     } catch (err) {
       console.error('ERROR: Failed to connect to database:', err.message);
