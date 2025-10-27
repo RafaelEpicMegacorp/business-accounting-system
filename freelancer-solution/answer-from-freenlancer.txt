@@ -1,0 +1,27 @@
+Musaf -.
+@musafh
+verified-v2.svg
+5 minutes ago
+const axios = require('axios');
+
+let config = {
+method: 'get',
+maxBodyLength: Infinity,
+url: ' https://api.sandbox.transferwise.tech/v1/transfers/55576213' ,
+headers: {
+'Authorization': 'Bearer dd385b7c-6561-42af-96b2-77eb0add50d2'
+}
+};
+
+axios.request(config)
+.then((response) => {
+console.log(JSON.stringify( response.data ));
+})
+.catch((error) => {
+console.log(error);
+});
+
+
+Hi @Rafael99999 , have attached the code block and .md file for the instructions as well. Feel free to check it out and let me know if you need any further assistance.
+
+Thanks

@@ -8,6 +8,7 @@ const contractRoutes = require('./routes/contractRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
 const wiseImportRoutes = require('./routes/wiseImport');
 const currencyRoutes = require('./routes/currencyRoutes');
+const wiseTestRoutes = require('./routes/wiseTestRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -30,6 +31,7 @@ app.use('/api/contracts', contractRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/wise', wiseImportRoutes); // CSV upload only
 app.use('/api/currency', currencyRoutes);
+app.use('/api/wise-test', wiseTestRoutes); // Wise API testing endpoints
 
 // Health check
 app.get('/health', (req, res) => {
