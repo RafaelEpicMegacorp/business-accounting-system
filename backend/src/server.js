@@ -39,7 +39,11 @@ app.use('/api/wise-test', wiseTestRoutes); // Wise API testing endpoints
 
 // Health check
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    version: '1.0.1-webhook-base64-fix'
+  });
 });
 
 // Error handling
