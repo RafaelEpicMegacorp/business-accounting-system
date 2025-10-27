@@ -55,3 +55,5 @@ app.use((err, req, res, next) => {
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
+
+// Railway build trigger - webhook monitor deployed (2025-10-27)
