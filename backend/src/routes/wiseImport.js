@@ -7,6 +7,10 @@ const auth = require('../middleware/auth');
 const wiseClassifier = require('../services/wiseClassifier');
 const WiseTransactionModel = require('../models/wiseTransactionModel');
 
+// In-memory storage for recent webhooks (for monitoring dashboard)
+const recentWebhooks = [];
+const MAX_RECENT_WEBHOOKS = 50;
+
 // Configure multer for CSV upload
 const storage = multer.memoryStorage();
 const upload = multer({
@@ -150,6 +154,120 @@ router.get('/test-connection', auth, async (req, res) => {
       errorType: error.constructor.name,
       errorCode: error.code,
       stack: error.stack
+    });
+  }
+});
+
+// GET /api/wise/webhooks/recent - Get recent webhook calls (memory + database)
+router.get('/webhooks/recent', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 50;
+
+    // Get recent webhooks from database (audit log)
+    const dbWebhooks = await pool.query(`
+      SELECT * FROM wise_sync_audit_log
+      WHERE action LIKE 'webhook_%'
+      ORDER BY created_at DESC
+      LIMIT $1
+    `, [limit]);
+
+    // Combine in-memory and database webhooks
+    const allWebhooks = [
+      ...recentWebhooks.map(w => ({ ...w, source: 'memory' })),
+      ...dbWebhooks.rows.map(w => ({ ...w, source: 'database' }))
+    ];
+
+    // Sort by timestamp descending
+    allWebhooks.sort((a, b) => {
+      const timeA = new Date(a.received_at || a.created_at);
+      const timeB = new Date(b.received_at || b.created_at);
+      return timeB - timeA;
+    });
+
+    res.json({
+      success: true,
+      count: allWebhooks.length,
+      webhooks: allWebhooks.slice(0, limit)
+    });
+  } catch (error) {
+    console.error('Error fetching recent webhooks:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch webhooks',
+      message: error.message
+    });
+  }
+});
+
+// GET /api/wise/webhooks/logs - Get webhook audit logs
+router.get('/webhooks/logs', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 100;
+    const offset = parseInt(req.query.offset) || 0;
+
+    const result = await pool.query(`
+      SELECT
+        wal.*,
+        wt.description as transaction_description,
+        wt.amount as transaction_amount,
+        wt.currency as transaction_currency,
+        e.id as entry_id,
+        e.description as entry_description
+      FROM wise_sync_audit_log wal
+      LEFT JOIN wise_transactions wt ON wal.wise_transaction_id = wt.wise_transaction_id
+      LEFT JOIN entries e ON wal.entry_id = e.id
+      ORDER BY wal.created_at DESC
+      LIMIT $1 OFFSET $2
+    `, [limit, offset]);
+
+    // Get total count
+    const countResult = await pool.query('SELECT COUNT(*) FROM wise_sync_audit_log');
+    const total = parseInt(countResult.rows[0].count);
+
+    res.json({
+      success: true,
+      total,
+      limit,
+      offset,
+      logs: result.rows
+    });
+  } catch (error) {
+    console.error('Error fetching webhook logs:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch logs',
+      message: error.message
+    });
+  }
+});
+
+// GET /api/wise/transactions/pending - Get transactions needing review
+router.get('/transactions/pending', auth, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        wt.*,
+        e.name as employee_name,
+        ent.id as entry_id,
+        ent.description as entry_description
+      FROM wise_transactions wt
+      LEFT JOIN employees e ON wt.matched_employee_id = e.id
+      LEFT JOIN entries ent ON wt.entry_id = ent.id
+      WHERE wt.needs_review = true OR wt.sync_status = 'pending'
+      ORDER BY wt.transaction_date DESC
+    `);
+
+    res.json({
+      success: true,
+      count: result.rows.length,
+      transactions: result.rows
+    });
+  } catch (error) {
+    console.error('Error fetching pending transactions:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch transactions',
+      message: error.message
     });
   }
 });
@@ -479,8 +597,9 @@ function validateWebhookSignature(req) {
 // POST /api/wise/webhook - Receive Wise webhook events
 router.post('/webhook', express.json(), async (req, res) => {
   const startTime = Date.now();
+  const receivedAt = new Date();
   console.log('=== Wise Webhook Received ===');
-  console.log('Timestamp:', new Date().toISOString());
+  console.log('Timestamp:', receivedAt.toISOString());
 
   // DEBUG: Log everything about the request
   console.log('=== WEBHOOK DEBUG INFO ===');
@@ -494,12 +613,48 @@ router.post('/webhook', express.json(), async (req, res) => {
   console.log('Raw Body as JSON String length:', JSON.stringify(req.body).length);
   console.log('=== END DEBUG INFO ===');
 
+  // Create webhook tracking object
+  const webhookData = {
+    received_at: receivedAt,
+    event_type: req.body.event_type,
+    payload: req.body,
+    headers: {
+      signature: req.headers['x-signature'] || req.headers['x-wise-signature'],
+      contentType: req.headers['content-type']
+    },
+    processing_status: 'received',
+    processing_result: null,
+    error: null
+  };
+
   try {
     // Validate signature
     const isValid = validateWebhookSignature(req);
 
     if (!isValid) {
       console.error('Invalid webhook signature');
+
+      // Log failed signature validation
+      webhookData.processing_status = 'failed';
+      webhookData.error = 'Invalid webhook signature';
+
+      // Add to in-memory array
+      recentWebhooks.unshift(webhookData);
+      if (recentWebhooks.length > MAX_RECENT_WEBHOOKS) {
+        recentWebhooks.pop();
+      }
+
+      // Log to database
+      await pool.query(
+        `INSERT INTO wise_sync_audit_log (action, notes, new_values)
+         VALUES ($1, $2, $3)`,
+        [
+          'webhook_signature_failed',
+          'Webhook received but signature validation failed',
+          JSON.stringify(webhookData)
+        ]
+      );
+
       return res.status(401).json({
         error: 'Invalid signature',
         message: 'Webhook signature validation failed'
@@ -513,69 +668,263 @@ router.post('/webhook', express.json(), async (req, res) => {
     // Handle test events
     if (event.event_type === 'test' || event.event_type === 'webhook#test') {
       console.log('✓ Test webhook received successfully');
+
+      const elapsed = Date.now() - startTime;
+      webhookData.processing_status = 'success';
+      webhookData.processing_result = 'Test webhook acknowledged';
+      webhookData.processing_time_ms = elapsed;
+
+      // Add to in-memory array
+      recentWebhooks.unshift(webhookData);
+      if (recentWebhooks.length > MAX_RECENT_WEBHOOKS) {
+        recentWebhooks.pop();
+      }
+
+      // Log to database
+      await pool.query(
+        `INSERT INTO wise_sync_audit_log (action, notes, new_values)
+         VALUES ($1, $2, $3)`,
+        [
+          'webhook_test_received',
+          'Test webhook received and acknowledged',
+          JSON.stringify(webhookData)
+        ]
+      );
+
       return res.status(200).json({
         success: true,
-        message: 'Test webhook received'
+        message: 'Test webhook received',
+        processing_time_ms: elapsed
       });
     }
 
     // Handle balance credit events (incoming money)
     if (event.event_type === 'balances#credit' || event.event_type === 'balance-transactions#credit') {
       console.log('Processing balance credit event...');
-      await processBalanceTransaction(event.data, 'CREDIT');
 
-      const elapsed = Date.now() - startTime;
-      console.log(`✓ Balance credit processed in ${elapsed}ms`);
-      return res.status(200).json({
-        success: true,
-        message: 'Balance credit processed'
-      });
+      try {
+        const result = await processBalanceTransaction(event.data, 'CREDIT');
+
+        const elapsed = Date.now() - startTime;
+        console.log(`✓ Balance credit processed in ${elapsed}ms`);
+
+        webhookData.processing_status = 'success';
+        webhookData.processing_result = result;
+        webhookData.processing_time_ms = elapsed;
+
+        // Add to in-memory array
+        recentWebhooks.unshift(webhookData);
+        if (recentWebhooks.length > MAX_RECENT_WEBHOOKS) {
+          recentWebhooks.pop();
+        }
+
+        // Log to database
+        await pool.query(
+          `INSERT INTO wise_sync_audit_log (wise_transaction_id, action, notes, new_values)
+           VALUES ($1, $2, $3, $4)`,
+          [
+            result?.transactionId || null,
+            'webhook_balance_credit',
+            `Balance credit processed: ${result?.message || 'Transaction created'}`,
+            JSON.stringify({ webhook: webhookData, result })
+          ]
+        );
+
+        return res.status(200).json({
+          success: true,
+          message: 'Balance credit processed',
+          processing_time_ms: elapsed,
+          result
+        });
+      } catch (error) {
+        const elapsed = Date.now() - startTime;
+        webhookData.processing_status = 'failed';
+        webhookData.error = error.message;
+        webhookData.processing_time_ms = elapsed;
+
+        recentWebhooks.unshift(webhookData);
+        if (recentWebhooks.length > MAX_RECENT_WEBHOOKS) {
+          recentWebhooks.pop();
+        }
+
+        throw error;
+      }
     }
 
     // Handle balance update events
     if (event.event_type === 'balances#update' || event.event_type === 'balance-transactions#update') {
       console.log('Processing balance update event...');
-      await processBalanceTransaction(event.data, 'UPDATE');
 
-      const elapsed = Date.now() - startTime;
-      console.log(`✓ Balance update processed in ${elapsed}ms`);
-      return res.status(200).json({
-        success: true,
-        message: 'Balance update processed'
-      });
+      try {
+        const result = await processBalanceTransaction(event.data, 'UPDATE');
+
+        const elapsed = Date.now() - startTime;
+        console.log(`✓ Balance update processed in ${elapsed}ms`);
+
+        webhookData.processing_status = 'success';
+        webhookData.processing_result = result;
+        webhookData.processing_time_ms = elapsed;
+
+        recentWebhooks.unshift(webhookData);
+        if (recentWebhooks.length > MAX_RECENT_WEBHOOKS) {
+          recentWebhooks.pop();
+        }
+
+        await pool.query(
+          `INSERT INTO wise_sync_audit_log (wise_transaction_id, action, notes, new_values)
+           VALUES ($1, $2, $3, $4)`,
+          [
+            result?.transactionId || null,
+            'webhook_balance_update',
+            `Balance update processed: ${result?.message || 'Transaction updated'}`,
+            JSON.stringify({ webhook: webhookData, result })
+          ]
+        );
+
+        return res.status(200).json({
+          success: true,
+          message: 'Balance update processed',
+          processing_time_ms: elapsed,
+          result
+        });
+      } catch (error) {
+        const elapsed = Date.now() - startTime;
+        webhookData.processing_status = 'failed';
+        webhookData.error = error.message;
+        webhookData.processing_time_ms = elapsed;
+        recentWebhooks.unshift(webhookData);
+        if (recentWebhooks.length > MAX_RECENT_WEBHOOKS) {
+          recentWebhooks.pop();
+        }
+        throw error;
+      }
     }
 
     // Handle transfer state changes
     if (event.event_type === 'transfers#state-change') {
       console.log('Processing transfer state change...');
-      await processTransferStateChange(event.data);
 
-      const elapsed = Date.now() - startTime;
-      console.log(`✓ Transfer state change processed in ${elapsed}ms`);
-      return res.status(200).json({
-        success: true,
-        message: 'Transfer state change processed'
-      });
+      try {
+        const result = await processTransferStateChange(event.data);
+
+        const elapsed = Date.now() - startTime;
+        console.log(`✓ Transfer state change processed in ${elapsed}ms`);
+
+        webhookData.processing_status = 'success';
+        webhookData.processing_result = result;
+        webhookData.processing_time_ms = elapsed;
+
+        recentWebhooks.unshift(webhookData);
+        if (recentWebhooks.length > MAX_RECENT_WEBHOOKS) {
+          recentWebhooks.pop();
+        }
+
+        await pool.query(
+          `INSERT INTO wise_sync_audit_log (wise_transaction_id, action, notes, new_values)
+           VALUES ($1, $2, $3, $4)`,
+          [
+            event.data.resource?.id || event.data.transfer_id || null,
+            'webhook_transfer_state_change',
+            `Transfer state changed to: ${event.data.current_state || 'unknown'}`,
+            JSON.stringify({ webhook: webhookData, result })
+          ]
+        );
+
+        return res.status(200).json({
+          success: true,
+          message: 'Transfer state change processed',
+          processing_time_ms: elapsed,
+          result
+        });
+      } catch (error) {
+        const elapsed = Date.now() - startTime;
+        webhookData.processing_status = 'failed';
+        webhookData.error = error.message;
+        webhookData.processing_time_ms = elapsed;
+        recentWebhooks.unshift(webhookData);
+        if (recentWebhooks.length > MAX_RECENT_WEBHOOKS) {
+          recentWebhooks.pop();
+        }
+        throw error;
+      }
     }
 
     // Handle transfer issues/active cases
     if (event.event_type === 'transfers#active-cases') {
       console.log('Processing transfer active case (issue)...');
-      await processTransferIssue(event.data);
 
-      const elapsed = Date.now() - startTime;
-      console.log(`✓ Transfer issue processed in ${elapsed}ms`);
-      return res.status(200).json({
-        success: true,
-        message: 'Transfer issue logged'
-      });
+      try {
+        const result = await processTransferIssue(event.data);
+
+        const elapsed = Date.now() - startTime;
+        console.log(`✓ Transfer issue processed in ${elapsed}ms`);
+
+        webhookData.processing_status = 'success';
+        webhookData.processing_result = result;
+        webhookData.processing_time_ms = elapsed;
+
+        recentWebhooks.unshift(webhookData);
+        if (recentWebhooks.length > MAX_RECENT_WEBHOOKS) {
+          recentWebhooks.pop();
+        }
+
+        await pool.query(
+          `INSERT INTO wise_sync_audit_log (wise_transaction_id, action, notes, new_values)
+           VALUES ($1, $2, $3, $4)`,
+          [
+            event.data.resource?.id || event.data.transfer_id || null,
+            'webhook_transfer_issue',
+            `Transfer issue detected: ${event.data.case_type || 'unknown'}`,
+            JSON.stringify({ webhook: webhookData, result })
+          ]
+        );
+
+        return res.status(200).json({
+          success: true,
+          message: 'Transfer issue logged',
+          processing_time_ms: elapsed,
+          result
+        });
+      } catch (error) {
+        const elapsed = Date.now() - startTime;
+        webhookData.processing_status = 'failed';
+        webhookData.error = error.message;
+        webhookData.processing_time_ms = elapsed;
+        recentWebhooks.unshift(webhookData);
+        if (recentWebhooks.length > MAX_RECENT_WEBHOOKS) {
+          recentWebhooks.pop();
+        }
+        throw error;
+      }
     }
 
     // Unknown event type
     console.warn('Unknown event type:', event.event_type);
+
+    const elapsed = Date.now() - startTime;
+    webhookData.processing_status = 'skipped';
+    webhookData.processing_result = 'Unknown event type, not processed';
+    webhookData.processing_time_ms = elapsed;
+
+    recentWebhooks.unshift(webhookData);
+    if (recentWebhooks.length > MAX_RECENT_WEBHOOKS) {
+      recentWebhooks.pop();
+    }
+
+    await pool.query(
+      `INSERT INTO wise_sync_audit_log (action, notes, new_values)
+       VALUES ($1, $2, $3)`,
+      [
+        'webhook_unknown_event',
+        `Unknown event type received: ${event.event_type}`,
+        JSON.stringify(webhookData)
+      ]
+    );
+
     return res.status(200).json({
       success: true,
-      message: 'Event received but not processed'
+      message: 'Event received but not processed',
+      event_type: event.event_type
     });
 
   } catch (error) {
@@ -583,11 +932,39 @@ router.post('/webhook', express.json(), async (req, res) => {
     console.error('Error:', error.message);
     console.error('Stack:', error.stack);
 
+    const elapsed = Date.now() - startTime;
+    webhookData.processing_status = 'failed';
+    webhookData.error = error.message;
+    webhookData.error_stack = error.stack;
+    webhookData.processing_time_ms = elapsed;
+
+    // Add to in-memory array
+    recentWebhooks.unshift(webhookData);
+    if (recentWebhooks.length > MAX_RECENT_WEBHOOKS) {
+      recentWebhooks.pop();
+    }
+
+    // Log error to database
+    try {
+      await pool.query(
+        `INSERT INTO wise_sync_audit_log (action, notes, new_values)
+         VALUES ($1, $2, $3)`,
+        [
+          'webhook_processing_error',
+          `Webhook processing failed: ${error.message}`,
+          JSON.stringify(webhookData)
+        ]
+      );
+    } catch (logError) {
+      console.error('Failed to log webhook error to database:', logError);
+    }
+
     // Still return 200 to Wise to avoid retries for processing errors
     return res.status(200).json({
       success: false,
       error: 'Internal processing error',
-      message: error.message
+      message: error.message,
+      processing_time_ms: elapsed
     });
   }
 });
@@ -608,7 +985,11 @@ async function processBalanceTransaction(data, direction) {
     const existing = await WiseTransactionModel.exists(transactionId);
     if (existing) {
       console.log(`Transaction ${transactionId} already exists, skipping`);
-      return;
+      return {
+        transactionId,
+        action: 'skipped',
+        message: 'Transaction already exists in database'
+      };
     }
 
     // Prepare transaction data for classification
@@ -660,13 +1041,29 @@ async function processBalanceTransaction(data, direction) {
     console.log(`  Confidence: ${classification.confidenceScore}%`);
     console.log(`  Needs Review: ${classification.needsReview}`);
 
+    let entryCreated = false;
+
     // If high confidence (80%+) and doesn't need review, auto-create entry
     if (!classification.needsReview && classification.confidenceScore >= 80) {
       console.log('Auto-creating entry for high-confidence transaction...');
       await autoCreateEntry(savedTransaction, classification);
+      entryCreated = true;
     } else {
       console.log('Transaction flagged for manual review');
     }
+
+    return {
+      transactionId,
+      action: 'created',
+      message: `Transaction saved with ${classification.confidenceScore}% confidence`,
+      transactionDbId: savedTransaction.id,
+      category: classification.category,
+      confidence: classification.confidenceScore,
+      needsReview: classification.needsReview,
+      entryCreated,
+      amount,
+      currency
+    };
 
   } catch (error) {
     console.error('Error processing balance transaction:', error);
@@ -691,8 +1088,23 @@ async function processTransferStateChange(data) {
         state: currentState
       });
       console.log(`✓ Updated transaction state for ${transferId}`);
+
+      return {
+        transferId,
+        action: 'updated',
+        message: `Transfer state updated to ${currentState}`,
+        previousState: existing.state,
+        currentState
+      };
     } else {
       console.log(`Transaction ${transferId} not found in database`);
+
+      return {
+        transferId,
+        action: 'not_found',
+        message: 'Transfer not found in database',
+        currentState
+      };
     }
 
   } catch (error) {
@@ -748,7 +1160,24 @@ async function processTransferIssue(data) {
           JSON.stringify({ issue_type: issueType, issue_details: issueDetails })
         ]
       );
+
+      return {
+        transferId,
+        action: 'issue_logged',
+        message: `Transfer issue logged (transaction not in database yet)`,
+        issueType,
+        issueDetails
+      };
     }
+
+    return {
+      transferId,
+      action: 'issue_flagged',
+      message: `Transfer flagged for review due to ${issueType}`,
+      issueType,
+      issueDetails,
+      transactionExists: true
+    };
 
   } catch (error) {
     console.error('Error processing transfer issue:', error);

@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wise Webhook Monitor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header-content h1 {
+            color: #667eea;
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 16px;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: #f0f0f0;
+            border-radius: 20px;
+            font-size: 14px;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #10b981;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .status-dot.paused {
+            background: #ef4444;
+            animation: none;
+        }
+
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: #f0f0f0;
+            color: #333;
+        }
+
+        .btn-secondary:hover {
+            background: #e0e0e0;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+
+        .stat-label {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            font-size: 28px;
+            font-weight: 700;
+            color: #667eea;
+        }
+
+        .webhooks-container {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+
+        .webhooks-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        .webhooks-header h2 {
+            color: #667eea;
+            font-size: 20px;
+        }
+
+        .filter-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .filter-btn {
+            padding: 6px 12px;
+            background: #f0f0f0;
+            border: none;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .filter-btn.active {
+            background: #667eea;
+            color: white;
+        }
+
+        .webhook-item {
+            border: 2px solid #f0f0f0;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 15px;
+            transition: all 0.3s;
+        }
+
+        .webhook-item:hover {
+            border-color: #667eea;
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.2);
+        }
+
+        .webhook-item.success {
+            border-left: 4px solid #10b981;
+        }
+
+        .webhook-item.failed {
+            border-left: 4px solid #ef4444;
+        }
+
+        .webhook-item.skipped {
+            border-left: 4px solid #f59e0b;
+        }
+
+        .webhook-header-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 15px;
+        }
+
+        .webhook-title {
+            flex: 1;
+        }
+
+        .event-type {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .webhook-time {
+            font-size: 13px;
+            color: #666;
+        }
+
+        .webhook-status {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .webhook-status.success {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .webhook-status.failed {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .webhook-status.skipped {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .webhook-details {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .detail-item {
+            background: #f9fafb;
+            padding: 12px;
+            border-radius: 8px;
+        }
+
+        .detail-label {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 4px;
+        }
+
+        .detail-value {
+            font-size: 14px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .payload-section {
+            margin-top: 15px;
+        }
+
+        .payload-toggle {
+            background: #f0f0f0;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            color: #667eea;
+            width: 100%;
+            text-align: left;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .payload-toggle:hover {
+            background: #e0e0e0;
+        }
+
+        .payload-content {
+            display: none;
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            line-height: 1.5;
+            margin-top: 10px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .payload-content.show {
+            display: block;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+        }
+
+        .empty-state-icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error-message {
+            background: #fee2e2;
+            border: 2px solid #ef4444;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            color: #991b1b;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="header-content">
+                <h1>🔔 Wise Webhook Monitor</h1>
+                <p class="subtitle">Real-time webhook monitoring and database sync verification</p>
+            </div>
+            <div class="controls">
+                <div class="status-indicator">
+                    <div class="status-dot" id="statusDot"></div>
+                    <span id="statusText">Live Monitoring</span>
+                </div>
+                <button class="btn-secondary" onclick="toggleAutoRefresh()">
+                    <span id="refreshButtonText">⏸️ Pause</span>
+                </button>
+                <button class="btn-secondary" onclick="clearWebhooks()">
+                    🗑️ Clear
+                </button>
+                <button class="btn-primary" onclick="refreshNow()">
+                    🔄 Refresh Now
+                </button>
+            </div>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-label">Total Webhooks</div>
+                <div class="stat-value" id="totalWebhooks">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Successful</div>
+                <div class="stat-value" style="color: #10b981;" id="successCount">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Failed</div>
+                <div class="stat-value" style="color: #ef4444;" id="failedCount">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Last Received</div>
+                <div class="stat-value" style="font-size: 16px;" id="lastReceived">Never</div>
+            </div>
+        </div>
+
+        <div class="webhooks-container">
+            <div class="webhooks-header">
+                <h2>Webhook History</h2>
+                <div class="filter-buttons">
+                    <button class="filter-btn active" onclick="filterWebhooks('all')">All</button>
+                    <button class="filter-btn" onclick="filterWebhooks('success')">Success</button>
+                    <button class="filter-btn" onclick="filterWebhooks('failed')">Failed</button>
+                    <button class="filter-btn" onclick="filterWebhooks('test')">Test</button>
+                </div>
+            </div>
+
+            <div id="webhooksList">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Loading webhooks...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let webhooks = [];
+        let autoRefresh = true;
+        let refreshInterval;
+        let currentFilter = 'all';
+
+        // Start auto-refresh
+        function startAutoRefresh() {
+            refreshInterval = setInterval(fetchWebhooks, 2000); // Refresh every 2 seconds
+        }
+
+        // Stop auto-refresh
+        function stopAutoRefresh() {
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+                refreshInterval = null;
+            }
+        }
+
+        // Toggle auto-refresh
+        function toggleAutoRefresh() {
+            autoRefresh = !autoRefresh;
+            const statusDot = document.getElementById('statusDot');
+            const statusText = document.getElementById('statusText');
+            const refreshButton = document.getElementById('refreshButtonText');
+
+            if (autoRefresh) {
+                statusDot.classList.remove('paused');
+                statusText.textContent = 'Live Monitoring';
+                refreshButton.textContent = '⏸️ Pause';
+                startAutoRefresh();
+            } else {
+                statusDot.classList.add('paused');
+                statusText.textContent = 'Paused';
+                refreshButton.textContent = '▶️ Resume';
+                stopAutoRefresh();
+            }
+        }
+
+        // Refresh now
+        function refreshNow() {
+            fetchWebhooks();
+        }
+
+        // Clear webhooks display
+        function clearWebhooks() {
+            webhooks = [];
+            renderWebhooks();
+            updateStats();
+        }
+
+        // Filter webhooks
+        function filterWebhooks(filter) {
+            currentFilter = filter;
+
+            // Update button states
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+
+            renderWebhooks();
+        }
+
+        // Fetch webhooks from API
+        async function fetchWebhooks() {
+            try {
+                const response = await fetch('/api/wise/webhooks/recent?limit=50');
+                const data = await response.json();
+
+                if (data.success) {
+                    webhooks = data.webhooks;
+                    renderWebhooks();
+                    updateStats();
+                } else {
+                    showError('Failed to fetch webhooks: ' + data.error);
+                }
+            } catch (error) {
+                console.error('Error fetching webhooks:', error);
+                showError('Network error: ' + error.message);
+            }
+        }
+
+        // Render webhooks list
+        function renderWebhooks() {
+            const container = document.getElementById('webhooksList');
+
+            // Filter webhooks
+            let filteredWebhooks = webhooks;
+            if (currentFilter !== 'all') {
+                if (currentFilter === 'test') {
+                    filteredWebhooks = webhooks.filter(w =>
+                        w.event_type === 'test' || w.event_type === 'webhook#test'
+                    );
+                } else {
+                    filteredWebhooks = webhooks.filter(w =>
+                        w.processing_status === currentFilter
+                    );
+                }
+            }
+
+            if (filteredWebhooks.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📭</div>
+                        <h3>No webhooks yet</h3>
+                        <p>Waiting for Wise to send webhook events...</p>
+                        <p style="margin-top: 20px; font-size: 14px;">
+                            Webhook URL: <code style="background: #f0f0f0; padding: 4px 8px; border-radius: 4px;">
+                                /api/wise/webhook
+                            </code>
+                        </p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = filteredWebhooks.map((webhook, index) => {
+                const statusClass = webhook.processing_status || 'unknown';
+                const eventType = webhook.event_type || webhook.payload?.event_type || 'Unknown Event';
+                const receivedAt = webhook.received_at || webhook.created_at;
+                const timeAgo = getTimeAgo(receivedAt);
+
+                let detailsHTML = '';
+                if (webhook.processing_result) {
+                    const result = webhook.processing_result;
+                    detailsHTML = `
+                        <div class="webhook-details">
+                            ${result.action ? `
+                                <div class="detail-item">
+                                    <div class="detail-label">Action</div>
+                                    <div class="detail-value">${result.action}</div>
+                                </div>
+                            ` : ''}
+                            ${result.message ? `
+                                <div class="detail-item">
+                                    <div class="detail-label">Result</div>
+                                    <div class="detail-value">${result.message}</div>
+                                </div>
+                            ` : ''}
+                            ${result.transactionId ? `
+                                <div class="detail-item">
+                                    <div class="detail-label">Transaction ID</div>
+                                    <div class="detail-value">${result.transactionId}</div>
+                                </div>
+                            ` : ''}
+                            ${result.category ? `
+                                <div class="detail-item">
+                                    <div class="detail-label">Category</div>
+                                    <div class="detail-value">${result.category}</div>
+                                </div>
+                            ` : ''}
+                            ${result.confidence !== undefined ? `
+                                <div class="detail-item">
+                                    <div class="detail-label">Confidence</div>
+                                    <div class="detail-value">${result.confidence}%</div>
+                                </div>
+                            ` : ''}
+                            ${result.entryCreated !== undefined ? `
+                                <div class="detail-item">
+                                    <div class="detail-label">Entry Created</div>
+                                    <div class="detail-value">${result.entryCreated ? '✅ Yes' : '⏳ Manual Review'}</div>
+                                </div>
+                            ` : ''}
+                            ${webhook.processing_time_ms ? `
+                                <div class="detail-item">
+                                    <div class="detail-label">Processing Time</div>
+                                    <div class="detail-value">${webhook.processing_time_ms}ms</div>
+                                </div>
+                            ` : ''}
+                        </div>
+                    `;
+                }
+
+                const errorHTML = webhook.error ? `
+                    <div class="detail-item" style="grid-column: 1 / -1; background: #fee2e2;">
+                        <div class="detail-label" style="color: #991b1b;">Error</div>
+                        <div class="detail-value" style="color: #991b1b;">${webhook.error}</div>
+                    </div>
+                ` : '';
+
+                return `
+                    <div class="webhook-item ${statusClass}">
+                        <div class="webhook-header-row">
+                            <div class="webhook-title">
+                                <div class="event-type">${eventType}</div>
+                                <div class="webhook-time">⏰ ${timeAgo} (${new Date(receivedAt).toLocaleString()})</div>
+                            </div>
+                            <span class="webhook-status ${statusClass}">
+                                ${statusClass === 'success' ? '✅' : statusClass === 'failed' ? '❌' : '⚠️'}
+                                ${statusClass.toUpperCase()}
+                            </span>
+                        </div>
+
+                        ${detailsHTML}
+                        ${errorHTML}
+
+                        <div class="payload-section">
+                            <button class="payload-toggle" onclick="togglePayload(${index})">
+                                <span>📋 View Payload</span>
+                                <span id="payload-arrow-${index}">▼</span>
+                            </button>
+                            <pre class="payload-content" id="payload-${index}">${JSON.stringify(webhook.payload || webhook, null, 2)}</pre>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Toggle payload visibility
+        function togglePayload(index) {
+            const payload = document.getElementById(`payload-${index}`);
+            const arrow = document.getElementById(`payload-arrow-${index}`);
+
+            payload.classList.toggle('show');
+            arrow.textContent = payload.classList.contains('show') ? '▲' : '▼';
+        }
+
+        // Update statistics
+        function updateStats() {
+            const total = webhooks.length;
+            const successful = webhooks.filter(w => w.processing_status === 'success').length;
+            const failed = webhooks.filter(w => w.processing_status === 'failed').length;
+
+            document.getElementById('totalWebhooks').textContent = total;
+            document.getElementById('successCount').textContent = successful;
+            document.getElementById('failedCount').textContent = failed;
+
+            if (webhooks.length > 0) {
+                const lastWebhook = webhooks[0];
+                const lastTime = lastWebhook.received_at || lastWebhook.created_at;
+                document.getElementById('lastReceived').textContent = getTimeAgo(lastTime);
+            }
+        }
+
+        // Get time ago string
+        function getTimeAgo(timestamp) {
+            const now = new Date();
+            const time = new Date(timestamp);
+            const diff = Math.floor((now - time) / 1000); // seconds
+
+            if (diff < 60) return `${diff}s ago`;
+            if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+            if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+            return `${Math.floor(diff / 86400)}d ago`;
+        }
+
+        // Show error message
+        function showError(message) {
+            const container = document.getElementById('webhooksList');
+            container.innerHTML = `
+                <div class="error-message">
+                    <strong>⚠️ Error</strong>
+                    <p>${message}</p>
+                </div>
+            `;
+        }
+
+        // Initialize
+        fetchWebhooks();
+        startAutoRefresh();
+    </script>
+</body>
+</html>
