@@ -419,21 +419,32 @@ function validateWebhookSignature(req) {
     return false;
   }
 
-  const signature = req.headers['x-signature'] || req.headers['x-wise-signature'];
+  const signature = req.headers['x-signature'] || req.headers['x-wise-signature'] || req.headers['x-2fa-approval'] || req.headers['x-hub-signature'];
 
   if (!signature) {
     console.error('No signature header found in webhook request');
+    console.error('Available headers:', Object.keys(req.headers).filter(h => h.startsWith('x-')));
     return false;
   }
 
+  console.log('=== SIGNATURE VALIDATION DEBUG ===');
+  console.log('Found signature in header:', signature);
+  console.log('Webhook secret length:', webhookSecret.length);
+
   // Get raw body as string
   const payload = JSON.stringify(req.body);
+  console.log('Payload to sign:', payload);
+  console.log('Payload length:', payload.length);
 
   // Calculate expected signature
   const expectedSignature = crypto
     .createHmac('sha256', webhookSecret)
     .update(payload)
     .digest('hex');
+
+  console.log('Expected signature (HMAC-SHA256):', expectedSignature);
+  console.log('Received signature:', signature);
+  console.log('=== END SIGNATURE DEBUG ===');
 
   // Check if signatures have the same length first
   if (signature.length !== expectedSignature.length) {
@@ -470,6 +481,18 @@ router.post('/webhook', express.json(), async (req, res) => {
   const startTime = Date.now();
   console.log('=== Wise Webhook Received ===');
   console.log('Timestamp:', new Date().toISOString());
+
+  // DEBUG: Log everything about the request
+  console.log('=== WEBHOOK DEBUG INFO ===');
+  console.log('All Headers:', JSON.stringify(req.headers, null, 2));
+  console.log('Body:', JSON.stringify(req.body, null, 2));
+  console.log('Signature Header (x-signature):', req.headers['x-signature']);
+  console.log('Signature Header (x-wise-signature):', req.headers['x-wise-signature']);
+  console.log('Signature Header (x-2fa-approval):', req.headers['x-2fa-approval']);
+  console.log('Signature Header (x-hub-signature):', req.headers['x-hub-signature']);
+  console.log('Content-Type:', req.headers['content-type']);
+  console.log('Raw Body as JSON String length:', JSON.stringify(req.body).length);
+  console.log('=== END DEBUG INFO ===');
 
   try {
     // Validate signature
