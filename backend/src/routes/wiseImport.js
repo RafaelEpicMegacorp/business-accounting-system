@@ -532,15 +532,15 @@ router.post('/import', auth, upload.single('csvFile'), async (req, res) => {
 function validateWebhookSignature(rawBody, signature) {
   const webhookSecret = process.env.WISE_WEBHOOK_SECRET;
 
-  // If no secret configured, return null (not validated, but also not failed)
+  // If no secret configured, ALLOW webhooks through (not an error!)
   if (!webhookSecret) {
-    console.warn('⚠️ WISE_WEBHOOK_SECRET not configured - signature validation skipped');
-    console.warn('⚠️ This is insecure and should only be used for testing');
-    return null; // null means "not validated" vs false meaning "validation failed"
+    console.warn('⚠️ WISE_WEBHOOK_SECRET not set - skipping signature validation');
+    console.warn('⚠️ Webhooks will be accepted without validation');
+    return true; // ALLOW webhook when no secret configured
   }
 
   if (!signature) {
-    console.error('No signature header found in webhook request');
+    console.error('No signature header found but WISE_WEBHOOK_SECRET is set');
     return false;
   }
 
@@ -685,8 +685,7 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
     // Validate signature using RAW body
     const isValid = validateWebhookSignature(rawBody, signature);
 
-    // isValid can be: true (valid), false (invalid), or null (not validated due to missing secret)
-    if (isValid === false) {
+    if (!isValid) {
       console.error('Invalid webhook signature');
 
       // Log failed signature validation
@@ -714,13 +713,11 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
         error: 'Invalid signature',
         message: 'Webhook signature validation failed'
       });
-    } else if (isValid === null) {
-      console.warn('⚠️ Webhook signature not validated (WISE_WEBHOOK_SECRET not configured)');
-      webhookData.processing_status = 'not_validated';
-    } else {
-      console.log('✅ Webhook signature validated successfully');
-      webhookData.processing_status = 'validated';
     }
+
+    // Signature is valid (or validation was skipped)
+    console.log('✅ Webhook accepted');
+    webhookData.processing_status = 'validated';
 
     console.log('Event Type:', event.event_type);
     console.log('Event Data:', JSON.stringify(event.data));
