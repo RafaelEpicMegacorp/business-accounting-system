@@ -593,6 +593,22 @@ function validateWebhookSignature(rawBody, signature) {
 router.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
   const startTime = Date.now();
   const receivedAt = new Date();
+
+  // CHECK TEST NOTIFICATION FIRST - before ANY body parsing
+  // Wise sends X-Test-Notification: true during URL validation
+  if (req.headers['x-test-notification'] === 'true') {
+    console.log('✓ Wise test notification received (URL validation)');
+    console.log('Test headers:', {
+      'x-test-notification': req.headers['x-test-notification'],
+      'x-delivery-id': req.headers['x-delivery-id']
+    });
+    return res.status(200).json({
+      success: true,
+      message: 'Webhook endpoint validated successfully',
+      timestamp: new Date().toISOString()
+    });
+  }
+
   console.log('=== Wise Webhook Received ===');
   console.log('Timestamp:', receivedAt.toISOString());
 
@@ -604,43 +620,33 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
     event = JSON.parse(rawBody);
   } catch (error) {
     console.error('Failed to parse webhook body as JSON:', error.message);
+
+    // Empty body = validation request, accept it
+    if (!rawBody || rawBody.trim() === '') {
+      console.log('✓ Empty body validation request');
+      return res.status(200).json({
+        status: 'ok',
+        message: 'Webhook endpoint is ready'
+      });
+    }
+
+    // Non-empty but invalid JSON = error
     return res.status(400).json({
       error: 'Invalid JSON',
       message: 'Webhook body is not valid JSON'
     });
   }
 
-  // Handle Wise test notifications (URL validation during webhook setup)
-  // Wise sends X-Test-Notification: true during URL validation
-  if (req.headers['x-test-notification'] === 'true') {
-    console.log('✓ Wise test notification received (URL validation)');
-    console.log('Test notification headers:', {
-      'x-test-notification': req.headers['x-test-notification'],
-      'x-delivery-id': req.headers['x-delivery-id'],
-      'x-signature-sha256': req.headers['x-signature-sha256']
-    });
-    return res.status(200).json({
-      success: true,
-      message: 'Webhook endpoint validated successfully',
-      timestamp: new Date().toISOString()
-    });
-  }
-
-  // Handle validation requests (no event_type or empty body)
+  // Validate event_type exists
   if (!event.event_type) {
-    // Check if this is a Wise validation request (empty or minimal body)
-    if (!rawBody || rawBody.trim() === '' || rawBody === '{}' || Object.keys(event).length === 0) {
-      console.log('✓ Webhook validation request received (POST with empty/minimal body)');
-      return res.status(200).json({
-        status: 'ok',
-        message: 'Webhook endpoint is ready',
-        timestamp: new Date().toISOString()
-      });
+    // Minimal body = validation request
+    if (rawBody === '{}' || Object.keys(event).length === 0) {
+      console.log('✓ Minimal body validation request');
+      return res.status(200).json({ status: 'ok' });
     }
 
-    // Otherwise, this is an error - real webhooks must have event_type
-    console.error('Webhook received with body but no event_type');
-    console.error('Body:', rawBody);
+    // Has body but no event_type = error
+    console.error('Webhook body missing event_type:', rawBody.substring(0, 200));
     return res.status(400).json({
       error: 'Missing event_type',
       message: 'Webhook body must include event_type field'
