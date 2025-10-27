@@ -85,13 +85,13 @@ Some endpoints require additional authentication when used by profiles registere
 
 ### Get User Profiles
 
-**Endpoint**: `GET /v2/profiles`
+**Endpoint**: `GET /v1/profiles` ⚠️ **Note**: Use v1, not v2
 
 Retrieve all profiles associated with your account.
 
 **Request:**
 ```bash
-curl -X GET "https://api.sandbox.wise.com/v2/profiles" \
+curl -X GET "https://api.sandbox.wise.com/v1/profiles" \
   -H "Authorization: Bearer <your-api-token>"
 ```
 
@@ -684,7 +684,7 @@ Content-Type: application/json
 **Goal**: Get current balance for all currencies.
 
 **Steps:**
-1. Get profile ID: `GET /v2/profiles`
+1. Get profile ID: `GET /v1/profiles`
 2. List balances: `GET /v4/profiles/{profileId}/balances?types=STANDARD`
 3. Store balance data in your database
 

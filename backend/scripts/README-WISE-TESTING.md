@@ -280,7 +280,7 @@ echo $WISE_API_URL
 
 # Test connection
 curl -H "Authorization: Bearer $WISE_API_TOKEN" \
-  https://api.wise.com/v2/profiles
+  https://api.wise.com/v1/profiles
 ```
 
 ---

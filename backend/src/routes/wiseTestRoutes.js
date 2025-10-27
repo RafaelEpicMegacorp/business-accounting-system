@@ -30,7 +30,7 @@ router.get('/test-profile', async (req, res) => {
     console.log('API URL:', WISE_API_URL);
     console.log('Token:', WISE_API_TOKEN.substring(0, 20) + '...');
 
-    const response = await fetch(`${WISE_API_URL}/v2/profiles`, {
+    const response = await fetch(`${WISE_API_URL}/v1/profiles`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${WISE_API_TOKEN}`,

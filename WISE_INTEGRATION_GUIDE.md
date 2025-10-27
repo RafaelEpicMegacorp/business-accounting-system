@@ -87,8 +87,8 @@ The `.env` file already has Wise configuration:
 
 ```bash
 # Existing Wise configuration
-WISE_API_TOKEN=3fef0a08-05a8-499a-8309-42dfd70054ae
-WISE_API_BASE_URL=https://api.transferwise.com
+WISE_API_TOKEN=your_wise_api_token_here
+WISE_API_BASE_URL=https://api.wise.com
 WISE_PROFILE_ID=74801255
 WISE_SYNC_INTERVAL=300000
 
@@ -121,7 +121,7 @@ Add these **4 new variables**:
 
 #### 1. WISE_API_TOKEN
 ```
-3fef0a08-05a8-499a-8309-42dfd70054ae
+your_wise_api_token_here
 ```
 
 #### 2. WISE_PROFILE_ID
@@ -131,7 +131,7 @@ Add these **4 new variables**:
 
 #### 3. WISE_API_BASE_URL
 ```
-https://api.transferwise.com
+https://api.wise.com
 ```
 
 #### 4. WISE_WEBHOOK_SECRET
@@ -204,12 +204,12 @@ https://business-accounting-system-production.up.railway.app/api/wise/webhook
 
 ```bash
 # Get your Wise API token
-WISE_TOKEN="3fef0a08-05a8-499a-8309-42dfd70054ae"
+WISE_TOKEN="your_wise_api_token_here"
 WISE_PROFILE="74801255"
 WEBHOOK_URL="https://business-accounting-system-production.up.railway.app/api/wise/webhook"
 
 # Create webhook subscription
-curl -X POST "https://api.transferwise.com/v3/profiles/${WISE_PROFILE}/subscriptions" \
+curl -X POST "https://api.wise.com/v3/profiles/${WISE_PROFILE}/subscriptions" \
   -H "Authorization: Bearer ${WISE_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{

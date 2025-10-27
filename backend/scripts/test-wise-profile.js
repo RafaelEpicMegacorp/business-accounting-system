@@ -78,7 +78,7 @@ async function testWiseProfile() {
     // Make API request
     logInfo('Fetching user profiles...');
 
-    const response = await fetch(`${WISE_API_URL}/v2/profiles`, {
+    const response = await fetch(`${WISE_API_URL}/v1/profiles`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${WISE_API_TOKEN}`,

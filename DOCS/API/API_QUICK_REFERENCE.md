@@ -105,13 +105,13 @@ Fast lookup table for all API endpoints (internal and Wise).
 
 ## Wise API Endpoints
 
-**Base URL**: `https://api.sandbox.transferwise.tech` (sandbox) | `https://api.transferwise.com` (prod)
+**Base URL**: `https://api.sandbox.wise.com` (sandbox) | `https://api.wise.com` (prod)
 
 ### Profile (1 endpoint)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/v2/profiles` | Get user profiles |
+| GET | `/v1/profiles` | Get user profiles ⚠️ v1, not v2 |
 
 ### Balance (10 endpoints)
 
