@@ -284,6 +284,46 @@ Received: xyz789...
 
 ---
 
+#### 2.1. "The URL you entered isn't working" During Webhook Creation
+
+**Symptoms:**
+- Error message in Wise dashboard: "The URL you entered isn't working. Please try a different one"
+- "[Request interrupted by user]" message
+- URL validation fails when clicking "Test webhook"
+
+**Root Cause:**
+Webhook endpoint checks `X-Test-Notification` header AFTER attempting to parse request body. When Wise sends test notification with empty body, parsing fails before header is checked.
+
+**Solution:**
+Ensure webhook endpoint checks `X-Test-Notification` header **BEFORE** any body parsing:
+
+```javascript
+// ✅ CORRECT - Check header FIRST
+router.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  // Check test notification FIRST
+  if (req.headers['x-test-notification'] === 'true') {
+    return res.status(200).json({ success: true });
+  }
+
+  // THEN parse body
+  const rawBody = req.body.toString('utf8');
+  const event = JSON.parse(rawBody);
+  // Continue processing...
+});
+```
+
+**Why This Happens:**
+- Wise sends `X-Test-Notification: true` header during URL validation
+- Test notification may have empty or minimal body (`{}`)
+- Parsing body first causes error before seeing header
+- Wise receives error → marks URL as broken
+
+**Implementation**: See `backend/src/routes/wiseImport.js:599`
+
+**Complete Documentation**: `BUGS/SOLVED/wise-webhook-url-validation-2025-10-27.md`
+
+---
+
 #### 3. Transactions Not Auto-Creating Entries
 
 **Symptoms:**
