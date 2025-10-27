@@ -435,19 +435,34 @@ function validateWebhookSignature(req) {
     .update(payload)
     .digest('hex');
 
-  // Compare signatures
-  const isValid = crypto.timingSafeEqual(
-    Buffer.from(signature),
-    Buffer.from(expectedSignature)
-  );
-
-  if (!isValid) {
-    console.error('Webhook signature validation failed');
+  // Check if signatures have the same length first
+  if (signature.length !== expectedSignature.length) {
+    console.error('Webhook signature validation failed - length mismatch');
+    console.error('Expected length:', expectedSignature.length);
+    console.error('Received length:', signature.length);
     console.error('Expected:', expectedSignature);
     console.error('Received:', signature);
+    return false;
   }
 
-  return isValid;
+  // Compare signatures using timing-safe comparison
+  try {
+    const isValid = crypto.timingSafeEqual(
+      Buffer.from(signature),
+      Buffer.from(expectedSignature)
+    );
+
+    if (!isValid) {
+      console.error('Webhook signature validation failed');
+      console.error('Expected:', expectedSignature);
+      console.error('Received:', signature);
+    }
+
+    return isValid;
+  } catch (error) {
+    console.error('Error during signature comparison:', error.message);
+    return false;
+  }
 }
 
 // POST /api/wise/webhook - Receive Wise webhook events
