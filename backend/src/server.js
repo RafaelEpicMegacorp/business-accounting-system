@@ -50,7 +50,7 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
-    version: '1.0.1-webhook-base64-fix'
+    version: '1.0.2-all-fixes-deployed'
   });
 });
 
