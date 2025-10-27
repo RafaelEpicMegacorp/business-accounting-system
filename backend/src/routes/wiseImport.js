@@ -588,20 +588,6 @@ function validateWebhookSignature(rawBody, signature) {
   }
 }
 
-// GET /api/wise/webhook - Webhook validation endpoint
-// Wise sends GET request during webhook creation to validate the URL exists and responds correctly
-router.get('/webhook', (req, res) => {
-  console.log('✓ Webhook validation request received (GET)');
-  console.log('Headers:', JSON.stringify(req.headers, null, 2));
-  res.status(200).json({
-    status: 'ok',
-    message: 'Webhook endpoint is ready to receive events',
-    timestamp: new Date().toISOString(),
-    accepts: ['POST'],
-    content_type: 'application/json'
-  });
-});
-
 // POST /api/wise/webhook - Receive Wise webhook events
 // Use express.raw to capture raw body BEFORE JSON parsing (needed for signature validation)
 router.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
@@ -621,6 +607,22 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
     return res.status(400).json({
       error: 'Invalid JSON',
       message: 'Webhook body is not valid JSON'
+    });
+  }
+
+  // Handle Wise test notifications (URL validation during webhook setup)
+  // Wise sends X-Test-Notification: true during URL validation
+  if (req.headers['x-test-notification'] === 'true') {
+    console.log('✓ Wise test notification received (URL validation)');
+    console.log('Test notification headers:', {
+      'x-test-notification': req.headers['x-test-notification'],
+      'x-delivery-id': req.headers['x-delivery-id'],
+      'x-signature-sha256': req.headers['x-signature-sha256']
+    });
+    return res.status(200).json({
+      success: true,
+      message: 'Webhook endpoint validated successfully',
+      timestamp: new Date().toISOString()
     });
   }
 
@@ -650,8 +652,11 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
   console.log('All Headers:', JSON.stringify(req.headers, null, 2));
   console.log('Event Type:', event.event_type);
   console.log('Body:', JSON.stringify(event, null, 2));
+  console.log('Signature Header (x-signature-sha256):', req.headers['x-signature-sha256']);
   console.log('Signature Header (x-signature):', req.headers['x-signature']);
   console.log('Signature Header (x-wise-signature):', req.headers['x-wise-signature']);
+  console.log('Test Notification:', req.headers['x-test-notification']);
+  console.log('Delivery ID:', req.headers['x-delivery-id']);
   console.log('Content-Type:', req.headers['content-type']);
   console.log('Raw Body length:', rawBody.length);
   console.log('=== END DEBUG INFO ===');
@@ -662,7 +667,9 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
     event_type: event.event_type,
     payload: event,
     headers: {
-      signature: req.headers['x-signature'] || req.headers['x-wise-signature'],
+      signature: req.headers['x-signature-sha256'] || req.headers['x-signature'] || req.headers['x-wise-signature'],
+      testNotification: req.headers['x-test-notification'],
+      deliveryId: req.headers['x-delivery-id'],
       contentType: req.headers['content-type']
     },
     processing_status: 'received',
@@ -672,7 +679,8 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
 
   try {
     // Get signature from headers
-    const signature = req.headers['x-signature'] || req.headers['x-wise-signature'] || req.headers['x-2fa-approval'] || req.headers['x-hub-signature'];
+    // NOTE: Wise official docs say they send X-Signature-SHA256
+    const signature = req.headers['x-signature-sha256'] || req.headers['x-signature'] || req.headers['x-wise-signature'] || req.headers['x-2fa-approval'] || req.headers['x-hub-signature'];
 
     // Validate signature using RAW body
     const isValid = validateWebhookSignature(rawBody, signature);
