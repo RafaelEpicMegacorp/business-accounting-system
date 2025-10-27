@@ -23,6 +23,10 @@ if (!process.env.JWT_SECRET) {
 app.use(cors());
 app.use(express.json());
 
+// Serve static files from public directory
+const path = require('path');
+app.use(express.static(path.join(__dirname, '../public')));
+
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/entries', entryRoutes);
