@@ -529,35 +529,31 @@ router.post('/import', auth, upload.single('csvFile'), async (req, res) => {
 });
 
 // Webhook signature validation function
-function validateWebhookSignature(req) {
+function validateWebhookSignature(rawBody, signature) {
   const webhookSecret = process.env.WISE_WEBHOOK_SECRET;
 
+  // If no secret configured, return null (not validated, but also not failed)
   if (!webhookSecret) {
-    console.error('WISE_WEBHOOK_SECRET not configured');
-    return false;
+    console.warn('⚠️ WISE_WEBHOOK_SECRET not configured - signature validation skipped');
+    console.warn('⚠️ This is insecure and should only be used for testing');
+    return null; // null means "not validated" vs false meaning "validation failed"
   }
-
-  const signature = req.headers['x-signature'] || req.headers['x-wise-signature'] || req.headers['x-2fa-approval'] || req.headers['x-hub-signature'];
 
   if (!signature) {
     console.error('No signature header found in webhook request');
-    console.error('Available headers:', Object.keys(req.headers).filter(h => h.startsWith('x-')));
     return false;
   }
 
   console.log('=== SIGNATURE VALIDATION DEBUG ===');
   console.log('Found signature in header:', signature);
   console.log('Webhook secret length:', webhookSecret.length);
+  console.log('Raw body length:', rawBody.length);
+  console.log('Raw body preview:', rawBody.substring(0, 200));
 
-  // Get raw body as string
-  const payload = JSON.stringify(req.body);
-  console.log('Payload to sign:', payload);
-  console.log('Payload length:', payload.length);
-
-  // Calculate expected signature
+  // Calculate expected signature using RAW body (before JSON parsing)
   const expectedSignature = crypto
     .createHmac('sha256', webhookSecret)
-    .update(payload)
+    .update(rawBody)
     .digest('hex');
 
   console.log('Expected signature (HMAC-SHA256):', expectedSignature);
@@ -569,8 +565,6 @@ function validateWebhookSignature(req) {
     console.error('Webhook signature validation failed - length mismatch');
     console.error('Expected length:', expectedSignature.length);
     console.error('Received length:', signature.length);
-    console.error('Expected:', expectedSignature);
-    console.error('Received:', signature);
     return false;
   }
 
@@ -595,29 +589,53 @@ function validateWebhookSignature(req) {
 }
 
 // POST /api/wise/webhook - Receive Wise webhook events
-router.post('/webhook', express.json(), async (req, res) => {
+// Use express.raw to capture raw body BEFORE JSON parsing (needed for signature validation)
+router.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
   const startTime = Date.now();
   const receivedAt = new Date();
   console.log('=== Wise Webhook Received ===');
   console.log('Timestamp:', receivedAt.toISOString());
 
+  // Capture raw body and parse it manually
+  const rawBody = req.body.toString('utf8');
+  let event;
+
+  try {
+    event = JSON.parse(rawBody);
+  } catch (error) {
+    console.error('Failed to parse webhook body as JSON:', error.message);
+    return res.status(400).json({
+      error: 'Invalid JSON',
+      message: 'Webhook body is not valid JSON'
+    });
+  }
+
+  // Validate event_type exists
+  if (!event.event_type) {
+    console.error('Webhook received without event_type');
+    console.error('Body:', rawBody);
+    return res.status(400).json({
+      error: 'Missing event_type',
+      message: 'Webhook body must include event_type field'
+    });
+  }
+
   // DEBUG: Log everything about the request
   console.log('=== WEBHOOK DEBUG INFO ===');
   console.log('All Headers:', JSON.stringify(req.headers, null, 2));
-  console.log('Body:', JSON.stringify(req.body, null, 2));
+  console.log('Event Type:', event.event_type);
+  console.log('Body:', JSON.stringify(event, null, 2));
   console.log('Signature Header (x-signature):', req.headers['x-signature']);
   console.log('Signature Header (x-wise-signature):', req.headers['x-wise-signature']);
-  console.log('Signature Header (x-2fa-approval):', req.headers['x-2fa-approval']);
-  console.log('Signature Header (x-hub-signature):', req.headers['x-hub-signature']);
   console.log('Content-Type:', req.headers['content-type']);
-  console.log('Raw Body as JSON String length:', JSON.stringify(req.body).length);
+  console.log('Raw Body length:', rawBody.length);
   console.log('=== END DEBUG INFO ===');
 
   // Create webhook tracking object
   const webhookData = {
     received_at: receivedAt,
-    event_type: req.body.event_type,
-    payload: req.body,
+    event_type: event.event_type,
+    payload: event,
     headers: {
       signature: req.headers['x-signature'] || req.headers['x-wise-signature'],
       contentType: req.headers['content-type']
@@ -628,10 +646,14 @@ router.post('/webhook', express.json(), async (req, res) => {
   };
 
   try {
-    // Validate signature
-    const isValid = validateWebhookSignature(req);
+    // Get signature from headers
+    const signature = req.headers['x-signature'] || req.headers['x-wise-signature'] || req.headers['x-2fa-approval'] || req.headers['x-hub-signature'];
 
-    if (!isValid) {
+    // Validate signature using RAW body
+    const isValid = validateWebhookSignature(rawBody, signature);
+
+    // isValid can be: true (valid), false (invalid), or null (not validated due to missing secret)
+    if (isValid === false) {
       console.error('Invalid webhook signature');
 
       // Log failed signature validation
@@ -659,9 +681,14 @@ router.post('/webhook', express.json(), async (req, res) => {
         error: 'Invalid signature',
         message: 'Webhook signature validation failed'
       });
+    } else if (isValid === null) {
+      console.warn('⚠️ Webhook signature not validated (WISE_WEBHOOK_SECRET not configured)');
+      webhookData.processing_status = 'not_validated';
+    } else {
+      console.log('✅ Webhook signature validated successfully');
+      webhookData.processing_status = 'validated';
     }
 
-    const event = req.body;
     console.log('Event Type:', event.event_type);
     console.log('Event Data:', JSON.stringify(event.data));
 
