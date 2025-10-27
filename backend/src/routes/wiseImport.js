@@ -520,6 +520,19 @@ router.post('/webhook', express.json(), async (req, res) => {
       });
     }
 
+    // Handle transfer issues/active cases
+    if (event.event_type === 'transfers#active-cases') {
+      console.log('Processing transfer active case (issue)...');
+      await processTransferIssue(event.data);
+
+      const elapsed = Date.now() - startTime;
+      console.log(`✓ Transfer issue processed in ${elapsed}ms`);
+      return res.status(200).json({
+        success: true,
+        message: 'Transfer issue logged'
+      });
+    }
+
     // Unknown event type
     console.warn('Unknown event type:', event.event_type);
     return res.status(200).json({
@@ -646,6 +659,61 @@ async function processTransferStateChange(data) {
 
   } catch (error) {
     console.error('Error processing transfer state change:', error);
+    throw error;
+  }
+}
+
+// Process transfer issue/active case from webhook
+async function processTransferIssue(data) {
+  try {
+    const transferId = data.resource?.id || data.transfer_id || data.id;
+    const issueType = data.case_type || 'unknown';
+    const issueDetails = data.details || data.message || 'No details provided';
+
+    console.log(`Transfer ${transferId} has issue: ${issueType}`);
+    console.log(`Issue details: ${JSON.stringify(issueDetails)}`);
+
+    // Check if we have this transaction
+    const existing = await WiseTransactionModel.getByWiseId(transferId);
+
+    if (existing) {
+      // Update transaction with issue details
+      await WiseTransactionModel.updateStatus(transferId, {
+        syncStatus: 'failed',
+        processingError: `Transfer issue: ${issueType} - ${JSON.stringify(issueDetails)}`,
+        needsReview: true
+      });
+
+      console.log(`✓ Updated transaction ${transferId} with issue details`);
+      console.warn(`⚠️ Transfer ${transferId} requires attention: ${issueType}`);
+
+      // Create audit log entry for the issue
+      await WiseTransactionModel.createAuditLog({
+        wiseTransactionId: transferId,
+        action: 'transfer_issue',
+        notes: `Transfer issue detected: ${issueType}`,
+        newValues: { issue_type: issueType, issue_details: issueDetails }
+      });
+
+    } else {
+      console.log(`Transaction ${transferId} not found in database - storing issue for future reference`);
+
+      // Store the issue even if we don't have the transaction yet
+      // It might arrive later via balance update
+      await pool.query(
+        `INSERT INTO wise_sync_audit_log (wise_transaction_id, action, notes, new_values)
+         VALUES ($1, $2, $3, $4)`,
+        [
+          transferId,
+          'transfer_issue_early',
+          `Issue detected before transaction sync: ${issueType}`,
+          JSON.stringify({ issue_type: issueType, issue_details: issueDetails })
+        ]
+      );
+    }
+
+  } catch (error) {
+    console.error('Error processing transfer issue:', error);
     throw error;
   }
 }
