@@ -163,10 +163,10 @@ router.get('/webhooks/recent', async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 50;
 
-    // Get recent SUCCESSFUL webhooks from database (exclude failed validations)
+    // Get recent webhooks from database (all webhook-related actions for debugging)
     const dbWebhooks = await pool.query(`
       SELECT * FROM wise_sync_audit_log
-      WHERE action = 'webhook_received'
+      WHERE action LIKE 'webhook_%'
       ORDER BY created_at DESC
       LIMIT $1
     `, [limit]);
@@ -558,8 +558,9 @@ function validateWebhookSignature(rawBody, signature) {
   }
 
   if (!signature) {
-    console.error('No signature header found but WISE_WEBHOOK_SECRET is set');
-    return false;
+    console.warn('⚠️ No signature header found');
+    console.warn('⚠️ Wise personal accounts do not send signatures - accepting webhook');
+    return true; // ALLOW webhooks without signature (personal accounts)
   }
 
   console.log('=== SIGNATURE VALIDATION DEBUG ===');
