@@ -21,7 +21,15 @@ if (!process.env.JWT_SECRET) {
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+
+// Parse JSON for all routes EXCEPT webhook (which needs raw body for signature validation)
+app.use((req, res, next) => {
+  if (req.path === '/api/wise/webhook') {
+    next(); // Skip JSON parsing for webhook - it uses express.raw()
+  } else {
+    express.json()(req, res, next); // Parse JSON for all other routes
+  }
+});
 
 // Serve static files from public directory
 const path = require('path');
