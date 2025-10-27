@@ -148,7 +148,7 @@ const WiseTransactionModel = {
     }
 
     if (entryId !== undefined) {
-      setClauses.push(`synced_entry_id = $${paramCounter++}`);
+      setClauses.push(`entry_id = $${paramCounter++}`);
       values.push(entryId);
     }
 

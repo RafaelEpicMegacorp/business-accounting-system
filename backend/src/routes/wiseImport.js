@@ -1,8 +1,11 @@
 const express = require('express');
 const multer = require('multer');
+const crypto = require('crypto');
 const router = express.Router();
 const pool = require('../config/database');
 const auth = require('../middleware/auth');
+const wiseClassifier = require('../services/wiseClassifier');
+const WiseTransactionModel = require('../models/wiseTransactionModel');
 
 // Configure multer for CSV upload
 const storage = multer.memoryStorage();
@@ -406,5 +409,334 @@ router.post('/import', auth, upload.single('csvFile'), async (req, res) => {
     res.status(500).json(errorResponse);
   }
 });
+
+// Webhook signature validation function
+function validateWebhookSignature(req) {
+  const webhookSecret = process.env.WISE_WEBHOOK_SECRET;
+
+  if (!webhookSecret) {
+    console.error('WISE_WEBHOOK_SECRET not configured');
+    return false;
+  }
+
+  const signature = req.headers['x-signature'] || req.headers['x-wise-signature'];
+
+  if (!signature) {
+    console.error('No signature header found in webhook request');
+    return false;
+  }
+
+  // Get raw body as string
+  const payload = JSON.stringify(req.body);
+
+  // Calculate expected signature
+  const expectedSignature = crypto
+    .createHmac('sha256', webhookSecret)
+    .update(payload)
+    .digest('hex');
+
+  // Compare signatures
+  const isValid = crypto.timingSafeEqual(
+    Buffer.from(signature),
+    Buffer.from(expectedSignature)
+  );
+
+  if (!isValid) {
+    console.error('Webhook signature validation failed');
+    console.error('Expected:', expectedSignature);
+    console.error('Received:', signature);
+  }
+
+  return isValid;
+}
+
+// POST /api/wise/webhook - Receive Wise webhook events
+router.post('/webhook', express.json(), async (req, res) => {
+  const startTime = Date.now();
+  console.log('=== Wise Webhook Received ===');
+  console.log('Timestamp:', new Date().toISOString());
+
+  try {
+    // Validate signature
+    const isValid = validateWebhookSignature(req);
+
+    if (!isValid) {
+      console.error('Invalid webhook signature');
+      return res.status(401).json({
+        error: 'Invalid signature',
+        message: 'Webhook signature validation failed'
+      });
+    }
+
+    const event = req.body;
+    console.log('Event Type:', event.event_type);
+    console.log('Event Data:', JSON.stringify(event.data));
+
+    // Handle test events
+    if (event.event_type === 'test' || event.event_type === 'webhook#test') {
+      console.log('✓ Test webhook received successfully');
+      return res.status(200).json({
+        success: true,
+        message: 'Test webhook received'
+      });
+    }
+
+    // Handle balance credit events (incoming money)
+    if (event.event_type === 'balances#credit' || event.event_type === 'balance-transactions#credit') {
+      console.log('Processing balance credit event...');
+      await processBalanceTransaction(event.data, 'CREDIT');
+
+      const elapsed = Date.now() - startTime;
+      console.log(`✓ Balance credit processed in ${elapsed}ms`);
+      return res.status(200).json({
+        success: true,
+        message: 'Balance credit processed'
+      });
+    }
+
+    // Handle balance update events
+    if (event.event_type === 'balances#update' || event.event_type === 'balance-transactions#update') {
+      console.log('Processing balance update event...');
+      await processBalanceTransaction(event.data, 'UPDATE');
+
+      const elapsed = Date.now() - startTime;
+      console.log(`✓ Balance update processed in ${elapsed}ms`);
+      return res.status(200).json({
+        success: true,
+        message: 'Balance update processed'
+      });
+    }
+
+    // Handle transfer state changes
+    if (event.event_type === 'transfers#state-change') {
+      console.log('Processing transfer state change...');
+      await processTransferStateChange(event.data);
+
+      const elapsed = Date.now() - startTime;
+      console.log(`✓ Transfer state change processed in ${elapsed}ms`);
+      return res.status(200).json({
+        success: true,
+        message: 'Transfer state change processed'
+      });
+    }
+
+    // Unknown event type
+    console.warn('Unknown event type:', event.event_type);
+    return res.status(200).json({
+      success: true,
+      message: 'Event received but not processed'
+    });
+
+  } catch (error) {
+    console.error('=== Webhook Processing Error ===');
+    console.error('Error:', error.message);
+    console.error('Stack:', error.stack);
+
+    // Still return 200 to Wise to avoid retries for processing errors
+    return res.status(200).json({
+      success: false,
+      error: 'Internal processing error',
+      message: error.message
+    });
+  }
+});
+
+// Process balance transaction from webhook
+async function processBalanceTransaction(data, direction) {
+  try {
+    // Extract transaction details from webhook payload
+    const transactionId = data.resource?.id || data.transaction_id || data.id;
+    const amount = Math.abs(parseFloat(data.amount?.value || data.amount || 0));
+    const currency = data.amount?.currency || data.currency || 'USD';
+    const description = data.details?.description || data.description || '';
+    const merchantName = data.details?.merchant_name || data.merchant_name || '';
+    const referenceNumber = data.details?.reference || data.reference || '';
+    const transactionDate = data.created_time || data.transaction_date || new Date().toISOString();
+
+    // Check for duplicates
+    const existing = await WiseTransactionModel.exists(transactionId);
+    if (existing) {
+      console.log(`Transaction ${transactionId} already exists, skipping`);
+      return;
+    }
+
+    // Prepare transaction data for classification
+    const transactionData = {
+      type: direction === 'CREDIT' ? 'CREDIT' : 'DEBIT',
+      amount,
+      currency,
+      description,
+      merchantName,
+      referenceNumber,
+      transactionDate
+    };
+
+    // Classify transaction
+    console.log('Classifying transaction...');
+    const classification = await wiseClassifier.classifyTransaction(transactionData);
+    console.log('Classification result:', {
+      category: classification.category,
+      confidence: classification.confidenceScore,
+      needsReview: classification.needsReview,
+      employeeId: classification.employeeId
+    });
+
+    // Store transaction in database
+    const savedTransaction = await WiseTransactionModel.create({
+      wiseTransactionId: transactionId,
+      wiseResourceId: data.resource?.id || null,
+      profileId: data.profile_id || process.env.WISE_PROFILE_ID,
+      accountId: data.account_id || null,
+      type: direction === 'CREDIT' ? 'CREDIT' : 'DEBIT',
+      state: data.state || 'completed',
+      amount,
+      currency,
+      description,
+      merchantName,
+      referenceNumber,
+      transactionDate,
+      valueDate: data.value_date || transactionDate,
+      syncStatus: classification.needsReview ? 'pending' : 'pending',
+      classifiedCategory: classification.category,
+      matchedEmployeeId: classification.employeeId,
+      confidenceScore: classification.confidenceScore,
+      needsReview: classification.needsReview,
+      rawPayload: data
+    });
+
+    console.log(`✓ Transaction saved: ${transactionId}`);
+    console.log(`  Category: ${classification.category}`);
+    console.log(`  Confidence: ${classification.confidenceScore}%`);
+    console.log(`  Needs Review: ${classification.needsReview}`);
+
+    // If high confidence (80%+) and doesn't need review, auto-create entry
+    if (!classification.needsReview && classification.confidenceScore >= 80) {
+      console.log('Auto-creating entry for high-confidence transaction...');
+      await autoCreateEntry(savedTransaction, classification);
+    } else {
+      console.log('Transaction flagged for manual review');
+    }
+
+  } catch (error) {
+    console.error('Error processing balance transaction:', error);
+    throw error;
+  }
+}
+
+// Process transfer state change from webhook
+async function processTransferStateChange(data) {
+  try {
+    const transferId = data.resource?.id || data.transfer_id || data.id;
+    const currentState = data.current_state || data.state;
+
+    console.log(`Transfer ${transferId} changed to state: ${currentState}`);
+
+    // Check if we have this transaction
+    const existing = await WiseTransactionModel.getByWiseId(transferId);
+
+    if (existing) {
+      // Update transaction state
+      await WiseTransactionModel.updateStatus(transferId, {
+        state: currentState
+      });
+      console.log(`✓ Updated transaction state for ${transferId}`);
+    } else {
+      console.log(`Transaction ${transferId} not found in database`);
+    }
+
+  } catch (error) {
+    console.error('Error processing transfer state change:', error);
+    throw error;
+  }
+}
+
+// Auto-create accounting entry from high-confidence transaction
+async function autoCreateEntry(transaction, classification) {
+  const client = await pool.getClient();
+
+  try {
+    await client.query('BEGIN');
+
+    // Determine entry type
+    const entryType = transaction.type === 'CREDIT' ? 'income' : 'expense';
+
+    // Map classified category to entry category
+    let entryCategory;
+    if (classification.category === 'Employee') {
+      entryCategory = 'salaries';
+    } else if (classification.category === 'Client Payment') {
+      entryCategory = 'consulting';
+    } else if (classification.category === 'Other Expenses') {
+      entryCategory = 'other_expenses';
+    } else if (classification.category === 'Other Income') {
+      entryCategory = 'other_income';
+    } else {
+      entryCategory = classification.category.toLowerCase().replace(/ /g, '_');
+    }
+
+    // Create description
+    let description = transaction.description || transaction.merchant_name || 'Wise Transaction';
+    if (classification.employeeId) {
+      const empResult = await client.query('SELECT name FROM employees WHERE id = $1', [classification.employeeId]);
+      if (empResult.rows[0]) {
+        description = `Salary - ${empResult.rows[0].name}`;
+      }
+    }
+
+    // Create detail with Wise info
+    let detail = `Auto-imported from Wise\nWise ID: ${transaction.wise_transaction_id}\n`;
+    if (transaction.reference_number) {
+      detail += `Reference: ${transaction.reference_number}\n`;
+    }
+    detail += `Confidence: ${classification.confidenceScore}%\n`;
+    detail += `Classification: ${classification.reasoning.join(', ')}`;
+
+    // Insert entry
+    const entryResult = await client.query(
+      `INSERT INTO entries
+       (type, category, description, detail, base_amount, total, entry_date, status, employee_id, currency, amount_original)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       RETURNING id`,
+      [
+        entryType,
+        entryCategory,
+        description,
+        detail,
+        transaction.amount,
+        transaction.amount,
+        transaction.transaction_date.split('T')[0],
+        'completed',
+        classification.employeeId || null,
+        transaction.currency,
+        transaction.amount
+      ]
+    );
+
+    const entryId = entryResult.rows[0].id;
+
+    // Update transaction as processed
+    await client.query(
+      `UPDATE wise_transactions
+       SET sync_status = 'processed', entry_id = $1, processed_at = CURRENT_TIMESTAMP
+       WHERE wise_transaction_id = $2`,
+      [entryId, transaction.wise_transaction_id]
+    );
+
+    await client.query('COMMIT');
+
+    console.log(`✓ Entry created for Wise transaction ${transaction.wise_transaction_id}: ${description} (${entryType} ${transaction.currency} ${transaction.amount})`);
+
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Error creating entry:', error);
+
+    // Mark transaction as failed
+    await WiseTransactionModel.markAsFailed(transaction.wise_transaction_id, error.message);
+
+    throw error;
+  } finally {
+    client.release();
+  }
+}
 
 module.exports = router;
