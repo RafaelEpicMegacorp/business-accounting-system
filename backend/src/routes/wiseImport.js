@@ -588,6 +588,20 @@ function validateWebhookSignature(rawBody, signature) {
   }
 }
 
+// GET /api/wise/webhook - Webhook validation endpoint
+// Wise sends GET request during webhook creation to validate the URL exists and responds correctly
+router.get('/webhook', (req, res) => {
+  console.log('✓ Webhook validation request received (GET)');
+  console.log('Headers:', JSON.stringify(req.headers, null, 2));
+  res.status(200).json({
+    status: 'ok',
+    message: 'Webhook endpoint is ready to receive events',
+    timestamp: new Date().toISOString(),
+    accepts: ['POST'],
+    content_type: 'application/json'
+  });
+});
+
 // POST /api/wise/webhook - Receive Wise webhook events
 // Use express.raw to capture raw body BEFORE JSON parsing (needed for signature validation)
 router.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
@@ -610,9 +624,20 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
     });
   }
 
-  // Validate event_type exists
+  // Handle validation requests (no event_type or empty body)
   if (!event.event_type) {
-    console.error('Webhook received without event_type');
+    // Check if this is a Wise validation request (empty or minimal body)
+    if (!rawBody || rawBody.trim() === '' || rawBody === '{}' || Object.keys(event).length === 0) {
+      console.log('✓ Webhook validation request received (POST with empty/minimal body)');
+      return res.status(200).json({
+        status: 'ok',
+        message: 'Webhook endpoint is ready',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // Otherwise, this is an error - real webhooks must have event_type
+    console.error('Webhook received with body but no event_type');
     console.error('Body:', rawBody);
     return res.status(400).json({
       error: 'Missing event_type',
