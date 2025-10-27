@@ -614,14 +614,30 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
   const startTime = Date.now();
   const receivedAt = new Date();
 
+  // ========== ULTRA VERBOSE LOGGING - LOG EVERYTHING ==========
+  console.log('\n\n');
+  console.log('='.repeat(80));
+  console.log('🔔 WEBHOOK REQUEST RECEIVED');
+  console.log('='.repeat(80));
+  console.log('📅 Timestamp:', receivedAt.toISOString());
+  console.log('🌐 Method:', req.method);
+  console.log('🔗 URL:', req.url);
+  console.log('📍 Path:', req.path);
+  console.log('🔍 Query:', JSON.stringify(req.query));
+  console.log('📦 Body Type:', typeof req.body);
+  console.log('📦 Body Length:', req.body ? req.body.length : 0);
+  console.log('📋 All Headers:');
+  Object.keys(req.headers).forEach(key => {
+    console.log(`  ${key}: ${req.headers[key]}`);
+  });
+  console.log('='.repeat(80));
+  console.log('\n');
+
   // CHECK TEST NOTIFICATION FIRST - before ANY body parsing
   // Wise sends X-Test-Notification: true during URL validation
   if (req.headers['x-test-notification'] === 'true') {
-    console.log('✓ Wise test notification received (URL validation)');
-    console.log('Test headers:', {
-      'x-test-notification': req.headers['x-test-notification'],
-      'x-delivery-id': req.headers['x-delivery-id']
-    });
+    console.log('✅ X-Test-Notification header detected - This is URL validation');
+    console.log('Responding with 200 OK for validation');
     return res.status(200).json({
       success: true,
       message: 'Webhook endpoint validated successfully',
@@ -629,7 +645,7 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
     });
   }
 
-  console.log('=== Wise Webhook Received ===');
+  console.log('📝 Not a test notification - proceeding with normal webhook processing');
   console.log('Timestamp:', receivedAt.toISOString());
 
   // Capture raw body and parse it manually
