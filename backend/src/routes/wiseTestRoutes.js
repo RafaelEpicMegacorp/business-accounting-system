@@ -173,6 +173,7 @@ router.get('/test-all', async (req, res) => {
   const WISE_PROFILE_ID = process.env.WISE_PROFILE_ID;
 
   const results = {
+    title: '🧪 Wise API Integration Test Suite',
     success: false,
     timestamp: new Date().toISOString(),
     tests: {},
@@ -183,27 +184,56 @@ router.get('/test-all', async (req, res) => {
     }
   };
 
+  // Helper function to create progress bar
+  const createProgressBar = (passed, total) => {
+    const percentage = total > 0 ? Math.round((passed / total) * 100) : 0;
+    const filledBlocks = Math.round((passed / total) * 20);
+    const emptyBlocks = 20 - filledBlocks;
+    const bar = '█'.repeat(filledBlocks) + '░'.repeat(emptyBlocks);
+    return `${bar} ${passed}/${total} (${percentage}%)`;
+  };
+
   // Test 1: Configuration Check
   console.log('=== Test 1: Configuration Check ===');
-  results.tests.configuration = {
-    name: 'Configuration Check',
-    status: 'pass',
-    apiUrl: WISE_API_URL,
-    hasToken: !!WISE_API_TOKEN,
-    tokenPrefix: WISE_API_TOKEN ? WISE_API_TOKEN.substring(0, 10) + '...' : null,
-    profileId: WISE_PROFILE_ID || 'Not set',
-    environment: process.env.NODE_ENV || 'development'
-  };
   results.summary.total++;
-  results.summary.passed++;
 
   if (!WISE_API_TOKEN) {
-    results.tests.configuration.status = 'fail';
-    results.tests.configuration.error = 'WISE_API_TOKEN not configured';
-    results.summary.passed--;
+    results.tests.configuration = {
+      emoji: '❌',
+      status: 'FAIL',
+      name: '1️⃣ Configuration Check',
+      description: 'Environment variables and settings',
+      error: 'WISE_API_TOKEN not configured',
+      hint: '💡 Set WISE_API_TOKEN in your environment variables',
+      details: {
+        apiUrl: WISE_API_URL,
+        hasToken: false,
+        profileId: WISE_PROFILE_ID || 'Not set',
+        environment: process.env.NODE_ENV || 'development'
+      }
+    };
     results.summary.failed++;
+    results.summary.emoji = '❌';
+    results.summary.message = 'Configuration check failed';
+    results.summary.progress = createProgressBar(results.summary.passed, results.summary.total);
     return res.status(500).json(results);
   }
+
+  results.tests.configuration = {
+    emoji: '✅',
+    status: 'PASS',
+    name: '1️⃣ Configuration Check',
+    description: 'Environment variables and settings',
+    message: 'All required variables are configured',
+    details: {
+      apiUrl: WISE_API_URL,
+      hasToken: true,
+      tokenPrefix: WISE_API_TOKEN.substring(0, 10) + '...',
+      profileId: WISE_PROFILE_ID || 'Not set (will use profile from API)',
+      environment: process.env.NODE_ENV || 'development'
+    }
+  };
+  results.summary.passed++;
 
   // Test 2: Profile Endpoint
   console.log('=== Test 2: Profile Endpoint ===');
@@ -221,27 +251,41 @@ router.get('/test-all', async (req, res) => {
 
     if (!profileResponse.ok) {
       results.tests.profile = {
-        name: 'Profile Endpoint',
-        status: 'fail',
-        endpoint: '/v1/profiles',
-        httpStatus: profileResponse.status,
+        emoji: '❌',
+        status: 'FAIL',
+        name: '2️⃣ Profile Endpoint',
+        description: 'GET /v1/profiles - User profile information',
         error: profileData,
-        message: 'Failed to fetch profiles'
+        hint: profileResponse.status === 401
+          ? '💡 Check your WISE_API_TOKEN - it may be invalid or expired'
+          : profileResponse.status === 404
+          ? '💡 Check WISE_API_URL is set to https://api.wise.com'
+          : '💡 Check Wise API status and your token permissions',
+        details: {
+          endpoint: `${WISE_API_URL}/v1/profiles`,
+          httpStatus: profileResponse.status,
+          httpStatusText: profileResponse.statusText
+        }
       };
       results.summary.failed++;
       console.error('Profile test failed:', profileResponse.status, profileData);
     } else {
       results.tests.profile = {
-        name: 'Profile Endpoint',
-        status: 'pass',
-        endpoint: '/v1/profiles',
-        httpStatus: profileResponse.status,
-        profileCount: profileData.length,
-        profiles: profileData.map(p => ({
-          id: p.id,
-          type: p.type,
-          name: p.details ? `${p.details.firstName || ''} ${p.details.lastName || ''}`.trim() : null
-        }))
+        emoji: '✅',
+        status: 'PASS',
+        name: '2️⃣ Profile Endpoint',
+        description: 'GET /v1/profiles - User profile information',
+        message: `Found ${profileData.length} profile(s)`,
+        details: {
+          endpoint: `${WISE_API_URL}/v1/profiles`,
+          httpStatus: profileResponse.status,
+          profileCount: profileData.length,
+          profiles: profileData.map(p => ({
+            id: p.id,
+            type: p.type === 'personal' ? '👤 Personal' : '🏢 Business',
+            name: p.details ? `${p.details.firstName || ''} ${p.details.lastName || ''}`.trim() : '(No name)'
+          }))
+        }
       };
       results.summary.passed++;
       console.log('Profile test passed:', profileData.length, 'profiles found');
@@ -254,10 +298,13 @@ router.get('/test-all', async (req, res) => {
 
       if (!profileId) {
         results.tests.balances = {
-          name: 'Balances Endpoint',
-          status: 'fail',
+          emoji: '❌',
+          status: 'FAIL',
+          name: '3️⃣ Balances Endpoint',
+          description: 'GET /v4/profiles/{id}/balances - Currency balances',
           error: 'No profile ID available',
-          message: 'Cannot test balances without a profile ID'
+          hint: '💡 Set WISE_PROFILE_ID in environment variables or ensure profile endpoint returns data',
+          details: {}
         };
         results.summary.failed++;
       } else {
@@ -277,40 +324,62 @@ router.get('/test-all', async (req, res) => {
 
           if (!balancesResponse.ok) {
             results.tests.balances = {
-              name: 'Balances Endpoint',
-              status: 'fail',
-              endpoint: `/v4/profiles/${profileId}/balances`,
-              httpStatus: balancesResponse.status,
+              emoji: '❌',
+              status: 'FAIL',
+              name: '3️⃣ Balances Endpoint',
+              description: 'GET /v4/profiles/{id}/balances - Currency balances',
               error: balancesData,
-              message: 'Failed to fetch balances'
+              hint: '💡 Check your API token has permissions to read balances',
+              details: {
+                endpoint: `${WISE_API_URL}/v4/profiles/${profileId}/balances`,
+                httpStatus: balancesResponse.status,
+                httpStatusText: balancesResponse.statusText,
+                profileId: profileId
+              }
             };
             results.summary.failed++;
             console.error('Balances test failed:', balancesResponse.status, balancesData);
           } else {
+            // Currency emoji mapping
+            const currencyEmojis = {
+              'USD': '💵', 'EUR': '💶', 'GBP': '💷', 'JPY': '💴',
+              'PLN': '🇵🇱', 'CHF': '🇨🇭', 'CAD': '🇨🇦', 'AUD': '🇦🇺'
+            };
+
             results.tests.balances = {
-              name: 'Balances Endpoint',
-              status: 'pass',
-              endpoint: `/v4/profiles/${profileId}/balances`,
-              httpStatus: balancesResponse.status,
-              profileId: profileId,
-              balanceCount: balancesData.length,
-              currencies: balancesData.map(b => b.currency),
-              balances: balancesData.map(b => ({
-                currency: b.currency,
-                available: b.amount.value,
-                reserved: b.reservedAmount.value,
-                total: b.totalWorth.value
-              }))
+              emoji: '✅',
+              status: 'PASS',
+              name: '3️⃣ Balances Endpoint',
+              description: 'GET /v4/profiles/{id}/balances - Currency balances',
+              message: `Found ${balancesData.length} currency balance(s)`,
+              details: {
+                endpoint: `${WISE_API_URL}/v4/profiles/${profileId}/balances`,
+                httpStatus: balancesResponse.status,
+                profileId: profileId,
+                balanceCount: balancesData.length,
+                currencies: balancesData.map(b => `${currencyEmojis[b.currency] || '💰'} ${b.currency}`),
+                balances: balancesData.map(b => ({
+                  currency: `${currencyEmojis[b.currency] || '💰'} ${b.currency}`,
+                  available: `${b.amount.value.toFixed(2)} ${b.currency}`,
+                  reserved: `${b.reservedAmount.value.toFixed(2)} ${b.currency}`,
+                  total: `${b.totalWorth.value.toFixed(2)} ${b.currency}`
+                }))
+              }
             };
             results.summary.passed++;
             console.log('Balances test passed:', balancesData.length, 'currencies found');
           }
         } catch (error) {
           results.tests.balances = {
-            name: 'Balances Endpoint',
-            status: 'fail',
+            emoji: '❌',
+            status: 'FAIL',
+            name: '3️⃣ Balances Endpoint',
+            description: 'GET /v4/profiles/{id}/balances - Currency balances',
             error: error.message,
-            message: 'Exception while testing balances endpoint'
+            hint: '💡 Check network connectivity and API URL configuration',
+            details: {
+              exception: error.message
+            }
           };
           results.summary.failed++;
           console.error('Balances test exception:', error);
@@ -319,17 +388,31 @@ router.get('/test-all', async (req, res) => {
     }
   } catch (error) {
     results.tests.profile = {
-      name: 'Profile Endpoint',
-      status: 'fail',
+      emoji: '❌',
+      status: 'FAIL',
+      name: '2️⃣ Profile Endpoint',
+      description: 'GET /v1/profiles - User profile information',
       error: error.message,
-      message: 'Exception while testing profile endpoint'
+      hint: error.message.includes('Unexpected token')
+        ? '💡 WISE_API_URL is likely pointing to the wrong URL (should be https://api.wise.com)'
+        : '💡 Check network connectivity and API configuration',
+      details: {
+        exception: error.message,
+        attemptedUrl: `${WISE_API_URL}/v1/profiles`
+      }
     };
     results.summary.failed++;
     console.error('Profile test exception:', error);
   }
 
-  // Set overall success
+  // Set overall success and create summary
   results.success = results.summary.failed === 0;
+
+  results.summary.emoji = results.success ? '✅' : '❌';
+  results.summary.message = results.success
+    ? '🎉 All tests passed! Wise API integration is working correctly.'
+    : `⚠️ ${results.summary.failed} test(s) failed. Check the details above for troubleshooting hints.`;
+  results.summary.progress = createProgressBar(results.summary.passed, results.summary.total);
 
   // Return appropriate status code
   const statusCode = results.success ? 200 : 500;
