@@ -637,6 +637,35 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
   // Wise sends X-Test-Notification: true during URL validation
   if (req.headers['x-test-notification'] === 'true') {
     console.log('✅ X-Test-Notification header detected - This is URL validation');
+
+    // Log test notifications to database for monitoring
+    try {
+      const rawBody = req.body.toString('utf8');
+      const event = JSON.parse(rawBody);
+
+      await pool.query(
+        `INSERT INTO wise_sync_audit_log (action, notes, new_values)
+         VALUES ($1, $2, $3)`,
+        [
+          'webhook_test',
+          'Test notification from Wise (URL validation)',
+          JSON.stringify({
+            event_type: event.event_type || 'test',
+            received_at: receivedAt.toISOString(),
+            payload: event,
+            headers: {
+              deliveryId: req.headers['x-delivery-id'],
+              testNotification: req.headers['x-test-notification']
+            },
+            processing_status: 'test'
+          })
+        ]
+      );
+      console.log('✓ Test notification logged to database');
+    } catch (error) {
+      console.warn('Failed to log test notification:', error.message);
+    }
+
     console.log('Responding with 200 OK for validation');
     return res.status(200).json({
       success: true,
