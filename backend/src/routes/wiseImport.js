@@ -163,18 +163,36 @@ router.get('/webhooks/recent', async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 50;
 
-    // Get recent webhooks from database (audit log)
+    // Get recent SUCCESSFUL webhooks from database (exclude failed validations)
     const dbWebhooks = await pool.query(`
       SELECT * FROM wise_sync_audit_log
-      WHERE action LIKE 'webhook_%'
+      WHERE action = 'webhook_received'
       ORDER BY created_at DESC
       LIMIT $1
     `, [limit]);
 
+    // Transform database records to extract event data from new_values JSONB
+    const transformedDbWebhooks = dbWebhooks.rows.map(row => {
+      const eventData = row.new_values || {};
+      return {
+        id: row.id,
+        event_type: eventData.event_type || 'unknown',
+        received_at: eventData.received_at || row.created_at,
+        payload: eventData.payload || {},
+        processing_status: eventData.processing_status || 'unknown',
+        processing_result: eventData.processing_result,
+        error: eventData.error,
+        wise_transaction_id: row.wise_transaction_id,
+        entry_id: row.entry_id,
+        created_at: row.created_at,
+        source: 'database'
+      };
+    });
+
     // Combine in-memory and database webhooks
     const allWebhooks = [
       ...recentWebhooks.map(w => ({ ...w, source: 'memory' })),
-      ...dbWebhooks.rows.map(w => ({ ...w, source: 'database' }))
+      ...transformedDbWebhooks
     ];
 
     // Sort by timestamp descending
