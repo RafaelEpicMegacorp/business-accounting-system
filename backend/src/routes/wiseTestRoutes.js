@@ -14,7 +14,7 @@ router.get('/health', (req, res) => {
 // Test Wise API connection - Get Profiles
 router.get('/test-profile', async (req, res) => {
   const WISE_API_TOKEN = process.env.WISE_API_TOKEN;
-  const WISE_API_URL = process.env.WISE_API_URL || process.env.WISE_API_BASE_URL || 'https://api.transferwise.com';
+  const WISE_API_URL = process.env.WISE_API_URL || process.env.WISE_API_BASE_URL || 'https://api.wise.com';
 
   // Check if token is configured
   if (!WISE_API_TOKEN) {
@@ -82,7 +82,7 @@ router.get('/test-profile', async (req, res) => {
 // Test Wise API - Get Balances
 router.get('/test-balances/:profileId?', async (req, res) => {
   const WISE_API_TOKEN = process.env.WISE_API_TOKEN;
-  const WISE_API_URL = process.env.WISE_API_URL || process.env.WISE_API_BASE_URL || 'https://api.transferwise.com';
+  const WISE_API_URL = process.env.WISE_API_URL || process.env.WISE_API_BASE_URL || 'https://api.wise.com';
   const profileId = req.params.profileId || process.env.WISE_PROFILE_ID;
 
   if (!WISE_API_TOKEN) {
@@ -160,7 +160,7 @@ router.get('/config', (req, res) => {
   res.json({
     hasToken: !!process.env.WISE_API_TOKEN,
     tokenPrefix: process.env.WISE_API_TOKEN ? process.env.WISE_API_TOKEN.substring(0, 10) + '...' : null,
-    apiUrl: process.env.WISE_API_URL || process.env.WISE_API_BASE_URL || 'https://api.transferwise.com',
+    apiUrl: process.env.WISE_API_URL || process.env.WISE_API_BASE_URL || 'https://api.wise.com',
     profileId: process.env.WISE_PROFILE_ID || null,
     environment: process.env.NODE_ENV || 'development'
   });

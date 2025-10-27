@@ -4,7 +4,7 @@ Collection of scripts to test Wise API integration.
 
 ## Prerequisites
 
-1. **Wise API Token**: Get from https://wise.com or https://sandbox.transferwise.tech
+1. **Wise API Token**: Get from https://wise.com or https://sandbox.wise.com
 2. **Node.js**: Version 18+ with native fetch support
 3. **Environment Setup**: Set API token in `.env` file
 
@@ -16,7 +16,7 @@ Collection of scripts to test Wise API integration.
 ```bash
 # Wise API Configuration
 WISE_API_TOKEN=your-api-token-here
-WISE_API_URL=https://api.transferwise.com  # or sandbox URL
+WISE_API_URL=https://api.wise.com  # or sandbox URL
 ```
 
 **For Railway (Production):**
@@ -182,7 +182,7 @@ node scripts/test-wise-statement.js 12345678 200001 EUR
 |----------|----------|-------------|---------|
 | `WISE_API_TOKEN` | Yes | Your Wise API token | `abc123...` |
 | `WISE_PROFILE_ID` | Optional | Your profile ID | `12345678` |
-| `WISE_API_URL` | Optional | API base URL | `https://api.transferwise.com` |
+| `WISE_API_URL` | Optional | API base URL | `https://api.wise.com` |
 
 ---
 
@@ -190,14 +190,14 @@ node scripts/test-wise-statement.js 12345678 200001 EUR
 
 ### Sandbox (Testing)
 
-**URL**: `https://api.sandbox.transferwise.tech`
+**URL**: `https://api.sandbox.wise.com`
 
 **Setup:**
-1. Sign up at https://sandbox.transferwise.tech
+1. Sign up at https://sandbox.wise.com
 2. Generate API token from settings
 3. Set in `.env`:
    ```bash
-   WISE_API_URL=https://api.sandbox.transferwise.tech
+   WISE_API_URL=https://api.sandbox.wise.com
    WISE_API_TOKEN=your-sandbox-token
    ```
 
@@ -211,13 +211,13 @@ node scripts/test-wise-statement.js 12345678 200001 EUR
 
 ### Production
 
-**URL**: `https://api.transferwise.com`
+**URL**: `https://api.wise.com`
 
 **Setup:**
 1. Get API token from https://wise.com
 2. Set in `.env`:
    ```bash
-   WISE_API_URL=https://api.transferwise.com
+   WISE_API_URL=https://api.wise.com
    WISE_API_TOKEN=your-production-token
    ```
 
@@ -280,7 +280,7 @@ echo $WISE_API_URL
 
 # Test connection
 curl -H "Authorization: Bearer $WISE_API_TOKEN" \
-  https://api.transferwise.com/v2/profiles
+  https://api.wise.com/v2/profiles
 ```
 
 ---

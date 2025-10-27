@@ -3,8 +3,8 @@
 Essential Wise API endpoints for accounting system integration.
 
 **Official Documentation**: https://docs.wise.com/api-docs/api-reference/
-**Sandbox Base URL**: `https://api.sandbox.transferwise.tech`
-**Production Base URL**: `https://api.transferwise.com`
+**Sandbox Base URL**: `https://api.sandbox.wise.com`
+**Production Base URL**: `https://api.wise.com`
 
 **Authentication**: Bearer token (API token or OAuth)
 **Content-Type**: `application/json`
@@ -29,14 +29,14 @@ Essential Wise API endpoints for accounting system integration.
 
 **Sandbox (Testing)**:
 ```
-Base URL: https://api.sandbox.transferwise.tech
+Base URL: https://api.sandbox.wise.com
 Purpose: Testing and development
 API Token: Test credentials from Wise support
 ```
 
 **Production**:
 ```
-Base URL: https://api.transferwise.com
+Base URL: https://api.wise.com
 Purpose: Live transactions
 API Token: Production credentials (requires verification)
 ```
@@ -91,7 +91,7 @@ Retrieve all profiles associated with your account.
 
 **Request:**
 ```bash
-curl -X GET "https://api.sandbox.transferwise.tech/v2/profiles" \
+curl -X GET "https://api.sandbox.wise.com/v2/profiles" \
   -H "Authorization: Bearer <your-api-token>"
 ```
 
@@ -130,7 +130,7 @@ Get all currency balances for a profile.
 
 **Request:**
 ```bash
-curl -X GET "https://api.sandbox.transferwise.tech/v4/profiles/12345678/balances?types=STANDARD" \
+curl -X GET "https://api.sandbox.wise.com/v4/profiles/12345678/balances?types=STANDARD" \
   -H "Authorization: Bearer <your-api-token>"
 ```
 
@@ -191,7 +191,7 @@ Get specific balance details.
 
 **Request:**
 ```bash
-curl -X GET "https://api.sandbox.transferwise.tech/v4/profiles/12345678/balances/200001" \
+curl -X GET "https://api.sandbox.wise.com/v4/profiles/12345678/balances/200001" \
   -H "Authorization: Bearer <your-api-token>"
 ```
 
@@ -211,7 +211,7 @@ Open new currency balance (multi-currency account).
 
 **Request:**
 ```bash
-curl -X POST "https://api.sandbox.transferwise.tech/v4/profiles/12345678/balances" \
+curl -X POST "https://api.sandbox.wise.com/v4/profiles/12345678/balances" \
   -H "Authorization: Bearer <your-api-token>" \
   -H "Content-Type: application/json" \
   -H "X-idempotence-uuid: $(uuidgen)" \
@@ -249,7 +249,7 @@ Convert money between different currency balances.
 
 **Request:**
 ```bash
-curl -X POST "https://api.sandbox.transferwise.tech/v2/profiles/12345678/balance-movements" \
+curl -X POST "https://api.sandbox.wise.com/v2/profiles/12345678/balance-movements" \
   -H "Authorization: Bearer <your-api-token>" \
   -H "Content-Type: application/json" \
   -H "X-idempotence-uuid: $(uuidgen)" \
@@ -309,7 +309,7 @@ Get total balance across all currencies, converted to specified currency.
 
 **Request:**
 ```bash
-curl -X GET "https://api.sandbox.transferwise.tech/v1/profiles/12345678/total-funds/USD" \
+curl -X GET "https://api.sandbox.wise.com/v1/profiles/12345678/total-funds/USD" \
   -H "Authorization: Bearer <your-api-token>"
 ```
 
@@ -356,7 +356,7 @@ Check deposit limits for regulatory compliance (mainly for Singapore/Malaysia).
 
 **Request:**
 ```bash
-curl -X GET "https://api.sandbox.transferwise.tech/v1/profiles/12345678/balance-capacity?currency=SGD" \
+curl -X GET "https://api.sandbox.wise.com/v1/profiles/12345678/balance-capacity?currency=SGD" \
   -H "Authorization: Bearer <your-api-token>"
 ```
 
@@ -404,7 +404,7 @@ Retrieve transaction history for specific balance.
 
 **Request:**
 ```bash
-curl -X GET "https://api.sandbox.transferwise.tech/v1/profiles/12345678/balance-statements/200001/statement.json?currency=EUR&intervalStart=2025-01-01T00:00:00.000Z&intervalEnd=2025-01-31T23:59:59.999Z&type=COMPACT" \
+curl -X GET "https://api.sandbox.wise.com/v1/profiles/12345678/balance-statements/200001/statement.json?currency=EUR&intervalStart=2025-01-01T00:00:00.000Z&intervalEnd=2025-01-31T23:59:59.999Z&type=COMPACT" \
   -H "Authorization: Bearer <your-api-token>"
 ```
 
@@ -523,7 +523,7 @@ Subscribe to events for specific profile.
 
 **Request:**
 ```bash
-curl -X POST "https://api.sandbox.transferwise.tech/v3/profiles/12345678/subscriptions" \
+curl -X POST "https://api.sandbox.wise.com/v3/profiles/12345678/subscriptions" \
   -H "Authorization: Bearer <your-api-token>" \
   -H "Content-Type: application/json" \
   -d '{
@@ -592,7 +592,7 @@ Get all webhook subscriptions for profile.
 
 **Request:**
 ```bash
-curl -X GET "https://api.sandbox.transferwise.tech/v3/profiles/12345678/subscriptions" \
+curl -X GET "https://api.sandbox.wise.com/v3/profiles/12345678/subscriptions" \
   -H "Authorization: Bearer <your-api-token>"
 ```
 
@@ -610,7 +610,7 @@ Get specific webhook subscription.
 
 **Request:**
 ```bash
-curl -X GET "https://api.sandbox.transferwise.tech/v3/profiles/12345678/subscriptions/a1b2c3d4-e5f6-7890-abcd-ef1234567890" \
+curl -X GET "https://api.sandbox.wise.com/v3/profiles/12345678/subscriptions/a1b2c3d4-e5f6-7890-abcd-ef1234567890" \
   -H "Authorization: Bearer <your-api-token>"
 ```
 
@@ -628,7 +628,7 @@ Remove webhook subscription.
 
 **Request:**
 ```bash
-curl -X DELETE "https://api.sandbox.transferwise.tech/v3/profiles/12345678/subscriptions/a1b2c3d4-e5f6-7890-abcd-ef1234567890" \
+curl -X DELETE "https://api.sandbox.wise.com/v3/profiles/12345678/subscriptions/a1b2c3d4-e5f6-7890-abcd-ef1234567890" \
   -H "Authorization: Bearer <your-api-token>"
 ```
 
@@ -694,7 +694,7 @@ Content-Type: application/json
 ```javascript
 // Get balances
 const response = await fetch(
-  `https://api.transferwise.com/v4/profiles/${profileId}/balances?types=STANDARD`,
+  `https://api.wise.com/v4/profiles/${profileId}/balances?types=STANDARD`,
   {
     headers: {
       'Authorization': `Bearer ${apiToken}`
@@ -736,7 +736,7 @@ const startDate = '2025-01-01T00:00:00.000Z';
 const endDate = '2025-01-31T23:59:59.999Z';
 
 const response = await fetch(
-  `https://api.transferwise.com/v1/profiles/${profileId}/balance-statements/${balanceId}/statement.json?currency=EUR&intervalStart=${startDate}&intervalEnd=${endDate}&type=COMPACT`,
+  `https://api.wise.com/v1/profiles/${profileId}/balance-statements/${balanceId}/statement.json?currency=EUR&intervalStart=${startDate}&intervalEnd=${endDate}&type=COMPACT`,
   {
     headers: {
       'Authorization': `Bearer ${apiToken}`
@@ -848,7 +848,7 @@ for (const tx of statement.transactions) {
 ```javascript
 // Create quote
 const quoteResponse = await fetch(
-  `https://api.transferwise.com/v3/profiles/${profileId}/quotes`,
+  `https://api.wise.com/v3/profiles/${profileId}/quotes`,
   {
     method: 'POST',
     headers: {
@@ -867,7 +867,7 @@ const quote = await quoteResponse.json();
 
 // Execute conversion
 const conversionResponse = await fetch(
-  `https://api.transferwise.com/v2/profiles/${profileId}/balance-movements`,
+  `https://api.wise.com/v2/profiles/${profileId}/balance-movements`,
   {
     method: 'POST',
     headers: {
@@ -989,7 +989,7 @@ X-RateLimit-Reset: 1642684800
 - Simulated exchange rates
 
 **Getting Sandbox Access:**
-1. Sign up at https://sandbox.transferwise.tech
+1. Sign up at https://sandbox.wise.com
 2. Generate API token from settings
 3. Use sandbox base URL for all requests
 
@@ -1038,7 +1038,7 @@ X-RateLimit-Reset: 1642684800
 
 **Official Resources:**
 - API Documentation: https://docs.wise.com/api-docs/
-- API Status: https://status.transferwise.com/
+- API Status: https://status.wise.com/
 - Support: https://wise.com/help/
 - Community Forum: https://community.wise.com/
 

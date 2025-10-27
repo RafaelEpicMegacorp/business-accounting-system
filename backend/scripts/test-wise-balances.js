@@ -17,7 +17,7 @@
 require('dotenv').config();
 
 const WISE_API_TOKEN = process.env.WISE_API_TOKEN;
-const WISE_API_URL = process.env.WISE_API_URL || 'https://api.transferwise.com';
+const WISE_API_URL = process.env.WISE_API_URL || 'https://api.wise.com';
 const profileId = process.argv[2] || process.env.WISE_PROFILE_ID;
 
 // ANSI color codes
