@@ -569,12 +569,13 @@ function validateWebhookSignature(rawBody, signature) {
   console.log('Raw body preview:', rawBody.substring(0, 200));
 
   // Calculate expected signature using RAW body (before JSON parsing)
+  // Wise sends signatures in base64 format, not hex
   const expectedSignature = crypto
     .createHmac('sha256', webhookSecret)
     .update(rawBody)
-    .digest('hex');
+    .digest('base64');
 
-  console.log('Expected signature (HMAC-SHA256):', expectedSignature);
+  console.log('Expected signature (HMAC-SHA256-base64):', expectedSignature);
   console.log('Received signature:', signature);
   console.log('=== END SIGNATURE DEBUG ===');
 
