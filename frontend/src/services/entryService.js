@@ -67,31 +67,103 @@ const entryService = {
     return response.data;
   },
 
-  // Get income entries only (with optional date filters)
+  // Get income entries only (with optional filters)
   async getIncome(filters = {}) {
     const params = new URLSearchParams();
+
+    // Date filters
     if (filters.startDate) params.append('startDate', filters.startDate);
     if (filters.endDate) params.append('endDate', filters.endDate);
+
+    // Search filter
+    if (filters.search) params.append('search', filters.search);
+
+    // Category filter (multiple)
+    if (filters.categories && filters.categories.length > 0) {
+      filters.categories.forEach(cat => params.append('categories', cat));
+    }
+
+    // Employee filter
+    if (filters.employeeId) params.append('employeeId', filters.employeeId);
+
+    // Amount range filters
+    if (filters.minAmount) params.append('minAmount', filters.minAmount);
+    if (filters.maxAmount) params.append('maxAmount', filters.maxAmount);
+
+    // Status filter
+    if (filters.status) params.append('status', filters.status);
+
+    // Currency filter
+    if (filters.currency) params.append('currency', filters.currency);
+
     const queryString = params.toString();
     const response = await api.get(`/entries/income${queryString ? `?${queryString}` : ''}`);
     return response.data;
   },
 
-  // Get non-employee expense entries (with optional date filters)
+  // Get non-employee expense entries (with optional filters)
   async getExpenses(filters = {}) {
     const params = new URLSearchParams();
+
+    // Date filters
     if (filters.startDate) params.append('startDate', filters.startDate);
     if (filters.endDate) params.append('endDate', filters.endDate);
+
+    // Search filter
+    if (filters.search) params.append('search', filters.search);
+
+    // Category filter (multiple)
+    if (filters.categories && filters.categories.length > 0) {
+      filters.categories.forEach(cat => params.append('categories', cat));
+    }
+
+    // Employee filter
+    if (filters.employeeId) params.append('employeeId', filters.employeeId);
+
+    // Amount range filters
+    if (filters.minAmount) params.append('minAmount', filters.minAmount);
+    if (filters.maxAmount) params.append('maxAmount', filters.maxAmount);
+
+    // Status filter
+    if (filters.status) params.append('status', filters.status);
+
+    // Currency filter
+    if (filters.currency) params.append('currency', filters.currency);
+
     const queryString = params.toString();
     const response = await api.get(`/entries/expenses${queryString ? `?${queryString}` : ''}`);
     return response.data;
   },
 
-  // Get salary entries only (with optional date filters)
+  // Get salary entries only (with optional filters)
   async getSalaries(filters = {}) {
     const params = new URLSearchParams();
+
+    // Date filters
     if (filters.startDate) params.append('startDate', filters.startDate);
     if (filters.endDate) params.append('endDate', filters.endDate);
+
+    // Search filter
+    if (filters.search) params.append('search', filters.search);
+
+    // Category filter (multiple)
+    if (filters.categories && filters.categories.length > 0) {
+      filters.categories.forEach(cat => params.append('categories', cat));
+    }
+
+    // Employee filter
+    if (filters.employeeId) params.append('employeeId', filters.employeeId);
+
+    // Amount range filters
+    if (filters.minAmount) params.append('minAmount', filters.minAmount);
+    if (filters.maxAmount) params.append('maxAmount', filters.maxAmount);
+
+    // Status filter
+    if (filters.status) params.append('status', filters.status);
+
+    // Currency filter
+    if (filters.currency) params.append('currency', filters.currency);
+
     const queryString = params.toString();
     const response = await api.get(`/entries/salaries${queryString ? `?${queryString}` : ''}`);
     return response.data;

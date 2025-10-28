@@ -2,11 +2,41 @@ const EntryModel = require('../models/entryModel');
 const pool = require('../config/database');
 
 const EntryController = {
-  // GET /api/entries?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
+  // GET /api/entries with optional filters
+  // Query params: startDate, endDate, search, categories[], employeeId, minAmount, maxAmount, status, currency
   async getAll(req, res, next) {
     try {
-      const { startDate, endDate } = req.query;
-      const entries = await EntryModel.getAll({ startDate, endDate });
+      const {
+        startDate,
+        endDate,
+        search,
+        categories,
+        employeeId,
+        minAmount,
+        maxAmount,
+        status,
+        currency
+      } = req.query;
+
+      // Parse categories if provided (can be single or array)
+      let parsedCategories;
+      if (categories) {
+        parsedCategories = Array.isArray(categories) ? categories : [categories];
+      }
+
+      const filters = {
+        startDate,
+        endDate,
+        search,
+        categories: parsedCategories,
+        employeeId,
+        minAmount,
+        maxAmount,
+        status,
+        currency
+      };
+
+      const entries = await EntryModel.getAll(filters);
       res.json(entries);
     } catch (error) {
       next(error);
@@ -92,30 +122,120 @@ const EntryController = {
     }
   },
 
-  // GET /api/entries/income
+  // GET /api/entries/income with optional filters
   async getIncome(req, res, next) {
     try {
-      const income = await EntryModel.getIncome();
+      const {
+        startDate,
+        endDate,
+        search,
+        categories,
+        employeeId,
+        minAmount,
+        maxAmount,
+        status,
+        currency
+      } = req.query;
+
+      // Parse categories if provided
+      let parsedCategories;
+      if (categories) {
+        parsedCategories = Array.isArray(categories) ? categories : [categories];
+      }
+
+      const filters = {
+        startDate,
+        endDate,
+        search,
+        categories: parsedCategories,
+        employeeId,
+        minAmount,
+        maxAmount,
+        status,
+        currency
+      };
+
+      const income = await EntryModel.getIncome(filters);
       res.json(income);
     } catch (error) {
       next(error);
     }
   },
 
-  // GET /api/entries/expenses
+  // GET /api/entries/expenses with optional filters
   async getExpenses(req, res, next) {
     try {
-      const expenses = await EntryModel.getExpenses();
+      const {
+        startDate,
+        endDate,
+        search,
+        categories,
+        employeeId,
+        minAmount,
+        maxAmount,
+        status,
+        currency
+      } = req.query;
+
+      // Parse categories if provided
+      let parsedCategories;
+      if (categories) {
+        parsedCategories = Array.isArray(categories) ? categories : [categories];
+      }
+
+      const filters = {
+        startDate,
+        endDate,
+        search,
+        categories: parsedCategories,
+        employeeId,
+        minAmount,
+        maxAmount,
+        status,
+        currency
+      };
+
+      const expenses = await EntryModel.getExpenses(filters);
       res.json(expenses);
     } catch (error) {
       next(error);
     }
   },
 
-  // GET /api/entries/salaries
+  // GET /api/entries/salaries with optional filters
   async getSalaries(req, res, next) {
     try {
-      const salaries = await EntryModel.getSalaries();
+      const {
+        startDate,
+        endDate,
+        search,
+        categories,
+        employeeId,
+        minAmount,
+        maxAmount,
+        status,
+        currency
+      } = req.query;
+
+      // Parse categories if provided
+      let parsedCategories;
+      if (categories) {
+        parsedCategories = Array.isArray(categories) ? categories : [categories];
+      }
+
+      const filters = {
+        startDate,
+        endDate,
+        search,
+        categories: parsedCategories,
+        employeeId,
+        minAmount,
+        maxAmount,
+        status,
+        currency
+      };
+
+      const salaries = await EntryModel.getSalaries(filters);
       res.json(salaries);
     } catch (error) {
       next(error);

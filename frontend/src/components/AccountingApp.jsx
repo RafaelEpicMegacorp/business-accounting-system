@@ -11,6 +11,8 @@ import ContractForm from './ContractForm';
 import DashboardView from './DashboardView';
 import ForecastView from './ForecastView';
 import SalaryCalendar from './SalaryCalendar';
+import SearchBar from './SearchBar';
+import FilterPanel from './FilterPanel';
 import { exportEntriesToCSV, exportEmployeesToCSV, exportContractsToCSV } from '../utils/csvExport';
 
 export default function AccountingApp() {
@@ -52,8 +54,18 @@ export default function AccountingApp() {
   // Bulk selection state
   const [selectedEntries, setSelectedEntries] = useState([]);
 
-  // Date filtering state
-  const [dateFilters, setDateFilters] = useState({ startDate: '', endDate: '' });
+  // Search and filter state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filters, setFilters] = useState({
+    startDate: '',
+    endDate: '',
+    categories: [],
+    employeeId: '',
+    minAmount: '',
+    maxAmount: '',
+    status: 'all',
+    currency: 'all'
+  });
   const [showFilters, setShowFilters] = useState(false);
 
   // Employee management state
@@ -67,29 +79,35 @@ export default function AccountingApp() {
 
   const categories = ['Employee', 'Administration', 'Software', 'Marketing', 'Equipment', 'Other'];
 
-  // Load entries on mount and when view or filters change
+  // Load entries on mount and when view, search, or filters change
   useEffect(() => {
     loadEntries();
-  }, [currentView, dateFilters]);
+  }, [currentView, searchQuery, filters]);
 
   const loadEntries = async () => {
     try {
       setLoading(true);
 
-      // Load data based on current view with date filters
+      // Combine search and filters
+      const allFilters = {
+        ...filters,
+        search: searchQuery
+      };
+
+      // Load data based on current view with all filters
       let entriesData;
       if (currentView === 'dashboard') {
         entriesData = [];
       } else if (currentView === 'income') {
-        entriesData = await entryService.getIncome(dateFilters);
+        entriesData = await entryService.getIncome(allFilters);
       } else if (currentView === 'expenses') {
-        entriesData = await entryService.getExpenses(dateFilters);
+        entriesData = await entryService.getExpenses(allFilters);
       } else if (currentView === 'salaries') {
         // Auto-generate missing salary entries for current month
         const now = new Date();
         await entryService.generateSalaryEntries(now.getFullYear(), now.getMonth() + 1);
         // Then fetch all salary entries
-        entriesData = await entryService.getSalaries(dateFilters);
+        entriesData = await entryService.getSalaries(allFilters);
       } else if (currentView === 'contracts') {
         entriesData = [];
         const contractsData = await contractService.getAll();
@@ -485,16 +503,36 @@ export default function AccountingApp() {
 
           {(currentView === 'income' || currentView === 'expenses' || currentView === 'salaries') && (
             <>
-              {/* Filters and Export Toolbar */}
-              <div className="flex flex-wrap items-center gap-3 mt-6 mb-4">
-                <button
-                  onClick={() => setShowFilters(!showFilters)}
-                  className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition"
-                >
-                  <Filter size={18} />
-                  {showFilters ? 'Hide Filters' : 'Show Filters'}
-                </button>
+              {/* Search Bar */}
+              <div className="mt-6 mb-4">
+                <SearchBar
+                  value={searchQuery}
+                  onChange={setSearchQuery}
+                  placeholder={`Search ${currentView}...`}
+                />
+              </div>
 
+              {/* Filter Panel */}
+              <FilterPanel
+                filters={filters}
+                onFiltersChange={setFilters}
+                onClearAll={() => {
+                  setFilters({
+                    startDate: '',
+                    endDate: '',
+                    categories: [],
+                    employeeId: '',
+                    minAmount: '',
+                    maxAmount: '',
+                    status: 'all',
+                    currency: 'all'
+                  });
+                  setSearchQuery('');
+                }}
+              />
+
+              {/* Export Toolbar */}
+              <div className="flex flex-wrap items-center gap-3 mb-4">
                 <button
                   onClick={() => exportEntriesToCSV(entries)}
                   className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
@@ -503,55 +541,11 @@ export default function AccountingApp() {
                   Export to CSV
                 </button>
 
-                {(dateFilters.startDate || dateFilters.endDate) && (
-                  <div className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-lg text-sm">
-                    <span className="font-medium">Active Filters:</span>
-                    {dateFilters.startDate && <span>From: {new Date(dateFilters.startDate).toLocaleDateString()}</span>}
-                    {dateFilters.endDate && <span>To: {new Date(dateFilters.endDate).toLocaleDateString()}</span>}
-                    <button
-                      onClick={() => setDateFilters({ startDate: '', endDate: '' })}
-                      className="ml-2 p-1 hover:bg-blue-100 rounded"
-                    >
-                      <X size={16} />
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Date Range Filters */}
-              {showFilters && (
-                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
-                  <h3 className="text-sm font-semibold text-gray-700 mb-3">Filter by Date Range</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Start Date</label>
-                      <input
-                        type="date"
-                        value={dateFilters.startDate}
-                        onChange={(e) => setDateFilters({ ...dateFilters, startDate: e.target.value })}
-                        className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">End Date</label>
-                      <input
-                        type="date"
-                        value={dateFilters.endDate}
-                        onChange={(e) => setDateFilters({ ...dateFilters, endDate: e.target.value })}
-                        className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      />
-                    </div>
-                    <div className="flex items-end">
-                      <button
-                        onClick={() => setDateFilters({ startDate: '', endDate: '' })}
-                        className="w-full bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700 text-sm"
-                      >
-                        Clear Filters
-                      </button>
-                    </div>
-                  </div>
+                {/* Results Count */}
+                <div className="text-sm text-gray-600">
+                  Showing <span className="font-semibold">{entries.length}</span> {entries.length === 1 ? 'entry' : 'entries'}
                 </div>
-              )}
+              </div>
 
               {/* Income-Specific Widgets */}
               {currentView === 'income' && incomeStats && (
@@ -976,34 +970,70 @@ export default function AccountingApp() {
               </div>
             )}
 
-            {/* Entries Table with Date Column */}
-            <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    <button onClick={toggleSelectAll} className="hover:text-gray-700">
-                      {selectedEntries.length === entries.length && entries.length > 0 ? (
-                        <CheckSquare size={18} />
-                      ) : (
-                        <Square size={18} />
-                      )}
+            {/* Entries Table with Date Column or Empty State */}
+            {entries.length === 0 ? (
+              <div className="bg-white rounded-lg shadow-sm p-12 text-center">
+                <div className="max-w-md mx-auto">
+                  <div className="text-gray-400 mb-4">
+                    <Filter size={48} className="mx-auto" />
+                  </div>
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">No entries found</h3>
+                  <p className="text-sm text-gray-500 mb-6">
+                    {searchQuery || filters.categories.length > 0 || filters.employeeId || filters.minAmount || filters.maxAmount || (filters.status && filters.status !== 'all') || (filters.currency && filters.currency !== 'all')
+                      ? 'Try adjusting your search or filters to find what you\'re looking for.'
+                      : 'Get started by adding your first entry using the "Add Entry" button above.'}
+                  </p>
+                  {(searchQuery || filters.categories.length > 0 || filters.employeeId || filters.minAmount || filters.maxAmount || (filters.status && filters.status !== 'all') || (filters.currency && filters.currency !== 'all')) && (
+                    <button
+                      onClick={() => {
+                        setFilters({
+                          startDate: '',
+                          endDate: '',
+                          categories: [],
+                          employeeId: '',
+                          minAmount: '',
+                          maxAmount: '',
+                          status: 'all',
+                          currency: 'all'
+                        });
+                        setSearchQuery('');
+                      }}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                    >
+                      <X size={16} />
+                      Clear all filters
                     </button>
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Detail</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Base Amount</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {entries.map((entry) => (
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-50 border-b border-gray-200">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <button onClick={toggleSelectAll} className="hover:text-gray-700">
+                            {selectedEntries.length === entries.length && entries.length > 0 ? (
+                              <CheckSquare size={18} />
+                            ) : (
+                              <Square size={18} />
+                            )}
+                          </button>
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Detail</th>
+                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Base Amount</th>
+                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
+                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {entries.map((entry) => (
                   <tr key={entry.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap text-center">
                       <button onClick={() => toggleEntrySelection(entry.id)} className="hover:text-blue-600">
@@ -1071,12 +1101,13 @@ export default function AccountingApp() {
                         </>
                       )}
                     </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </>
         )}
         </>

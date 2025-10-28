@@ -2,9 +2,20 @@ const pool = require('../config/database');
 
 const EntryModel = {
   // Get all entries, sorted by date (most recent first) with employee info
-  // Supports optional date range filtering
+  // Supports optional date range filtering, search, and advanced filters
   async getAll(filters = {}) {
-    const { startDate, endDate } = filters;
+    const {
+      startDate,
+      endDate,
+      search,
+      categories,
+      employeeId,
+      minAmount,
+      maxAmount,
+      status,
+      currency
+    } = filters;
+
     let query = `
       SELECT e.*, emp.name as employee_name, emp.pay_type
       FROM entries e
@@ -14,6 +25,7 @@ const EntryModel = {
     const params = [];
     const conditions = [];
 
+    // Date range filters
     if (startDate) {
       params.push(startDate);
       conditions.push(`e.entry_date >= $${params.length}`);
@@ -22,6 +34,51 @@ const EntryModel = {
     if (endDate) {
       params.push(endDate);
       conditions.push(`e.entry_date <= $${params.length}`);
+    }
+
+    // Search filter (case-insensitive search across description, employee name, and category)
+    if (search && search.trim()) {
+      params.push(`%${search.trim()}%`);
+      conditions.push(`(
+        e.description ILIKE $${params.length} OR
+        e.category ILIKE $${params.length} OR
+        emp.name ILIKE $${params.length}
+      )`);
+    }
+
+    // Category filter (multiple categories support)
+    if (categories && categories.length > 0) {
+      params.push(categories);
+      conditions.push(`e.category = ANY($${params.length})`);
+    }
+
+    // Employee filter
+    if (employeeId) {
+      params.push(employeeId);
+      conditions.push(`e.employee_id = $${params.length}`);
+    }
+
+    // Amount range filters
+    if (minAmount !== undefined && minAmount !== null && minAmount !== '') {
+      params.push(minAmount);
+      conditions.push(`e.total >= $${params.length}`);
+    }
+
+    if (maxAmount !== undefined && maxAmount !== null && maxAmount !== '') {
+      params.push(maxAmount);
+      conditions.push(`e.total <= $${params.length}`);
+    }
+
+    // Status filter
+    if (status && status !== 'all') {
+      params.push(status);
+      conditions.push(`e.status = $${params.length}`);
+    }
+
+    // Currency filter
+    if (currency && currency !== 'all') {
+      params.push(currency);
+      conditions.push(`e.currency = $${params.length}`);
     }
 
     if (conditions.length > 0) {
@@ -105,39 +162,261 @@ const EntryModel = {
     return result.rows;
   },
 
-  // Get income entries only
-  async getIncome() {
-    const result = await pool.query(
-      `SELECT e.*, emp.name as employee_name, emp.pay_type
-       FROM entries e
-       LEFT JOIN employees emp ON e.employee_id = emp.id
-       WHERE e.type = 'income'
-       ORDER BY e.entry_date DESC, e.id DESC`
-    );
+  // Get income entries only with optional filters
+  async getIncome(filters = {}) {
+    const {
+      startDate,
+      endDate,
+      search,
+      categories,
+      employeeId,
+      minAmount,
+      maxAmount,
+      status,
+      currency
+    } = filters;
+
+    let query = `
+      SELECT e.*, emp.name as employee_name, emp.pay_type
+      FROM entries e
+      LEFT JOIN employees emp ON e.employee_id = emp.id
+    `;
+
+    const params = [];
+    const conditions = ['e.type = \'income\''];
+
+    // Date range filters
+    if (startDate) {
+      params.push(startDate);
+      conditions.push(`e.entry_date >= $${params.length}`);
+    }
+
+    if (endDate) {
+      params.push(endDate);
+      conditions.push(`e.entry_date <= $${params.length}`);
+    }
+
+    // Search filter
+    if (search && search.trim()) {
+      params.push(`%${search.trim()}%`);
+      conditions.push(`(
+        e.description ILIKE $${params.length} OR
+        e.category ILIKE $${params.length} OR
+        emp.name ILIKE $${params.length}
+      )`);
+    }
+
+    // Category filter
+    if (categories && categories.length > 0) {
+      params.push(categories);
+      conditions.push(`e.category = ANY($${params.length})`);
+    }
+
+    // Employee filter
+    if (employeeId) {
+      params.push(employeeId);
+      conditions.push(`e.employee_id = $${params.length}`);
+    }
+
+    // Amount range filters
+    if (minAmount !== undefined && minAmount !== null && minAmount !== '') {
+      params.push(minAmount);
+      conditions.push(`e.total >= $${params.length}`);
+    }
+
+    if (maxAmount !== undefined && maxAmount !== null && maxAmount !== '') {
+      params.push(maxAmount);
+      conditions.push(`e.total <= $${params.length}`);
+    }
+
+    // Status filter
+    if (status && status !== 'all') {
+      params.push(status);
+      conditions.push(`e.status = $${params.length}`);
+    }
+
+    // Currency filter
+    if (currency && currency !== 'all') {
+      params.push(currency);
+      conditions.push(`e.currency = $${params.length}`);
+    }
+
+    query += ` WHERE ${conditions.join(' AND ')}`;
+    query += ` ORDER BY e.entry_date DESC, e.id DESC`;
+
+    const result = await pool.query(query, params);
     return result.rows;
   },
 
-  // Get non-employee expense entries (Administration, Software, etc.)
-  async getExpenses() {
-    const result = await pool.query(
-      `SELECT e.*, emp.name as employee_name, emp.pay_type
-       FROM entries e
-       LEFT JOIN employees emp ON e.employee_id = emp.id
-       WHERE e.type = 'expense' AND e.category != 'Employee'
-       ORDER BY e.entry_date DESC, e.id DESC`
-    );
+  // Get non-employee expense entries (Administration, Software, etc.) with optional filters
+  async getExpenses(filters = {}) {
+    const {
+      startDate,
+      endDate,
+      search,
+      categories,
+      employeeId,
+      minAmount,
+      maxAmount,
+      status,
+      currency
+    } = filters;
+
+    let query = `
+      SELECT e.*, emp.name as employee_name, emp.pay_type
+      FROM entries e
+      LEFT JOIN employees emp ON e.employee_id = emp.id
+    `;
+
+    const params = [];
+    const conditions = ['e.type = \'expense\'', 'e.category != \'Employee\''];
+
+    // Date range filters
+    if (startDate) {
+      params.push(startDate);
+      conditions.push(`e.entry_date >= $${params.length}`);
+    }
+
+    if (endDate) {
+      params.push(endDate);
+      conditions.push(`e.entry_date <= $${params.length}`);
+    }
+
+    // Search filter
+    if (search && search.trim()) {
+      params.push(`%${search.trim()}%`);
+      conditions.push(`(
+        e.description ILIKE $${params.length} OR
+        e.category ILIKE $${params.length} OR
+        emp.name ILIKE $${params.length}
+      )`);
+    }
+
+    // Category filter
+    if (categories && categories.length > 0) {
+      params.push(categories);
+      conditions.push(`e.category = ANY($${params.length})`);
+    }
+
+    // Employee filter
+    if (employeeId) {
+      params.push(employeeId);
+      conditions.push(`e.employee_id = $${params.length}`);
+    }
+
+    // Amount range filters
+    if (minAmount !== undefined && minAmount !== null && minAmount !== '') {
+      params.push(minAmount);
+      conditions.push(`e.total >= $${params.length}`);
+    }
+
+    if (maxAmount !== undefined && maxAmount !== null && maxAmount !== '') {
+      params.push(maxAmount);
+      conditions.push(`e.total <= $${params.length}`);
+    }
+
+    // Status filter
+    if (status && status !== 'all') {
+      params.push(status);
+      conditions.push(`e.status = $${params.length}`);
+    }
+
+    // Currency filter
+    if (currency && currency !== 'all') {
+      params.push(currency);
+      conditions.push(`e.currency = $${params.length}`);
+    }
+
+    query += ` WHERE ${conditions.join(' AND ')}`;
+    query += ` ORDER BY e.entry_date DESC, e.id DESC`;
+
+    const result = await pool.query(query, params);
     return result.rows;
   },
 
-  // Get employee salary entries only
-  async getSalaries() {
-    const result = await pool.query(
-      `SELECT e.*, emp.name as employee_name, emp.pay_type
-       FROM entries e
-       LEFT JOIN employees emp ON e.employee_id = emp.id
-       WHERE e.type = 'expense' AND e.category = 'Employee'
-       ORDER BY e.entry_date DESC, e.id DESC`
-    );
+  // Get employee salary entries only with optional filters
+  async getSalaries(filters = {}) {
+    const {
+      startDate,
+      endDate,
+      search,
+      categories,
+      employeeId,
+      minAmount,
+      maxAmount,
+      status,
+      currency
+    } = filters;
+
+    let query = `
+      SELECT e.*, emp.name as employee_name, emp.pay_type
+      FROM entries e
+      LEFT JOIN employees emp ON e.employee_id = emp.id
+    `;
+
+    const params = [];
+    const conditions = ['e.type = \'expense\'', 'e.category = \'Employee\''];
+
+    // Date range filters
+    if (startDate) {
+      params.push(startDate);
+      conditions.push(`e.entry_date >= $${params.length}`);
+    }
+
+    if (endDate) {
+      params.push(endDate);
+      conditions.push(`e.entry_date <= $${params.length}`);
+    }
+
+    // Search filter
+    if (search && search.trim()) {
+      params.push(`%${search.trim()}%`);
+      conditions.push(`(
+        e.description ILIKE $${params.length} OR
+        e.category ILIKE $${params.length} OR
+        emp.name ILIKE $${params.length}
+      )`);
+    }
+
+    // Category filter (less relevant for salaries but included for consistency)
+    if (categories && categories.length > 0) {
+      params.push(categories);
+      conditions.push(`e.category = ANY($${params.length})`);
+    }
+
+    // Employee filter
+    if (employeeId) {
+      params.push(employeeId);
+      conditions.push(`e.employee_id = $${params.length}`);
+    }
+
+    // Amount range filters
+    if (minAmount !== undefined && minAmount !== null && minAmount !== '') {
+      params.push(minAmount);
+      conditions.push(`e.total >= $${params.length}`);
+    }
+
+    if (maxAmount !== undefined && maxAmount !== null && maxAmount !== '') {
+      params.push(maxAmount);
+      conditions.push(`e.total <= $${params.length}`);
+    }
+
+    // Status filter
+    if (status && status !== 'all') {
+      params.push(status);
+      conditions.push(`e.status = $${params.length}`);
+    }
+
+    // Currency filter
+    if (currency && currency !== 'all') {
+      params.push(currency);
+      conditions.push(`e.currency = $${params.length}`);
+    }
+
+    query += ` WHERE ${conditions.join(' AND ')}`;
+    query += ` ORDER BY e.entry_date DESC, e.id DESC`;
+
+    const result = await pool.query(query, params);
     return result.rows;
   },
 
