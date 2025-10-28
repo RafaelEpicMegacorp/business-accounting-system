@@ -373,7 +373,10 @@
                     <span id="refreshButtonText">⏸️ Pause</span>
                 </button>
                 <button class="btn-secondary" onclick="clearWebhooks()">
-                    🗑️ Clear
+                    🗑️ Clear Display
+                </button>
+                <button class="btn-secondary" onclick="clearDatabase()" style="background: #fee2e2; color: #991b1b;">
+                    🗄️💥 Clear Database
                 </button>
                 <button class="btn-primary" onclick="refreshNow()">
                     🔄 Refresh Now
@@ -480,8 +483,72 @@
                     <div class="empty-state-icon">🧹</div>
                     <h3>Display cleared</h3>
                     <p>Only new webhooks received after ${new Date().toLocaleTimeString()} will be shown</p>
+                    <p style="margin-top: 10px; font-size: 13px; color: #666;">
+                        Note: Database logs are preserved. Use "Clear Database" to permanently delete.
+                    </p>
                 </div>
             `;
+        }
+
+        // Clear webhooks from database - PERMANENT deletion
+        async function clearDatabase() {
+            // Confirmation dialog
+            const confirmed = confirm(
+                '⚠️ WARNING: Clear Database?\n\n' +
+                'This will PERMANENTLY DELETE all webhook logs from the database.\n\n' +
+                'This action cannot be undone!\n\n' +
+                'Click OK to proceed with deletion.'
+            );
+
+            if (!confirmed) {
+                return;
+            }
+
+            try {
+                // Show loading state
+                const container = document.getElementById('webhooksList');
+                container.innerHTML = `
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <p>Clearing database...</p>
+                    </div>
+                `;
+
+                const response = await fetch('/api/wise/webhooks/clear-db', {
+                    method: 'DELETE'
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    // Reset local state
+                    clearedAtTimestamp = null;
+                    webhooks = [];
+                    updateStats();
+
+                    // Show success message
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">✅</div>
+                            <h3>Database cleared successfully</h3>
+                            <p>${data.message}</p>
+                            <p style="margin-top: 10px; color: #10b981;">
+                                Deleted ${data.deletedCount} webhook logs
+                            </p>
+                            <p style="margin-top: 20px; font-size: 14px; color: #666;">
+                                Waiting for new webhooks...
+                            </p>
+                        </div>
+                    `;
+
+                    console.log('✓ Database cleared:', data);
+                } else {
+                    showError('Failed to clear database: ' + data.error);
+                }
+            } catch (error) {
+                console.error('Error clearing database:', error);
+                showError('Network error while clearing database: ' + error.message);
+            }
         }
 
         // Filter webhooks

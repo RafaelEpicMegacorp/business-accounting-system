@@ -259,6 +259,40 @@ router.get('/webhooks/logs', async (req, res) => {
   }
 });
 
+// DELETE /api/wise/webhooks/clear-db - Clear all webhook logs from database
+router.delete('/webhooks/clear-db', async (req, res) => {
+  try {
+    console.log('🗑️ Clearing webhook logs from database...');
+
+    // Delete all webhook-related logs from audit table
+    const result = await pool.query(`
+      DELETE FROM wise_sync_audit_log
+      WHERE action LIKE 'webhook_%'
+    `);
+
+    const deletedCount = result.rowCount;
+
+    // Clear in-memory webhooks array
+    recentWebhooks.length = 0;
+
+    console.log(`✓ Deleted ${deletedCount} webhook logs from database`);
+
+    res.json({
+      success: true,
+      message: `Cleared ${deletedCount} webhook logs from database`,
+      deletedCount,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error clearing webhook logs:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to clear webhook logs',
+      message: error.message
+    });
+  }
+});
+
 // GET /api/wise/transactions/pending - Get transactions needing review
 router.get('/transactions/pending', auth, async (req, res) => {
   try {
