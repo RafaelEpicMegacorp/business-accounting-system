@@ -1,0 +1,926 @@
+{
+	"info": {
+		"_postman_id": "d714234f-34a4-4b37-8eab-ae8e91e32c55",
+		"name": "Misc",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "39111393"
+	},
+	"item": [
+		{
+			"name": "Get profile",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "10b1f19c-bd61-4c9b-8d86-1ec264550ad4",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "https://api.wise.com/v1/profiles",
+					"protocol": "https",
+					"host": [
+						"api",
+						"wise",
+						"com"
+					],
+					"path": [
+						"v1",
+						"profiles"
+					]
+				}
+			},
+			"response": [
+				{
+					"name": "New Request",
+					"originalRequest": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "https://api.sandbox.transferwise.tech/v1/profiles",
+							"protocol": "https",
+							"host": [
+								"api",
+								"sandbox",
+								"transferwise",
+								"tech"
+							],
+							"path": [
+								"v1",
+								"profiles"
+							]
+						}
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "Text",
+					"header": [
+						{
+							"key": "Date",
+							"value": "Wed, 22 Oct 2025 16:38:27 GMT"
+						},
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						},
+						{
+							"key": "Transfer-Encoding",
+							"value": "chunked"
+						},
+						{
+							"key": "Connection",
+							"value": "keep-alive"
+						},
+						{
+							"key": "Server",
+							"value": "cloudflare"
+						},
+						{
+							"key": "cache-control",
+							"value": "no-cache, no-store, max-age=0, must-revalidate"
+						},
+						{
+							"key": "expires",
+							"value": "0"
+						},
+						{
+							"key": "pragma",
+							"value": "no-cache"
+						},
+						{
+							"key": "x-xss-protection",
+							"value": "0"
+						},
+						{
+							"key": "x-frame-options",
+							"value": "DENY"
+						},
+						{
+							"key": "x-content-type-options",
+							"value": "nosniff"
+						},
+						{
+							"key": "content-encoding",
+							"value": "gzip"
+						},
+						{
+							"key": "x-trace-id",
+							"value": "dddda50d669be23b8181c5444f10614d"
+						},
+						{
+							"key": "x-envoy-upstream-service-time",
+							"value": "143"
+						},
+						{
+							"key": "x-envoy-attempt-count",
+							"value": "1"
+						},
+						{
+							"key": "vary",
+							"value": "origin,access-control-request-method,access-control-request-headers,accept-encoding"
+						},
+						{
+							"key": "cf-cache-status",
+							"value": "DYNAMIC"
+						},
+						{
+							"key": "Set-Cookie",
+							"value": "__cf_bm=cv0aeMon1DS8HRTnRxW5nh7v5GJyM8YS..gq2ncjDQY-1761151107.3818629-1.0.1.1-Qvukj0TX5QdrfhXdq6KJnAHWHvrAYq4JSYOEMh3BbGzpDZCow7rTV2UPoGZj7CPbA5osAkzBmTmBJaIAXE.3M291inWFsC3tMB74kQxy0Wr1dEcCpfTogT50t8r4e0d.; HttpOnly; Secure; Path=/; Expires=Wed, 22 Oct 2025 17:08:27 GMT"
+						},
+						{
+							"key": "CF-RAY",
+							"value": "992a6cd52c3dce7a-SIN"
+						},
+						{
+							"key": "alt-svc",
+							"value": "h3=\":443\"; ma=86400"
+						}
+					],
+					"cookie": [],
+					"body": "[\n    {\n        \"id\": 29055250,\n        \"type\": \"personal\",\n        \"details\": {\n            \"firstName\": \"Kenny\",\n            \"lastName\": \"Hendrix\",\n            \"dateOfBirth\": \"1991-09-06\",\n            \"phoneNumber\": \"+447480747829\",\n            \"avatar\": null,\n            \"occupation\": null,\n            \"occupations\": null,\n            \"primaryAddress\": 50355890,\n            \"firstNameInKana\": null,\n            \"lastNameInKana\": null,\n            \"localizedInformation\": []\n        }\n    },\n    {\n        \"id\": 29055251,\n        \"type\": \"business\",\n        \"details\": {\n            \"name\": \"Raymond and Sons 7136\",\n            \"registrationNumber\": \"11903378\",\n            \"acn\": null,\n            \"abn\": null,\n            \"arbn\": null,\n            \"companyType\": \"LIMITED\",\n            \"companyRole\": \"OWNER\",\n            \"descriptionOfBusiness\": \"DESIGN\",\n            \"primaryAddress\": 50355891,\n            \"webpage\": \"https://raymondandsons7136.com\",\n            \"businessCategory\": \"CONSULTING_IT_BUSINESS_SERVICES\",\n            \"businessSubCategory\": \"DESIGN\",\n            \"localizedInformation\": []\n        }\n    }\n]"
+				}
+			]
+		},
+		{
+			"name": "Balance",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "{{wise_test_token}}",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://api.sandbox.transferwise.tech/v4/profiles/{{profile_id}}/balances?types=STANDARD",
+					"protocol": "https",
+					"host": [
+						"api",
+						"sandbox",
+						"transferwise",
+						"tech"
+					],
+					"path": [
+						"v4",
+						"profiles",
+						"{{profile_id}}",
+						"balances"
+					],
+					"query": [
+						{
+							"key": "types",
+							"value": "STANDARD"
+						}
+					]
+				}
+			},
+			"response": [
+				{
+					"name": "New borderless account",
+					"originalRequest": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "https://api.sandbox.transferwise.tech/v4/profiles/{{profile_id}}/balances?types=STANDARD",
+							"protocol": "https",
+							"host": [
+								"api",
+								"sandbox",
+								"transferwise",
+								"tech"
+							],
+							"path": [
+								"v4",
+								"profiles",
+								"{{profile_id}}",
+								"balances"
+							],
+							"query": [
+								{
+									"key": "types",
+									"value": "STANDARD"
+								}
+							]
+						}
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "Text",
+					"header": [
+						{
+							"key": "Date",
+							"value": "Thu, 23 Oct 2025 22:39:36 GMT"
+						},
+						{
+							"key": "Content-Type",
+							"value": "application/json;charset=UTF-8"
+						},
+						{
+							"key": "Transfer-Encoding",
+							"value": "chunked"
+						},
+						{
+							"key": "Connection",
+							"value": "keep-alive"
+						},
+						{
+							"key": "Server",
+							"value": "cloudflare"
+						},
+						{
+							"key": "x-content-type-options",
+							"value": "nosniff"
+						},
+						{
+							"key": "cache-control",
+							"value": "no-cache, no-store, max-age=0, must-revalidate"
+						},
+						{
+							"key": "expires",
+							"value": "0"
+						},
+						{
+							"key": "x-xss-protection",
+							"value": "0"
+						},
+						{
+							"key": "x-frame-options",
+							"value": "DENY"
+						},
+						{
+							"key": "pragma",
+							"value": "no-cache"
+						},
+						{
+							"key": "content-encoding",
+							"value": "gzip"
+						},
+						{
+							"key": "x-trace-id",
+							"value": "f4ecf33b974cbb030ac2546826559b0d"
+						},
+						{
+							"key": "x-envoy-upstream-service-time",
+							"value": "65"
+						},
+						{
+							"key": "x-envoy-attempt-count",
+							"value": "1"
+						},
+						{
+							"key": "vary",
+							"value": "origin,access-control-request-method,access-control-request-headers,accept-encoding"
+						},
+						{
+							"key": "cf-cache-status",
+							"value": "DYNAMIC"
+						},
+						{
+							"key": "Set-Cookie",
+							"value": "__cf_bm=5R1VgUWkFnQklshnUPVz1nFkEZOHIB6wPig_LMYVr1o-1761259175.4906356-1.0.1.1-aEeCkwS_ZwrLFHRoSSa_SyRygRh.Ou3CUrqAknOEbH0fnCK69M6fN_E9ZXX.ZiThPbC39ibvygYbliJkx9jVm.n_S6JnR2BoZUq9SW438LnuP6dt_s9sf472ylthuqJf; HttpOnly; Secure; Path=/; Expires=Thu, 23 Oct 2025 23:09:36 GMT"
+						},
+						{
+							"key": "CF-RAY",
+							"value": "9934bb36cd5421e3-KHI"
+						},
+						{
+							"key": "alt-svc",
+							"value": "h3=\":443\"; ma=86400"
+						}
+					],
+					"cookie": [],
+					"body": "[\n    {\n        \"id\": 317502,\n        \"currency\": \"GBP\",\n        \"amount\": {\n            \"value\": 1000000,\n            \"currency\": \"GBP\"\n        },\n        \"reservedAmount\": {\n            \"value\": 0,\n            \"currency\": \"GBP\"\n        },\n        \"cashAmount\": {\n            \"value\": 1000000,\n            \"currency\": \"GBP\"\n        },\n        \"totalWorth\": {\n            \"value\": 1000000,\n            \"currency\": \"GBP\"\n        },\n        \"type\": \"STANDARD\",\n        \"name\": null,\n        \"icon\": null,\n        \"investmentState\": \"NOT_INVESTED\",\n        \"creationTime\": \"2025-10-22T16:27:20.063472Z\",\n        \"modificationTime\": \"2025-10-22T16:27:20.481274Z\",\n        \"visible\": true,\n        \"primary\": true,\n        \"groupId\": null,\n        \"recipientId\": 701679106\n    },\n    {\n        \"id\": 317503,\n        \"currency\": \"EUR\",\n        \"amount\": {\n            \"value\": 1000000,\n            \"currency\": \"EUR\"\n        },\n        \"reservedAmount\": {\n            \"value\": 0,\n            \"currency\": \"EUR\"\n        },\n        \"cashAmount\": {\n            \"value\": 1000000,\n            \"currency\": \"EUR\"\n        },\n        \"totalWorth\": {\n            \"value\": 1000000,\n            \"currency\": \"EUR\"\n        },\n        \"type\": \"STANDARD\",\n        \"name\": null,\n        \"icon\": null,\n        \"investmentState\": \"NOT_INVESTED\",\n        \"creationTime\": \"2025-10-22T16:27:23.440724Z\",\n        \"modificationTime\": \"2025-10-22T16:27:23.875586Z\",\n        \"visible\": true,\n        \"primary\": true,\n        \"groupId\": null,\n        \"recipientId\": 701679108\n    },\n    {\n        \"id\": 317539,\n        \"currency\": \"USD\",\n        \"amount\": {\n            \"value\": 999900,\n            \"currency\": \"USD\"\n        },\n        \"reservedAmount\": {\n            \"value\": 0,\n            \"currency\": \"USD\"\n        },\n        \"cashAmount\": {\n            \"value\": 999900,\n            \"currency\": \"USD\"\n        },\n        \"totalWorth\": {\n            \"value\": 999900,\n            \"currency\": \"USD\"\n        },\n        \"type\": \"STANDARD\",\n        \"name\": null,\n        \"icon\": null,\n        \"investmentState\": \"NOT_INVESTED\",\n        \"creationTime\": \"2025-10-22T16:27:25.331829Z\",\n        \"modificationTime\": \"2025-10-23T11:20:35.544088Z\",\n        \"visible\": true,\n        \"primary\": true,\n        \"groupId\": null,\n        \"recipientId\": 701679110\n    },\n    {\n        \"id\": 317556,\n        \"currency\": \"AUD\",\n        \"amount\": {\n            \"value\": 1000000,\n            \"currency\": \"AUD\"\n        },\n        \"reservedAmount\": {\n            \"value\": 0,\n            \"currency\": \"AUD\"\n        },\n        \"cashAmount\": {\n            \"value\": 1000000,\n            \"currency\": \"AUD\"\n        },\n        \"totalWorth\": {\n            \"value\": 1000000,\n            \"currency\": \"AUD\"\n        },\n        \"type\": \"STANDARD\",\n        \"name\": null,\n        \"icon\": null,\n        \"investmentState\": \"NOT_INVESTED\",\n        \"creationTime\": \"2025-10-22T16:27:28.044133Z\",\n        \"modificationTime\": \"2025-10-22T16:27:29.025941Z\",\n        \"visible\": true,\n        \"primary\": true,\n        \"groupId\": null,\n        \"recipientId\": 701679112\n    }\n]"
+				}
+			]
+		},
+		{
+			"name": "Profile Webhook subscription",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "{{wise_test_token}}",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://api.sandbox.transferwise.tech/v3/profiles/{{profile_id}}/subscriptions",
+					"protocol": "https",
+					"host": [
+						"api",
+						"sandbox",
+						"transferwise",
+						"tech"
+					],
+					"path": [
+						"v3",
+						"profiles",
+						"{{profile_id}}",
+						"subscriptions"
+					]
+				}
+			},
+			"response": [
+				{
+					"name": "New Request",
+					"originalRequest": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "https://api.sandbox.transferwise.tech/v3/profiles/{{profile_id}}/subscriptions",
+							"protocol": "https",
+							"host": [
+								"api",
+								"sandbox",
+								"transferwise",
+								"tech"
+							],
+							"path": [
+								"v3",
+								"profiles",
+								"{{profile_id}}",
+								"subscriptions"
+							]
+						}
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "Text",
+					"header": [
+						{
+							"key": "Date",
+							"value": "Thu, 23 Oct 2025 22:54:47 GMT"
+						},
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						},
+						{
+							"key": "Transfer-Encoding",
+							"value": "chunked"
+						},
+						{
+							"key": "Connection",
+							"value": "keep-alive"
+						},
+						{
+							"key": "Server",
+							"value": "cloudflare"
+						},
+						{
+							"key": "x-content-type-options",
+							"value": "nosniff"
+						},
+						{
+							"key": "x-xss-protection",
+							"value": "0"
+						},
+						{
+							"key": "x-frame-options",
+							"value": "DENY"
+						},
+						{
+							"key": "cache-control",
+							"value": "no-cache, no-store, max-age=0, must-revalidate"
+						},
+						{
+							"key": "expires",
+							"value": "0"
+						},
+						{
+							"key": "pragma",
+							"value": "no-cache"
+						},
+						{
+							"key": "content-encoding",
+							"value": "gzip"
+						},
+						{
+							"key": "x-trace-id",
+							"value": "e468b4a98db7dabbc555995d9caf3166"
+						},
+						{
+							"key": "x-envoy-upstream-service-time",
+							"value": "72"
+						},
+						{
+							"key": "x-envoy-attempt-count",
+							"value": "1"
+						},
+						{
+							"key": "vary",
+							"value": "origin,access-control-request-method,access-control-request-headers,accept-encoding"
+						},
+						{
+							"key": "cf-cache-status",
+							"value": "DYNAMIC"
+						},
+						{
+							"key": "Set-Cookie",
+							"value": "__cf_bm=VpAIyEwVA3Nc6HKBA36cEeX4Q8QCbHfP1m190eakOuA-1761260087.2883964-1.0.1.1-g_4JFdP6TC6wLutClwdlaAnalGnZh5bqoU7KzC_sFQhCXBx2cZlT9NyLpz0nXst4a85qZNzsRKQ.9RAcZ8i5oSnXQAVWpzbx.zQu99WImrR64Aic_SPnKNJb2xmJ2MTs; HttpOnly; Secure; Path=/; Expires=Thu, 23 Oct 2025 23:24:47 GMT"
+						},
+						{
+							"key": "CF-RAY",
+							"value": "9934d1798ade21e4-KHI"
+						},
+						{
+							"key": "alt-svc",
+							"value": "h3=\":443\"; ma=86400"
+						}
+					],
+					"cookie": [],
+					"body": "[\n    {\n        \"id\": \"94c1f8ef-4b2b-4ff5-ab30-22edd1e29209\",\n        \"name\": \"Webhook 1\",\n        \"delivery\": {\n            \"version\": \"2.0.0\",\n            \"url\": \"https://webhook.site/db28f968-4b7c-403f-b596-eb0259a2f3ac\",\n            \"mtls_enabled\": null\n        },\n        \"trigger_on\": \"transfers#state-change\",\n        \"created_by\": {\n            \"type\": \"user\",\n            \"id\": \"13262285\"\n        },\n        \"created_at\": \"2025-10-23T22:47:39Z\",\n        \"scope\": {\n            \"domain\": \"profile\",\n            \"id\": \"29055251\"\n        },\n        \"request_headers\": [],\n        \"enabled\": true\n    }\n]"
+				}
+			]
+		},
+		{
+			"name": "Retrieve Profile webhook",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "{{wise_test_token}}",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://api.transferwise.com/v3/profiles/{{profile_id}}/subscriptions/{{subscriptionId}}",
+					"protocol": "https",
+					"host": [
+						"api",
+						"transferwise",
+						"com"
+					],
+					"path": [
+						"v3",
+						"profiles",
+						"{{profile_id}}",
+						"subscriptions",
+						"{{subscriptionId}}"
+					]
+				}
+			},
+			"response": [
+				{
+					"name": "New Request",
+					"originalRequest": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "https://api.transferwise.com/v3/profiles/{{profile_id}}/subscriptions/{{subscriptionId}}",
+							"protocol": "https",
+							"host": [
+								"api",
+								"transferwise",
+								"com"
+							],
+							"path": [
+								"v3",
+								"profiles",
+								"{{profile_id}}",
+								"subscriptions",
+								"{{subscriptionId}}"
+							]
+						}
+					},
+					"status": "Unauthorized",
+					"code": 401,
+					"_postman_previewlanguage": "Text",
+					"header": [
+						{
+							"key": "Date",
+							"value": "Thu, 23 Oct 2025 22:58:12 GMT"
+						},
+						{
+							"key": "Content-Type",
+							"value": "application/json; charset=utf-8"
+						},
+						{
+							"key": "Content-Length",
+							"value": "61"
+						},
+						{
+							"key": "Connection",
+							"value": "keep-alive"
+						},
+						{
+							"key": "CF-RAY",
+							"value": "9934d67a8c1321f2-KHI"
+						},
+						{
+							"key": "x-trace-id",
+							"value": "f6c7cbda2e05043607a845760f249356"
+						},
+						{
+							"key": "cache-control",
+							"value": "private, no-cache, no-store, max-age=0"
+						},
+						{
+							"key": "expires",
+							"value": "0"
+						},
+						{
+							"key": "pragma",
+							"value": "no-cache"
+						},
+						{
+							"key": "x-envoy-upstream-service-time",
+							"value": "9"
+						},
+						{
+							"key": "x-envoy-attempt-count",
+							"value": "1"
+						},
+						{
+							"key": "X-Content-Type-Options",
+							"value": "nosniff"
+						},
+						{
+							"key": "cf-cache-status",
+							"value": "DYNAMIC"
+						},
+						{
+							"key": "Set-Cookie",
+							"value": "__cf_bm=IxEjhfd2H_pPv1NOtXsNr.6y5N.bEE8oYyqdotINY0A-1761260292-1.0.1.1-Uns9z36hngGXFgEu9HLq.oteyXF8CqbUWN43_ebPZ9NCDfdIGI0m8FTNQaAHZvukmkVarDVLgbtmQHJ5sXW_Tlfnqu7Qb.Nfywp4zPq9r5lmmWyhDfWBc_PUwkLiDc5P; path=/; expires=Thu, 23-Oct-25 23:28:12 GMT; domain=.transferwise.com; HttpOnly; Secure; SameSite=None"
+						},
+						{
+							"key": "Strict-Transport-Security",
+							"value": "max-age=31536000"
+						},
+						{
+							"key": "Server",
+							"value": "cloudflare"
+						},
+						{
+							"key": "alt-svc",
+							"value": "h3=\":443\"; ma=86400"
+						}
+					],
+					"cookie": [],
+					"body": "{\n    \"error\": \"invalid_token\",\n    \"error_description\": \"Invalid token\"\n}"
+				}
+			]
+		},
+		{
+			"name": "Activities",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "{{wise_test_token}}",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://api.sandbox.transferwise.tech/v1/profiles/{{profile_id}}/activities",
+					"protocol": "https",
+					"host": [
+						"api",
+						"sandbox",
+						"transferwise",
+						"tech"
+					],
+					"path": [
+						"v1",
+						"profiles",
+						"{{profile_id}}",
+						"activities"
+					]
+				}
+			},
+			"response": [
+				{
+					"name": "New Request",
+					"originalRequest": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "https://api.sandbox.transferwise.tech/v1/profiles/{{profile_id}}/activities",
+							"protocol": "https",
+							"host": [
+								"api",
+								"sandbox",
+								"transferwise",
+								"tech"
+							],
+							"path": [
+								"v1",
+								"profiles",
+								"{{profile_id}}",
+								"activities"
+							]
+						}
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "Text",
+					"header": [
+						{
+							"key": "Date",
+							"value": "Thu, 23 Oct 2025 23:12:32 GMT"
+						},
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						},
+						{
+							"key": "Transfer-Encoding",
+							"value": "chunked"
+						},
+						{
+							"key": "Connection",
+							"value": "keep-alive"
+						},
+						{
+							"key": "Server",
+							"value": "cloudflare"
+						},
+						{
+							"key": "x-frame-options",
+							"value": "DENY"
+						},
+						{
+							"key": "cache-control",
+							"value": "no-cache, no-store, max-age=0, must-revalidate"
+						},
+						{
+							"key": "expires",
+							"value": "0"
+						},
+						{
+							"key": "pragma",
+							"value": "no-cache"
+						},
+						{
+							"key": "x-total-count",
+							"value": "0"
+						},
+						{
+							"key": "x-xss-protection",
+							"value": "0"
+						},
+						{
+							"key": "x-content-type-options",
+							"value": "nosniff"
+						},
+						{
+							"key": "content-encoding",
+							"value": "gzip"
+						},
+						{
+							"key": "x-trace-id",
+							"value": "a1e627625a5f4dc3828ed8ad506961ed"
+						},
+						{
+							"key": "x-envoy-upstream-service-time",
+							"value": "109"
+						},
+						{
+							"key": "x-envoy-attempt-count",
+							"value": "1"
+						},
+						{
+							"key": "vary",
+							"value": "origin,access-control-request-method,access-control-request-headers,accept-encoding"
+						},
+						{
+							"key": "cf-cache-status",
+							"value": "DYNAMIC"
+						},
+						{
+							"key": "Set-Cookie",
+							"value": "__cf_bm=_hxXjybEfle44wVQaEi9L2.MAqwgyYI5EZ2aE_FHJCo-1761261151.323715-1.0.1.1-cWNwTDS40nWazIZgHWW6.tKgJ8k9wBUtfIDxwmEwt4ZKg6hb6RByE2COcIiv2cEFNgF5w7wZ6mypLOEZoRoeSE7UgCQs00zuiKBdX6yXH2_U.4jJ0W21E7.OzWkCTLGY; HttpOnly; Secure; Path=/; Expires=Thu, 23 Oct 2025 23:42:32 GMT"
+						},
+						{
+							"key": "CF-RAY",
+							"value": "9934eb73ceb521e3-KHI"
+						},
+						{
+							"key": "alt-svc",
+							"value": "h3=\":443\"; ma=86400"
+						}
+					],
+					"cookie": [],
+					"body": "{\n    \"cursor\": null,\n    \"activities\": [\n        {\n            \"id\": \"TU9ORVRBUllfQUNUSVZJVFk6OjI5MDU1MjUxOjpUUkFOU0ZFUjo6NTU1NzYyMTM=\",\n            \"type\": \"TRANSFER\",\n            \"resource\": {\n                \"type\": \"TRANSFER\",\n                \"id\": \"55576213\"\n            },\n            \"title\": \"<strong>Musaf Hanif</strong>\",\n            \"description\": \"By you · Sending paused\",\n            \"primaryAmount\": \"998.87 USD\",\n            \"secondaryAmount\": \"1,000 USD\",\n            \"status\": \"REQUIRES_ATTENTION\",\n            \"createdOn\": \"2025-10-23T23:03:29.945Z\",\n            \"updatedOn\": \"2025-10-23T23:04:00.170Z\"\n        },\n        {\n            \"id\": \"TU9ORVRBUllfQUNUSVZJVFk6OjI5MDU1MjUxOjpUUkFOU0ZFUjo6NTU1NzQwNjA=\",\n            \"type\": \"TRANSFER\",\n            \"resource\": {\n                \"type\": \"TRANSFER\",\n                \"id\": \"55574060\"\n            },\n            \"title\": \"<strong>Kenny Hendrix</strong>\",\n            \"description\": \"By you · Sending paused\",\n            \"primaryAmount\": \"100 USD\",\n            \"secondaryAmount\": \"\",\n            \"status\": \"REQUIRES_ATTENTION\",\n            \"createdOn\": \"2025-10-23T11:20:16.862Z\",\n            \"updatedOn\": \"2025-10-23T11:20:48.009Z\"\n        }\n    ]\n}"
+				}
+			]
+		},
+		{
+			"name": "Transfer",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "{{wise_test_token}}",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://api.sandbox.transferwise.tech/v1/transfers/{{transferId}}",
+					"protocol": "https",
+					"host": [
+						"api",
+						"sandbox",
+						"transferwise",
+						"tech"
+					],
+					"path": [
+						"v1",
+						"transfers",
+						"{{transferId}}"
+					]
+				}
+			},
+			"response": [
+				{
+					"name": "New Request",
+					"originalRequest": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "https://api.sandbox.transferwise.tech/v1/transfers/{{transferId}}",
+							"protocol": "https",
+							"host": [
+								"api",
+								"sandbox",
+								"transferwise",
+								"tech"
+							],
+							"path": [
+								"v1",
+								"transfers",
+								"{{transferId}}"
+							]
+						}
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "Text",
+					"header": [
+						{
+							"key": "Date",
+							"value": "Thu, 23 Oct 2025 23:20:06 GMT"
+						},
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						},
+						{
+							"key": "Transfer-Encoding",
+							"value": "chunked"
+						},
+						{
+							"key": "Connection",
+							"value": "keep-alive"
+						},
+						{
+							"key": "Server",
+							"value": "cloudflare"
+						},
+						{
+							"key": "pragma",
+							"value": "no-cache"
+						},
+						{
+							"key": "x-content-type-options",
+							"value": "nosniff"
+						},
+						{
+							"key": "x-xss-protection",
+							"value": "0"
+						},
+						{
+							"key": "x-frame-options",
+							"value": "DENY"
+						},
+						{
+							"key": "expires",
+							"value": "0"
+						},
+						{
+							"key": "cache-control",
+							"value": "no-cache, no-store, max-age=0, must-revalidate"
+						},
+						{
+							"key": "content-encoding",
+							"value": "gzip"
+						},
+						{
+							"key": "x-trace-id",
+							"value": "899a33ac21cad28e8dc6a69f88791d69"
+						},
+						{
+							"key": "x-envoy-upstream-service-time",
+							"value": "96"
+						},
+						{
+							"key": "x-envoy-attempt-count",
+							"value": "1"
+						},
+						{
+							"key": "vary",
+							"value": "origin,access-control-request-method,access-control-request-headers,accept-encoding"
+						},
+						{
+							"key": "cf-cache-status",
+							"value": "DYNAMIC"
+						},
+						{
+							"key": "Set-Cookie",
+							"value": "__cf_bm=T97w06F5vu3ky_U8pN5i_2lIN_48n5EhFGmFaJ.MDIE-1761261605.8358915-1.0.1.1-VWpvA5swqIpHVUFpUVhGU3wNhA3py84IXLRBDqvrDLkjFwGKDJ9pjJH8rsCm41fwAGp2AVz4UoEx86E9gG20WZiY92KHLnz3_Y_4jQLlyK8o8sj6agoy7h.HMNwhVs6z; HttpOnly; Secure; Path=/; Expires=Thu, 23 Oct 2025 23:50:06 GMT"
+						},
+						{
+							"key": "CF-RAY",
+							"value": "9934f68c7b8a21e4-KHI"
+						},
+						{
+							"key": "alt-svc",
+							"value": "h3=\":443\"; ma=86400"
+						}
+					],
+					"cookie": [],
+					"body": "{\n    \"id\": 55576213,\n    \"user\": 13262285,\n    \"targetAccount\": 701684575,\n    \"sourceAccount\": null,\n    \"quote\": null,\n    \"quoteUuid\": \"00e29ff6-e637-4cbc-b417-246ea5c05a7a\",\n    \"payinSessionId\": \"684d4071-4829-461d-4fca-d768fb7bd97a\",\n    \"status\": \"processing\",\n    \"reference\": \"\",\n    \"rate\": 1,\n    \"created\": \"2025-10-23 23:03:28\",\n    \"business\": 29055251,\n    \"transferRequest\": null,\n    \"details\": {\n        \"reference\": \"\"\n    },\n    \"hasActiveIssues\": false,\n    \"sourceCurrency\": \"USD\",\n    \"sourceValue\": 998.87,\n    \"targetCurrency\": \"USD\",\n    \"targetValue\": 998.87,\n    \"customerTransactionId\": \"684d36fe-39ba-4808-9900-a8462f79e001\"\n}"
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "wise_test_token",
+			"value": "",
+			"type": "default"
+		},
+		{
+			"key": "profile_id_wise",
+			"value": "",
+			"type": "default"
+		},
+		{
+			"key": "profile_id",
+			"value": "",
+			"type": "default"
+		},
+		{
+			"key": "account_id",
+			"value": "",
+			"type": "default"
+		},
+		{
+			"key": "subscriptionId",
+			"value": "",
+			"type": "default"
+		},
+		{
+			"key": "transferId",
+			"value": "",
+			"type": "default"
+		},
+		{
+			"key": "client_wise_token",
+			"value": "",
+			"type": "default"
+		}
+	]
+}

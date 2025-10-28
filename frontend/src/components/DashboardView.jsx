@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { TrendingUp, TrendingDown, DollarSign, Users, FileText, Calendar, Briefcase, Upload } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, Users, FileText, Calendar, Briefcase, Upload, RefreshCw } from 'lucide-react';
 import dashboardService from '../services/dashboardService';
 import entryService from '../services/entryService';
 import currencyService from '../services/currencyService';
+import wiseService from '../services/wiseService';
 import IncomeVsExpenseChart from './IncomeVsExpenseChart';
 import CategoryBreakdownChart from './CategoryBreakdownChart';
 import WiseImport from './WiseImport';
@@ -14,6 +15,8 @@ function DashboardView({ onNavigateToForecast }) {
   const [totalUSD, setTotalUSD] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState(null);
 
   useEffect(() => {
     loadDashboardData();
@@ -42,6 +45,35 @@ function DashboardView({ onNavigateToForecast }) {
   const handleImportSuccess = () => {
     // Reload dashboard data after successful import
     loadDashboardData();
+  };
+
+  const handleWiseSync = async () => {
+    try {
+      setSyncing(true);
+      setSyncMessage(null);
+
+      const result = await wiseService.syncFromWise();
+
+      // Show success message with stats
+      const stats = result.stats || {};
+      const message = `Sync completed: ${stats.newTransactions || 0} new transactions, ${stats.duplicatesSkipped || 0} duplicates skipped, ${stats.entriesCreated || 0} entries created`;
+      setSyncMessage({ type: 'success', text: message });
+
+      // Reload dashboard data
+      loadDashboardData();
+
+      // Clear message after 10 seconds
+      setTimeout(() => setSyncMessage(null), 10000);
+    } catch (error) {
+      console.error('Sync failed:', error);
+      const errorMsg = error.response?.data?.error || error.message || 'Failed to sync from Wise';
+      setSyncMessage({ type: 'error', text: errorMsg });
+
+      // Clear error after 10 seconds
+      setTimeout(() => setSyncMessage(null), 10000);
+    } finally {
+      setSyncing(false);
+    }
   };
 
   if (loading) {
@@ -152,14 +184,31 @@ function DashboardView({ onNavigateToForecast }) {
               <DollarSign size={24} className="text-teal-700" />
               <h3 className="text-xl font-bold text-teal-900">Wise Account Balances</h3>
             </div>
-            <button
-              onClick={() => setShowImportModal(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition shadow-md"
-            >
-              <Upload size={18} />
-              Import CSV
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={handleWiseSync}
+                disabled={syncing}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <RefreshCw size={18} className={syncing ? 'animate-spin' : ''} />
+                {syncing ? 'Syncing...' : 'Sync from Wise'}
+              </button>
+              <button
+                onClick={() => setShowImportModal(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition shadow-md"
+              >
+                <Upload size={18} />
+                Import CSV
+              </button>
+            </div>
           </div>
+
+          {/* Sync Message */}
+          {syncMessage && (
+            <div className={`mb-4 p-4 rounded-lg ${syncMessage.type === 'success' ? 'bg-green-100 text-green-800 border border-green-300' : 'bg-red-100 text-red-800 border border-red-300'}`}>
+              {syncMessage.text}
+            </div>
+          )}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {currencyBalances.map((balance) => {
               const amount = parseFloat(balance.balance);

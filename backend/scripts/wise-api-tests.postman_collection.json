@@ -1,0 +1,336 @@
+{
+	"info": {
+		"_postman_id": "wise-balance-statement-test",
+		"name": "Wise API - Balance Statement Tests",
+		"description": "Collection to test Wise Balance Statement API endpoints",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "1. Get Profiles",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer 10b1f19c-bd61-4c9b-8d86-1ec264550ad4",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "https://api.wise.com/v1/profiles",
+					"protocol": "https",
+					"host": [
+						"api",
+						"wise",
+						"com"
+					],
+					"path": [
+						"v1",
+						"profiles"
+					]
+				},
+				"description": "Get all profiles for the authenticated user. Should return profile ID 74801255."
+			},
+			"response": []
+		},
+		{
+			"name": "2. Get Balances",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer 10b1f19c-bd61-4c9b-8d86-1ec264550ad4",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "https://api.wise.com/v4/profiles/74801255/balances?types=STANDARD",
+					"protocol": "https",
+					"host": [
+						"api",
+						"wise",
+						"com"
+					],
+					"path": [
+						"v4",
+						"profiles",
+						"74801255",
+						"balances"
+					],
+					"query": [
+						{
+							"key": "types",
+							"value": "STANDARD"
+						}
+					]
+				},
+				"description": "Get all balances for profile 74801255. Should return EUR (134500252), PLN (134500428), USD (134500343)."
+			},
+			"response": []
+		},
+		{
+			"name": "3. Balance Statement - EUR (Oct 2025)",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer 10b1f19c-bd61-4c9b-8d86-1ec264550ad4",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "https://api.wise.com/v1/profiles/74801255/balance-statements/134500252/statement.json?currency=EUR&intervalStart=2025-10-01T00:00:00.000Z&intervalEnd=2025-10-28T23:59:59.999Z&type=COMPACT",
+					"protocol": "https",
+					"host": [
+						"api",
+						"wise",
+						"com"
+					],
+					"path": [
+						"v1",
+						"profiles",
+						"74801255",
+						"balance-statements",
+						"134500252",
+						"statement.json"
+					],
+					"query": [
+						{
+							"key": "currency",
+							"value": "EUR"
+						},
+						{
+							"key": "intervalStart",
+							"value": "2025-10-01T00:00:00.000Z"
+						},
+						{
+							"key": "intervalEnd",
+							"value": "2025-10-28T23:59:59.999Z"
+						},
+						{
+							"key": "type",
+							"value": "COMPACT"
+						}
+					]
+				},
+				"description": "Get EUR balance statement for October 2025. This is the endpoint returning 403 errors."
+			},
+			"response": []
+		},
+		{
+			"name": "4. Balance Statement - PLN (Oct 2025)",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer 10b1f19c-bd61-4c9b-8d86-1ec264550ad4",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "https://api.wise.com/v1/profiles/74801255/balance-statements/134500428/statement.json?currency=PLN&intervalStart=2025-10-01T00:00:00.000Z&intervalEnd=2025-10-28T23:59:59.999Z&type=COMPACT",
+					"protocol": "https",
+					"host": [
+						"api",
+						"wise",
+						"com"
+					],
+					"path": [
+						"v1",
+						"profiles",
+						"74801255",
+						"balance-statements",
+						"134500428",
+						"statement.json"
+					],
+					"query": [
+						{
+							"key": "currency",
+							"value": "PLN"
+						},
+						{
+							"key": "intervalStart",
+							"value": "2025-10-01T00:00:00.000Z"
+						},
+						{
+							"key": "intervalEnd",
+							"value": "2025-10-28T23:59:59.999Z"
+						},
+						{
+							"key": "type",
+							"value": "COMPACT"
+						}
+					]
+				},
+				"description": "Get PLN balance statement for October 2025. You mentioned a 120 PLN payment - it should be in this statement."
+			},
+			"response": []
+		},
+		{
+			"name": "5. Balance Statement - USD (Oct 2025)",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer 10b1f19c-bd61-4c9b-8d86-1ec264550ad4",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "https://api.wise.com/v1/profiles/74801255/balance-statements/134500343/statement.json?currency=USD&intervalStart=2025-10-01T00:00:00.000Z&intervalEnd=2025-10-28T23:59:59.999Z&type=COMPACT",
+					"protocol": "https",
+					"host": [
+						"api",
+						"wise",
+						"com"
+					],
+					"path": [
+						"v1",
+						"profiles",
+						"74801255",
+						"balance-statements",
+						"134500343",
+						"statement.json"
+					],
+					"query": [
+						{
+							"key": "currency",
+							"value": "USD"
+						},
+						{
+							"key": "intervalStart",
+							"value": "2025-10-01T00:00:00.000Z"
+						},
+						{
+							"key": "intervalEnd",
+							"value": "2025-10-28T23:59:59.999Z"
+						},
+						{
+							"key": "type",
+							"value": "COMPACT"
+						}
+					]
+				},
+				"description": "Get USD balance statement for October 2025."
+			},
+			"response": []
+		},
+		{
+			"name": "6. Balance Statement - EUR (Last 7 Days)",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer 10b1f19c-bd61-4c9b-8d86-1ec264550ad4",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "https://api.wise.com/v1/profiles/74801255/balance-statements/134500252/statement.json?currency=EUR&intervalStart=2025-10-21T00:00:00.000Z&intervalEnd=2025-10-28T23:59:59.999Z&type=COMPACT",
+					"protocol": "https",
+					"host": [
+						"api",
+						"wise",
+						"com"
+					],
+					"path": [
+						"v1",
+						"profiles",
+						"74801255",
+						"balance-statements",
+						"134500252",
+						"statement.json"
+					],
+					"query": [
+						{
+							"key": "currency",
+							"value": "EUR"
+						},
+						{
+							"key": "intervalStart",
+							"value": "2025-10-21T00:00:00.000Z"
+						},
+						{
+							"key": "intervalEnd",
+							"value": "2025-10-28T23:59:59.999Z"
+						},
+						{
+							"key": "type",
+							"value": "COMPACT"
+						}
+					]
+				},
+				"description": "Try with shorter date range (last 7 days) to test if date range is the issue."
+			},
+			"response": []
+		}
+	],
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "https://api.wise.com",
+			"type": "string"
+		},
+		{
+			"key": "apiToken",
+			"value": "10b1f19c-bd61-4c9b-8d86-1ec264550ad4",
+			"type": "string"
+		},
+		{
+			"key": "profileId",
+			"value": "74801255",
+			"type": "string"
+		},
+		{
+			"key": "balanceIdEUR",
+			"value": "134500252",
+			"type": "string"
+		},
+		{
+			"key": "balanceIdPLN",
+			"value": "134500428",
+			"type": "string"
+		},
+		{
+			"key": "balanceIdUSD",
+			"value": "134500343",
+			"type": "string"
+		}
+	]
+}

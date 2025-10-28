@@ -1382,4 +1382,219 @@ async function autoCreateEntry(transaction, classification) {
   }
 }
 
+/**
+ * POST /api/wise/sync
+ * Manual sync from Wise Activities API
+ */
+router.post('/sync', auth, async (req, res) => {
+  console.log('🔄 Manual Wise sync triggered');
+
+  const WISE_API_TOKEN = process.env.WISE_API_TOKEN;
+  const WISE_API_URL = process.env.WISE_API_URL || 'https://api.wise.com';
+  const WISE_PROFILE_ID = process.env.WISE_PROFILE_ID;
+
+  if (!WISE_API_TOKEN || !WISE_PROFILE_ID) {
+    return res.status(500).json({
+      success: false,
+      error: 'Wise API not configured. Missing WISE_API_TOKEN or WISE_PROFILE_ID'
+    });
+  }
+
+  const stats = {
+    activitiesFound: 0,
+    transfersProcessed: 0,
+    newTransactions: 0,
+    duplicatesSkipped: 0,
+    entriesCreated: 0,
+    errors: 0,
+    errorDetails: []
+  };
+
+  try {
+    // Fetch activities from Wise
+    console.log('📋 Fetching activities from Wise API...');
+    const activitiesResponse = await fetch(
+      `${WISE_API_URL}/v1/profiles/${WISE_PROFILE_ID}/activities`,
+      {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${WISE_API_TOKEN}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    if (!activitiesResponse.ok) {
+      const errorText = await activitiesResponse.text();
+      throw new Error(`Wise API error: ${activitiesResponse.status} ${errorText}`);
+    }
+
+    const activitiesData = await activitiesResponse.json();
+    const activities = activitiesData.activities || [];
+    stats.activitiesFound = activities.length;
+
+    console.log(`✓ Found ${activities.length} activities`);
+
+    if (activities.length === 0) {
+      return res.json({
+        success: true,
+        message: 'No activities found in Wise account',
+        stats
+      });
+    }
+
+    // Process each TRANSFER activity
+    for (const activity of activities) {
+      if (activity.type !== 'TRANSFER' || !activity.resource?.id) {
+        continue;
+      }
+
+      try {
+        const transferId = activity.resource.id;
+        console.log(`📝 Fetching transfer ${transferId}...`);
+
+        // Get full transfer details
+        const transferResponse = await fetch(
+          `${WISE_API_URL}/v1/transfers/${transferId}`,
+          {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${WISE_API_TOKEN}`,
+              'Content-Type': 'application/json'
+            }
+          }
+        );
+
+        if (!transferResponse.ok) {
+          throw new Error(`Transfer API error: ${transferResponse.status}`);
+        }
+
+        const transfer = await transferResponse.json();
+        stats.transfersProcessed++;
+
+        // Create transaction ID
+        const transactionId = transfer.customerTransactionId || `TRANSFER-${transfer.id}`;
+
+        // Check for duplicates
+        const existing = await WiseTransactionModel.exists(transactionId);
+        if (existing) {
+          stats.duplicatesSkipped++;
+          console.log(`⏭️  Skipping duplicate: ${transactionId}`);
+          continue;
+        }
+
+        // Extract transfer details
+        const amount = Math.abs(parseFloat(transfer.sourceValue || transfer.targetValue));
+        const currency = transfer.sourceCurrency || transfer.targetCurrency;
+        const description = transfer.details?.reference || '';
+        const transactionDate = transfer.created;
+        const type = transfer.sourceValue ? 'DEBIT' : 'CREDIT';
+
+        // Classify transaction
+        const transactionData = {
+          type,
+          amount,
+          currency,
+          description,
+          merchantName: '',
+          referenceNumber: transactionId,
+          transactionDate
+        };
+
+        const classification = await wiseClassifier.classifyTransaction(transactionData);
+
+        // Store transaction
+        await WiseTransactionModel.create({
+          wiseTransactionId: transactionId,
+          wiseResourceId: transfer.id.toString(),
+          profileId: WISE_PROFILE_ID,
+          accountId: transfer.sourceAccount || transfer.targetAccount,
+          type,
+          state: transfer.status || 'completed',
+          amount,
+          currency,
+          description,
+          merchantName: '',
+          referenceNumber: transactionId,
+          transactionDate,
+          valueDate: transactionDate,
+          syncStatus: classification.needsReview ? 'pending' : 'pending',
+          classifiedCategory: classification.category,
+          matchedEmployeeId: classification.employeeId,
+          confidenceScore: classification.confidenceScore,
+          needsReview: classification.needsReview,
+          rawPayload: transfer
+        });
+
+        stats.newTransactions++;
+        console.log(`✅ Imported: ${transactionId} - ${description} (${amount} ${currency})`);
+
+        // Auto-create entry if high confidence
+        if (!classification.needsReview && classification.confidenceScore >= 80) {
+          // Get exchange rate if needed
+          let amountUsd = amount;
+          let exchangeRate = 1;
+
+          if (currency !== 'USD') {
+            const rateResponse = await fetch(`https://api.exchangerate-api.com/v4/latest/${currency}`);
+            const rateData = await rateResponse.json();
+            exchangeRate = rateData.rates.USD;
+            amountUsd = amount * exchangeRate;
+          }
+
+          const entryType = type === 'CREDIT' ? 'income' : 'expense';
+          const category = classification.category;
+
+          await pool.query(
+            `INSERT INTO entries (type, category, description, detail, base_amount, total, entry_date, status, employee_id, currency, amount_original, amount_usd, exchange_rate)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+            [
+              entryType,
+              category,
+              description || 'Wise transaction',
+              `Auto-imported from Wise (Ref: ${transactionId})`,
+              amount,
+              amount,
+              transactionDate.split('T')[0],
+              'completed',
+              classification.employeeId || null,
+              currency,
+              amount,
+              amountUsd,
+              exchangeRate
+            ]
+          );
+
+          stats.entriesCreated++;
+          console.log(`✓ Entry auto-created`);
+        }
+
+      } catch (error) {
+        stats.errors++;
+        stats.errorDetails.push({
+          transferId: activity.resource.id,
+          error: error.message
+        });
+        console.error(`❌ Error processing transfer ${activity.resource.id}:`, error.message);
+      }
+    }
+
+    console.log(`\n✅ Sync complete: ${stats.newTransactions} new, ${stats.duplicatesSkipped} duplicates, ${stats.entriesCreated} entries, ${stats.errors} errors`);
+
+    res.json({
+      success: true,
+      message: 'Wise sync completed',
+      stats
+    });
+
+  } catch (error) {
+    console.error('❌ Sync error:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      stats
+    });
+  }
+});
+
 module.exports = router;
