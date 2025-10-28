@@ -4,7 +4,6 @@ const crypto = require('crypto');
 const router = express.Router();
 const pool = require('../config/database');
 const auth = require('../middleware/auth');
-const wiseClassifier = require('../services/wiseClassifier');
 const WiseTransactionModel = require('../models/wiseTransactionModel');
 
 // In-memory storage for recent webhooks (for monitoring dashboard)
@@ -1111,17 +1110,7 @@ async function processBalanceTransaction(data, direction) {
       transactionDate
     };
 
-    // Classify transaction
-    console.log('Classifying transaction...');
-    const classification = await wiseClassifier.classifyTransaction(transactionData);
-    console.log('Classification result:', {
-      category: classification.category,
-      confidence: classification.confidenceScore,
-      needsReview: classification.needsReview,
-      employeeId: classification.employeeId
-    });
-
-    // Store transaction in database
+    // Store transaction in database (no classification needed)
     const savedTransaction = await WiseTransactionModel.create({
       wiseTransactionId: transactionId,
       wiseResourceId: balanceId,
@@ -1136,39 +1125,53 @@ async function processBalanceTransaction(data, direction) {
       referenceNumber,
       transactionDate,
       valueDate: transactionDate,
-      syncStatus: classification.needsReview ? 'pending' : 'pending',
-      classifiedCategory: classification.category,
-      matchedEmployeeId: classification.employeeId,
-      confidenceScore: classification.confidenceScore,
-      needsReview: classification.needsReview,
+      syncStatus: 'processed',
+      classifiedCategory: null,
+      matchedEmployeeId: null,
+      confidenceScore: null,
+      needsReview: false,
       rawPayload: matchingTransaction
     });
 
-    console.log(`✓ Transaction saved: ${transactionId}`);
-    console.log(`  Category: ${classification.category}`);
-    console.log(`  Confidence: ${classification.confidenceScore}%`);
-    console.log(`  Needs Review: ${classification.needsReview}`);
+    console.log(`✓ Transaction saved: ${transactionId} - ${description} (${amount} ${txnCurrency})`);
 
-    let entryCreated = false;
+    // Create entry immediately (all Wise transactions are completed)
+    const entryType = matchingTransaction.type === 'CREDIT' ? 'income' : 'expense';
+    const category = entryType === 'income' ? 'other_income' : 'other_expenses';
 
-    // If confidence meets threshold (40% per CLAUDE.md line 784) and doesn't need review, auto-create entry
-    if (!classification.needsReview && classification.confidenceScore >= 40) {
-      console.log('Auto-creating entry for high-confidence transaction...');
-      await autoCreateEntry(savedTransaction, classification);
-      entryCreated = true;
-    } else {
-      console.log('Transaction flagged for manual review');
-    }
+    const entryResult = await pool.query(
+      `INSERT INTO entries (type, category, description, detail, base_amount, total, entry_date, status, currency, amount_original)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       RETURNING id`,
+      [
+        entryType,
+        category,
+        description || 'Wise transaction',
+        `Imported from Wise (Ref: ${transactionId})`,
+        amount,
+        amount,
+        transactionDate.split('T')[0],
+        'completed',
+        txnCurrency,
+        amount
+      ]
+    );
+
+    // Link entry to transaction
+    await WiseTransactionModel.updateStatus(transactionId, {
+      entryId: entryResult.rows[0].id,
+      syncStatus: 'processed'
+    });
+
+    console.log(`✓ Entry created: ${entryType} ${amount} ${txnCurrency}`);
 
     return {
       transactionId,
       action: 'created',
-      message: `Transaction saved with ${classification.confidenceScore}% confidence`,
+      message: `Transaction imported and entry created`,
       transactionDbId: savedTransaction.id,
-      category: classification.category,
-      confidence: classification.confidenceScore,
-      needsReview: classification.needsReview,
-      entryCreated,
+      entryId: entryResult.rows[0].id,
+      entryCreated: true,
       amount,
       currency: txnCurrency
     };
@@ -1293,94 +1296,8 @@ async function processTransferIssue(data) {
   }
 }
 
-// Auto-create accounting entry from high-confidence transaction
-async function autoCreateEntry(transaction, classification) {
-  const client = await pool.getClient();
-
-  try {
-    await client.query('BEGIN');
-
-    // Determine entry type
-    const entryType = transaction.type === 'CREDIT' ? 'income' : 'expense';
-
-    // Map classified category to entry category
-    let entryCategory;
-    if (classification.category === 'Employee') {
-      entryCategory = 'salaries';
-    } else if (classification.category === 'Client Payment') {
-      entryCategory = 'consulting';
-    } else if (classification.category === 'Other Expenses') {
-      entryCategory = 'other_expenses';
-    } else if (classification.category === 'Other Income') {
-      entryCategory = 'other_income';
-    } else {
-      entryCategory = classification.category.toLowerCase().replace(/ /g, '_');
-    }
-
-    // Create description
-    let description = transaction.description || transaction.merchant_name || 'Wise Transaction';
-    if (classification.employeeId) {
-      const empResult = await client.query('SELECT name FROM employees WHERE id = $1', [classification.employeeId]);
-      if (empResult.rows[0]) {
-        description = `Salary - ${empResult.rows[0].name}`;
-      }
-    }
-
-    // Create detail with Wise info
-    let detail = `Auto-imported from Wise\nWise ID: ${transaction.wise_transaction_id}\n`;
-    if (transaction.reference_number) {
-      detail += `Reference: ${transaction.reference_number}\n`;
-    }
-    detail += `Confidence: ${classification.confidenceScore}%\n`;
-    detail += `Classification: ${classification.reasoning.join(', ')}`;
-
-    // Insert entry
-    const entryResult = await client.query(
-      `INSERT INTO entries
-       (type, category, description, detail, base_amount, total, entry_date, status, employee_id, currency, amount_original)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-       RETURNING id`,
-      [
-        entryType,
-        entryCategory,
-        description,
-        detail,
-        transaction.amount,
-        transaction.amount,
-        transaction.transaction_date.split('T')[0],
-        'completed',
-        classification.employeeId || null,
-        transaction.currency,
-        transaction.amount
-      ]
-    );
-
-    const entryId = entryResult.rows[0].id;
-
-    // Update transaction as processed
-    await client.query(
-      `UPDATE wise_transactions
-       SET sync_status = 'processed', entry_id = $1, processed_at = CURRENT_TIMESTAMP
-       WHERE wise_transaction_id = $2`,
-      [entryId, transaction.wise_transaction_id]
-    );
-
-    await client.query('COMMIT');
-
-    console.log(`✓ Entry created for Wise transaction ${transaction.wise_transaction_id}: ${description} (${entryType} ${transaction.currency} ${transaction.amount})`);
-
-  } catch (error) {
-    await client.query('ROLLBACK');
-    console.error('Error creating entry:', error);
-
-    // Mark transaction as failed
-    await WiseTransactionModel.markAsFailed(transaction.wise_transaction_id, error.message);
-
-    throw error;
-  } finally {
-    client.release();
-  }
-}
+// Note: autoCreateEntry function removed - entries are now created inline during sync
+// All Wise transactions are historical facts and are immediately marked as 'completed'
 
 /**
  * POST /api/wise/sync
@@ -1411,10 +1328,20 @@ router.post('/sync', auth, async (req, res) => {
   };
 
   try {
-    // Fetch activities from Wise
+    // Calculate date range for historical sync (last 2 years)
+    const now = new Date();
+    const twoYearsAgo = new Date();
+    twoYearsAgo.setFullYear(now.getFullYear() - 2);
+
     console.log('📋 Fetching activities from Wise API...');
+    console.log(`   Date range: ${twoYearsAgo.toISOString().split('T')[0]} to ${now.toISOString().split('T')[0]}`);
+
+    // Fetch activities with date range
     const activitiesResponse = await fetch(
-      `${WISE_API_URL}/v1/profiles/${WISE_PROFILE_ID}/activities`,
+      `${WISE_API_URL}/v1/profiles/${WISE_PROFILE_ID}/activities?` +
+      `createdDateStart=${twoYearsAgo.toISOString()}&` +
+      `createdDateEnd=${now.toISOString()}&` +
+      `limit=1000`, // Max per page
       {
         method: 'GET',
         headers: {
@@ -1511,25 +1438,6 @@ router.post('/sync', auth, async (req, res) => {
         const transactionDate = transfer.created;
         const type = transfer.sourceValue ? 'DEBIT' : 'CREDIT';
 
-        // Classify transaction
-        const transactionData = {
-          type,
-          amount,
-          currency,
-          description,
-          merchantName,
-          referenceNumber: transactionId,
-          transactionDate
-        };
-
-        const classification = await wiseClassifier.classifyTransaction(transactionData);
-        console.log(`[Wise Sync] Transaction ${transactionId} classified:`, {
-          category: classification.category,
-          confidence: classification.confidenceScore,
-          needsReview: classification.needsReview,
-          reasoning: classification.reasoning
-        });
-
         // Store transaction with full activity data
         await WiseTransactionModel.create({
           wiseTransactionId: transactionId,
@@ -1545,110 +1453,48 @@ router.post('/sync', auth, async (req, res) => {
           referenceNumber: transactionId,
           transactionDate,
           valueDate: transactionDate,
-          syncStatus: classification.needsReview ? 'pending' : 'pending',
-          classifiedCategory: classification.category,
-          matchedEmployeeId: classification.employeeId,
-          confidenceScore: classification.confidenceScore,
-          needsReview: classification.needsReview,
+          syncStatus: 'processed', // All Wise transactions are historical facts
+          classifiedCategory: null, // No classification needed
+          matchedEmployeeId: null,
+          confidenceScore: null,
+          needsReview: false,
           rawPayload: { transfer, activity } // Store both for complete data
         });
 
         stats.newTransactions++;
         console.log(`✅ Imported: ${transactionId} - ${description} (${amount} ${currency})`);
 
-        // Auto-create entry if confidence meets threshold (40% per CLAUDE.md line 784)
-        if (!classification.needsReview && classification.confidenceScore >= 40) {
-          // Get exchange rate if needed
-          let amountUsd = amount;
-          let exchangeRate = 1;
+        // Create entry immediately - no confidence thresholds
+        // All Wise transactions are completed (they already happened)
+        const entryType = type === 'CREDIT' ? 'income' : 'expense';
+        const category = type === 'CREDIT' ? 'other_income' : 'other_expenses';
 
-          if (currency !== 'USD') {
-            const rateResponse = await fetch(`https://api.exchangerate-api.com/v4/latest/${currency}`);
-            const rateData = await rateResponse.json();
-            exchangeRate = rateData.rates.USD;
-            amountUsd = amount * exchangeRate;
-          }
+        const entryResult = await pool.query(
+          `INSERT INTO entries (type, category, description, detail, base_amount, total, entry_date, status, currency, amount_original)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+           RETURNING id`,
+          [
+            entryType,
+            category,
+            description || 'Wise transaction',
+            `Imported from Wise (Ref: ${transactionId})`,
+            amount,
+            amount,
+            transactionDate.split('T')[0],
+            'completed', // All Wise transactions are completed
+            currency,
+            amount
+          ]
+        );
 
-          const entryType = type === 'CREDIT' ? 'income' : 'expense';
-          const category = classification.category;
+        // Link entry to transaction
+        await WiseTransactionModel.updateStatus(transactionId, {
+          entryId: entryResult.rows[0].id,
+          syncStatus: 'processed'
+        });
 
-          await pool.query(
-            `INSERT INTO entries (type, category, description, detail, base_amount, total, entry_date, status, employee_id, currency, amount_original, amount_usd, exchange_rate)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
-            [
-              entryType,
-              category,
-              description || 'Wise transaction',
-              `Auto-imported from Wise (Ref: ${transactionId})`,
-              amount,
-              amount,
-              transactionDate.split('T')[0],
-              'completed',
-              classification.employeeId || null,
-              currency,
-              amount,
-              amountUsd,
-              exchangeRate
-            ]
-          );
-
-          stats.entriesCreated++;
-          console.log(`✓ Entry auto-created`);
-        }
-        // If confidence is low but transaction is valid, create entry as "pending" for manual review
-        else if (classification.confidenceScore >= 20 && classification.category !== 'Uncategorized') {
-          console.log(`⚠️  Creating pending entry for low-confidence transaction...`);
-
-          // Get exchange rate if needed
-          let amountUsd = amount;
-          let exchangeRate = 1;
-
-          if (currency !== 'USD') {
-            try {
-              const rateResponse = await fetch(`https://api.exchangerate-api.com/v4/latest/${currency}`);
-              const rateData = await rateResponse.json();
-              exchangeRate = rateData.rates.USD;
-              amountUsd = amount * exchangeRate;
-            } catch (err) {
-              console.warn('Failed to get exchange rate, using 1:1');
-            }
-          }
-
-          const entryType = type === 'CREDIT' ? 'income' : 'expense';
-          const category = classification.category;
-
-          const entryResult = await pool.query(
-            `INSERT INTO entries (type, category, description, detail, base_amount, total, entry_date, status, employee_id, currency, amount_original, amount_usd, exchange_rate)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-             RETURNING id`,
-            [
-              entryType,
-              category,
-              `${description || 'Wise transaction'} (Requires Review)`,
-              `Auto-imported from Wise. Confidence: ${classification.confidenceScore}%. Ref: ${transactionId}`,
-              amount,
-              amount,
-              transactionDate.split('T')[0],
-              'pending', // Mark as pending for manual review
-              classification.employeeId || null,
-              currency,
-              amount,
-              amountUsd,
-              exchangeRate
-            ]
-          );
-
-          // Link entry to transaction
-          await WiseTransactionModel.updateStatus(transactionId, {
-            entryId: entryResult.rows[0].id,
-            syncStatus: 'pending_review'
-          });
-
-          stats.entriesCreated++;
-          console.log(`⚠️  Pending entry created (${classification.confidenceScore}% confidence)`);
-        } else {
-          console.log(`⏭️  Skipping entry creation - confidence too low or uncategorized`);
-        }
+        stats.entriesCreated++;
+        console.log(`✓ Entry created: ${entryType} ${amount} ${currency}`);
 
       } catch (error) {
         stats.errors++;
