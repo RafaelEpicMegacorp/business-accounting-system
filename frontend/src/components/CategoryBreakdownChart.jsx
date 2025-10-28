@@ -10,14 +10,14 @@ if (!API_URL) {
 // Color palette for pie chart
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
 
-const CategoryBreakdownChart = ({ startDate, endDate }) => {
+const CategoryBreakdownChart = ({ startDate, endDate, refreshTrigger }) => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
     fetchCategoryData();
-  }, [startDate, endDate]);
+  }, [startDate, endDate, refreshTrigger]);
 
   const fetchCategoryData = async () => {
     try {

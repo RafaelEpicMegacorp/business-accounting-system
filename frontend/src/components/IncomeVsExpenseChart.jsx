@@ -7,14 +7,14 @@ if (!API_URL) {
   throw new Error('VITE_API_URL environment variable is not set. Please check your .env file.');
 }
 
-const IncomeVsExpenseChart = ({ months = 12 }) => {
+const IncomeVsExpenseChart = ({ months = 12, refreshTrigger }) => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
     fetchChartData();
-  }, [months]);
+  }, [months, refreshTrigger]);
 
   const fetchChartData = async () => {
     try {

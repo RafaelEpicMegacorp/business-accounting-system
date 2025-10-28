@@ -17,6 +17,7 @@ function DashboardView({ onNavigateToForecast }) {
   const [showImportModal, setShowImportModal] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState(null);
+  const [chartRefreshTrigger, setChartRefreshTrigger] = useState(0);
 
   useEffect(() => {
     loadDashboardData();
@@ -45,6 +46,8 @@ function DashboardView({ onNavigateToForecast }) {
   const handleImportSuccess = () => {
     // Reload dashboard data after successful import
     loadDashboardData();
+    // Trigger chart refresh
+    setChartRefreshTrigger(prev => prev + 1);
   };
 
   const handleWiseSync = async () => {
@@ -61,6 +64,9 @@ function DashboardView({ onNavigateToForecast }) {
 
       // Reload dashboard data
       loadDashboardData();
+
+      // Trigger chart refresh
+      setChartRefreshTrigger(prev => prev + 1);
 
       // Clear message after 10 seconds
       setTimeout(() => setSyncMessage(null), 10000);
@@ -342,8 +348,8 @@ function DashboardView({ onNavigateToForecast }) {
 
       {/* Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <IncomeVsExpenseChart months={12} />
-        <CategoryBreakdownChart />
+        <IncomeVsExpenseChart months={12} refreshTrigger={chartRefreshTrigger} />
+        <CategoryBreakdownChart refreshTrigger={chartRefreshTrigger} />
       </div>
 
       {/* Import Modal */}
