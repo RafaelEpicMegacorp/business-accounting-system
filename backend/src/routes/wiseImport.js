@@ -1370,39 +1370,30 @@ router.post('/sync', auth, async (req, res) => {
       });
     }
 
-    // Process each TRANSFER activity
+    // Process all transaction activities (TRANSFER, CARD_PAYMENT, CONVERSION, etc.)
+    // Wise returns multiple activity types - we need to handle them all
+    const validActivityTypes = ['TRANSFER', 'CARD_PAYMENT', 'CARD_CHECK', 'CONVERSION'];
+
     for (const activity of activities) {
-      if (activity.type !== 'TRANSFER' || !activity.resource?.id) {
+      // Skip activities that aren't transactions or don't have resource details
+      if (!validActivityTypes.includes(activity.type) || !activity.resource?.id) {
+        console.log(`⏭️  Skipping activity type: ${activity.type}`);
         continue;
       }
 
       try {
-        const transferId = activity.resource.id;
-        console.log(`📝 Fetching transfer ${transferId}...`);
+        const resourceId = activity.resource.id;
+        console.log(`📝 Processing ${activity.type} activity ${resourceId}...`);
 
-        // Get full transfer details
-        const transferResponse = await fetch(
-          `${WISE_API_URL}/v1/transfers/${transferId}`,
-          {
-            method: 'GET',
-            headers: {
-              'Authorization': `Bearer ${WISE_API_TOKEN}`,
-              'Content-Type': 'application/json'
-            }
-          }
-        );
+        // Extract transaction data directly from activity object
+        // Different activity types have different data structures
+        let transactionData;
+        let transactionId;
 
-        if (!transferResponse.ok) {
-          throw new Error(`Transfer API error: ${transferResponse.status}`);
-        }
+        // Create unique transaction ID based on activity type and resource ID
+        transactionId = `${activity.type}-${resourceId}`;
 
-        const transfer = await transferResponse.json();
-        stats.transfersProcessed++;
-
-        // Create transaction ID
-        const transactionId = transfer.customerTransactionId || `TRANSFER-${transfer.id}`;
-
-        // Check for duplicates
+        // Check for duplicates before processing
         const existing = await WiseTransactionModel.exists(transactionId);
         if (existing) {
           stats.duplicatesSkipped++;
@@ -1410,42 +1401,58 @@ router.post('/sync', auth, async (req, res) => {
           continue;
         }
 
-        // Extract transfer details
-        const amount = Math.abs(parseFloat(transfer.sourceValue || transfer.targetValue));
-        const currency = transfer.sourceCurrency || transfer.targetCurrency;
+        // Extract common transaction details from activity data
+        const activityData = activity.data || {};
 
-        // Extract description from activity data (richer than transfer details)
+        // Extract amount and currency
+        let amount = 0;
+        let currency = 'USD';
+        let type = 'DEBIT'; // Default to expense
+
+        // Parse amount from activity data - Wise uses different field names
+        if (activityData.amount) {
+          amount = Math.abs(parseFloat(activityData.amount.value || activityData.amount));
+          currency = activityData.amount.currency || activityData.currency || currency;
+        } else if (activityData.totalFees) {
+          amount = Math.abs(parseFloat(activityData.totalFees.value || activityData.totalFees));
+          currency = activityData.totalFees.currency || currency;
+        }
+
+        // Determine transaction direction (DEBIT = expense, CREDIT = income)
+        // For card payments and most activities, these are expenses (money out)
+        if (activity.type === 'CARD_PAYMENT' || activity.type === 'CARD_CHECK') {
+          type = 'DEBIT'; // Card payments are always expenses
+        } else if (activityData.direction) {
+          type = activityData.direction === 'OUT' ? 'DEBIT' : 'CREDIT';
+        }
+
+        // Extract description and merchant info
         let description = '';
         let merchantName = '';
 
-        if (activity.data) {
-          // Try multiple fields to get the best description
-          description =
-            activity.data.title ||
-            activity.data.recipient?.name ||
-            activity.data.sender?.name ||
-            activity.data.merchant?.name ||
-            activity.data.reference ||
-            transfer.details?.reference ||
-            '';
+        description =
+          activityData.title ||
+          activityData.merchant?.name ||
+          activityData.recipient?.name ||
+          activityData.sender?.name ||
+          activityData.reference ||
+          `${activity.type} transaction`;
 
-          merchantName = activity.data.merchant?.name || activity.data.recipient?.name || '';
-        } else {
-          // Fallback to transfer details
-          description = transfer.details?.reference || '';
-        }
+        merchantName = activityData.merchant?.name || activityData.recipient?.name || '';
 
-        const transactionDate = transfer.created;
-        const type = transfer.sourceValue ? 'DEBIT' : 'CREDIT';
+        // Transaction date
+        const transactionDate = activity.occurredAt || new Date().toISOString();
+
+        stats.transfersProcessed++;
 
         // Store transaction with full activity data
         await WiseTransactionModel.create({
           wiseTransactionId: transactionId,
-          wiseResourceId: transfer.id.toString(),
+          wiseResourceId: resourceId.toString(),
           profileId: WISE_PROFILE_ID,
-          accountId: transfer.sourceAccount || transfer.targetAccount,
+          accountId: activityData.accountId || null,
           type,
-          state: transfer.status || 'completed',
+          state: activityData.status || 'completed',
           amount,
           currency,
           description,
@@ -1458,7 +1465,7 @@ router.post('/sync', auth, async (req, res) => {
           matchedEmployeeId: null,
           confidenceScore: null,
           needsReview: false,
-          rawPayload: { transfer, activity } // Store both for complete data
+          rawPayload: { activity } // Store complete activity object for debugging
         });
 
         stats.newTransactions++;
