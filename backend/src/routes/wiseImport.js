@@ -1472,8 +1472,8 @@ router.post('/sync', auth, async (req, res) => {
         const category = type === 'CREDIT' ? 'other_income' : 'other_expenses';
 
         const entryResult = await pool.query(
-          `INSERT INTO entries (type, category, description, detail, base_amount, total, entry_date, status, currency, amount_original)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          `INSERT INTO entries (type, category, description, detail, base_amount, total, entry_date, status, currency, amount_original, wise_transaction_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
            RETURNING id`,
           [
             entryType,
@@ -1485,7 +1485,8 @@ router.post('/sync', auth, async (req, res) => {
             transactionDate.split('T')[0],
             'completed', // All Wise transactions are completed
             currency,
-            amount
+            amount,
+            transactionId // Link entry to wise_transaction
           ]
         );
 
