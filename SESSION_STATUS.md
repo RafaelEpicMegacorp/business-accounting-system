@@ -31,7 +31,17 @@
    - Tested sync button on production: https://ds-accounting.netlify.app
    - **Result**: 5 new transactions, 0 duplicates, 0 entries created
    - All UI behaviors working correctly (loading state, success message, auto-reload)
-   - No errors or unexpected behavior detected
+   - **Issue Found**: No entries created because confidence threshold was too high (80%)
+
+5. **✅ Wise Sync Fix - Entry Creation Issue** (October 28, 2025)
+   - **Problem**: 80% confidence threshold prevented all entry creation
+   - **Root Cause**: Empty descriptions from Wise API → 0% confidence scores
+   - **Solution**: Lowered threshold from 80% to 40% (per CLAUDE.md spec)
+   - **Added**: Fallback logic for 20-39% confidence (creates pending entries)
+   - **Improved**: Error handling in classifier (25% default instead of 0%)
+   - **Added**: Debug logging for classification results
+   - **Deployment**: Committed (d355a0a) and pushed to production
+   - **Files Modified**: `wiseImport.js`, `wiseClassifier.js`
 
 ---
 
