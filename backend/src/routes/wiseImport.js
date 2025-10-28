@@ -1008,14 +1008,86 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
 // Process balance transaction from webhook
 async function processBalanceTransaction(data, direction) {
   try {
-    // Extract transaction details from webhook payload
-    const transactionId = data.resource?.id || data.transaction_id || data.id;
-    const amount = Math.abs(parseFloat(data.amount?.value || data.amount || 0));
-    const currency = data.amount?.currency || data.currency || 'USD';
-    const description = data.details?.description || data.description || '';
-    const merchantName = data.details?.merchant_name || data.merchant_name || '';
-    const referenceNumber = data.details?.reference || data.reference || '';
-    const transactionDate = data.created_time || data.transaction_date || new Date().toISOString();
+    // Extract resource ID and timestamp from webhook
+    const balanceId = data.resource?.id;
+    const occurredAt = data.occurred_at;
+    const profileId = data.profile_id || process.env.WISE_PROFILE_ID;
+
+    if (!balanceId || !occurredAt) {
+      throw new Error('Webhook missing required fields: resource.id or occurred_at');
+    }
+
+    console.log('Fetching transaction details from Wise API...');
+    console.log(`  Balance ID: ${balanceId}`);
+    console.log(`  Occurred At: ${occurredAt}`);
+    console.log(`  Profile ID: ${profileId}`);
+
+    // Call Wise Balance Statement API to get full transaction details
+    const WISE_API_TOKEN = process.env.WISE_API_TOKEN;
+    const WISE_API_URL = process.env.WISE_API_URL || 'https://api.wise.com';
+
+    if (!WISE_API_TOKEN) {
+      throw new Error('WISE_API_TOKEN environment variable not set');
+    }
+
+    // Calculate time window around the event (±1 hour to ensure we catch it)
+    const eventTime = new Date(occurredAt);
+    const intervalStart = new Date(eventTime.getTime() - 3600000).toISOString(); // 1 hour before
+    const intervalEnd = new Date(eventTime.getTime() + 3600000).toISOString();   // 1 hour after
+
+    // Get the currency from the balance (we'll need to query balances first to know currency)
+    // For now, we'll try common currencies if not specified
+    const currency = data.currency || 'EUR'; // Default to EUR, can be improved
+
+    const statementUrl = `${WISE_API_URL}/v1/profiles/${profileId}/balance-statements/${balanceId}/statement.json?currency=${currency}&intervalStart=${intervalStart}&intervalEnd=${intervalEnd}&type=COMPACT`;
+
+    console.log(`  API URL: ${statementUrl}`);
+
+    const response = await fetch(statementUrl, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${WISE_API_TOKEN}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Wise API Error:', response.status, errorText);
+      throw new Error(`Wise API returned ${response.status}: ${errorText}`);
+    }
+
+    const statement = await response.json();
+    console.log(`  ✓ Received statement with ${statement.transactions?.length || 0} transactions`);
+
+    // Find the transaction that matches our event time
+    const transactions = statement.transactions || [];
+    const matchingTransaction = transactions.find(txn => {
+      const txnTime = new Date(txn.date);
+      const timeDiff = Math.abs(txnTime.getTime() - eventTime.getTime());
+      return timeDiff < 60000; // Within 1 minute of event time
+    });
+
+    if (!matchingTransaction) {
+      console.log('  ⚠️ No matching transaction found in statement');
+      return {
+        action: 'not_found',
+        message: 'Transaction not found in statement',
+        balanceId,
+        occurredAt
+      };
+    }
+
+    console.log('  ✓ Found matching transaction');
+
+    // Extract transaction details from API response
+    const transactionId = matchingTransaction.referenceNumber;
+    const amount = Math.abs(parseFloat(matchingTransaction.amount.value));
+    const txnCurrency = matchingTransaction.amount.currency;
+    const description = matchingTransaction.details?.description || '';
+    const merchantName = matchingTransaction.details?.senderName || matchingTransaction.details?.recipientName || '';
+    const referenceNumber = matchingTransaction.referenceNumber;
+    const transactionDate = matchingTransaction.date;
 
     // Check for duplicates
     const existing = await WiseTransactionModel.exists(transactionId);
@@ -1032,7 +1104,7 @@ async function processBalanceTransaction(data, direction) {
     const transactionData = {
       type: direction === 'CREDIT' ? 'CREDIT' : 'DEBIT',
       amount,
-      currency,
+      currency: txnCurrency,
       description,
       merchantName,
       referenceNumber,
@@ -1052,24 +1124,24 @@ async function processBalanceTransaction(data, direction) {
     // Store transaction in database
     const savedTransaction = await WiseTransactionModel.create({
       wiseTransactionId: transactionId,
-      wiseResourceId: data.resource?.id || null,
-      profileId: data.profile_id || process.env.WISE_PROFILE_ID,
-      accountId: data.account_id || null,
-      type: direction === 'CREDIT' ? 'CREDIT' : 'DEBIT',
-      state: data.state || 'completed',
+      wiseResourceId: balanceId,
+      profileId: profileId,
+      accountId: balanceId,
+      type: matchingTransaction.type, // CREDIT or DEBIT from API
+      state: 'completed',
       amount,
-      currency,
+      currency: txnCurrency,
       description,
       merchantName,
       referenceNumber,
       transactionDate,
-      valueDate: data.value_date || transactionDate,
+      valueDate: transactionDate,
       syncStatus: classification.needsReview ? 'pending' : 'pending',
       classifiedCategory: classification.category,
       matchedEmployeeId: classification.employeeId,
       confidenceScore: classification.confidenceScore,
       needsReview: classification.needsReview,
-      rawPayload: data
+      rawPayload: matchingTransaction
     });
 
     console.log(`✓ Transaction saved: ${transactionId}`);
@@ -1098,7 +1170,7 @@ async function processBalanceTransaction(data, direction) {
       needsReview: classification.needsReview,
       entryCreated,
       amount,
-      currency
+      currency: txnCurrency
     };
 
   } catch (error) {
