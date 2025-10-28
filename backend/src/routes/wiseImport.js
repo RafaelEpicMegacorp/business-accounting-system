@@ -1639,6 +1639,44 @@ router.post('/sync', auth, async (req, res) => {
       }
     }
 
+    // Fetch and update real Wise account balances from API
+    console.log('🔄 Fetching real Wise account balances from API...');
+    try {
+      const balancesResponse = await fetch(
+        `${WISE_API_URL}/v4/profiles/${WISE_PROFILE_ID}/balances?types=STANDARD`,
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${WISE_API_TOKEN}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      if (balancesResponse.ok) {
+        const balances = await balancesResponse.json();
+
+        // Update currency_balances table with real Wise balances
+        for (const balance of balances) {
+          await pool.query(`
+            INSERT INTO currency_balances (currency, balance, last_updated)
+            VALUES ($1, $2, CURRENT_TIMESTAMP)
+            ON CONFLICT (currency)
+            DO UPDATE SET balance = $2, last_updated = CURRENT_TIMESTAMP
+          `, [balance.currency, balance.amount.value]);
+
+          console.log(`✓ Updated ${balance.currency}: ${balance.amount.value}`);
+        }
+
+        console.log('✅ Real Wise account balances synced');
+      } else {
+        console.warn('⚠️  Failed to fetch Wise balances:', balancesResponse.status);
+      }
+    } catch (error) {
+      console.error('❌ Error fetching Wise balances:', error.message);
+      // Don't fail the entire sync if balance fetch fails
+    }
+
     console.log(`\n✅ Sync complete: ${stats.newTransactions} new, ${stats.duplicatesSkipped} duplicates, ${stats.entriesCreated} entries, ${stats.errors} errors`);
 
     res.json({
