@@ -100,9 +100,7 @@ async function cleanupWiseTestData() {
         SELECT
           currency,
           COALESCE(SUM(CASE WHEN type = 'income' THEN total ELSE 0 END), 0) as total_income,
-          COALESCE(SUM(CASE WHEN type = 'expense' THEN total ELSE 0 END), 0) as total_expenses,
-          COALESCE(SUM(CASE WHEN type = 'income' THEN amount_usd ELSE 0 END), 0) as income_usd,
-          COALESCE(SUM(CASE WHEN type = 'expense' THEN amount_usd ELSE 0 END), 0) as expenses_usd
+          COALESCE(SUM(CASE WHEN type = 'expense' THEN total ELSE 0 END), 0) as total_expenses
         FROM entries
         WHERE status = 'completed'
         GROUP BY currency
@@ -110,7 +108,6 @@ async function cleanupWiseTestData() {
       UPDATE currency_balances cb
       SET
         balance = COALESCE(bc.total_income, 0) - COALESCE(bc.total_expenses, 0),
-        balance_usd = COALESCE(bc.income_usd, 0) - COALESCE(bc.expenses_usd, 0),
         last_updated = CURRENT_TIMESTAMP
       FROM balance_calculations bc
       WHERE cb.currency = bc.currency
