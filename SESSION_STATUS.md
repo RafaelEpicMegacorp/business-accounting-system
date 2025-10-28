@@ -4,7 +4,7 @@
 
 **Date**: October 28, 2025
 **Branch**: `live` (auto-deploys to production)
-**Status**: 🔄 Waiting for Railway deployment + user testing of entry creation fix
+**Status**: ✅ **WISE SYNC FULLY WORKING** - Entries created successfully with real merchant names!
 
 ---
 
@@ -13,15 +13,20 @@
 **TL;DR - What you need to do:**
 1. ✅ Read this file (you're here)
 2. ⚠️ **ALWAYS use feature-supervisor agent** for all work
-3. 🧪 Test Wise sync on production: https://ds-accounting.netlify.app
-4. ✅ Verify entries were created (Income/Expenses tabs should NOT be empty)
-5. 📝 Update this file with test results
+3. ✅ **Wise sync is WORKING** - Real merchant names showing in Expenses tab!
+4. 🎉 **Testing Complete** - 9 entries created successfully (see details below)
+5. 📝 Ready for next task or feature
 
-**Last Thing We Did**: Fixed Wise sync to create entries (threshold 80%→40%, added fallback logic)
+**Last Thing We Did**: Fixed critical bug - missing `wise_transaction_id` foreign key in entry INSERT
 
-**What Needs Testing**: Whether the fix actually creates entries from the 5 synced transactions
+**What We Verified**:
+- ✅ Sync button creates entries (9 entries created from 9 transactions)
+- ✅ Real merchant names: Claude ($128.12), Upwork ($1,939.19), Hilton Hotels ($120), etc.
+- ✅ Correct currencies: EUR, USD, PLN (not forced to USD)
+- ✅ Proper categorization: All marked as expenses (other_expenses)
+- ✅ Income tab empty (expected - no income transactions in sync)
 
-**Jump to Details**: [See "When Computer Restarts" section below](#-immediate-when-computer-restarts-start-here)
+**Jump to Details**: [See "What We Just Completed" section below](#-what-we-just-completed)
 
 ---
 
@@ -61,6 +66,26 @@
    - **Added**: Debug logging for classification results
    - **Deployment**: Committed (d355a0a) and pushed to production
    - **Files Modified**: `wiseImport.js`, `wiseClassifier.js`
+
+6. **✅ Critical Fix - Missing Foreign Key** (October 28, 2025)
+   - **Problem**: Sync running but creating 0 entries despite Activities API returning data
+   - **Root Cause**: Entry INSERT missing `wise_transaction_id` column
+   - **Database Schema**: `entries.wise_transaction_id` references `wise_transactions.wise_transaction_id`
+   - **Bug**: Foreign key constraint failing silently (caught by try/catch)
+   - **Solution**: Added `wise_transaction_id` to INSERT statement (line 1475, 1489)
+   - **Also Added**: Comprehensive debug logging to trace execution
+   - **Deployment**: Committed (4e3185c) and pushed to production
+   - **Testing**: Verified working on production - 9 entries created!
+   - **Files Modified**: `wiseImport.js`
+
+7. **✅ Production Verification Complete** (October 28, 2025)
+   - **Tested**: Clicked "Sync from Wise" button on https://ds-accounting.netlify.app
+   - **Result**: "Sync completed: 9 new transactions, 0 duplicates skipped, 9 entries created"
+   - **Expenses Tab**: Shows real merchant names (Claude, Upwork, Hilton Hotels, Deploy Staff, etc.)
+   - **Currencies**: Correct (EUR, USD, PLN) - not forced to USD
+   - **Amounts**: Accurate from Wise ($128.12 EUR, $1,939.19 USD, $120 PLN, etc.)
+   - **Income Tab**: Empty (expected - no income transactions in test sync)
+   - **Status**: ✅ **WISE SYNC FULLY FUNCTIONAL**
 
 ---
 
