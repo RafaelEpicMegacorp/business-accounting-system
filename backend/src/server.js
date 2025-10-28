@@ -9,6 +9,7 @@ const dashboardRoutes = require('./routes/dashboardRoutes');
 const wiseImportRoutes = require('./routes/wiseImport');
 const currencyRoutes = require('./routes/currencyRoutes');
 const wiseTestRoutes = require('./routes/wiseTestRoutes');
+const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -50,18 +51,15 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
-    version: '1.0.2-all-fixes-deployed'
+    version: '1.0.3-validation-system'
   });
 });
 
-// Error handling
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({
-    error: 'Internal server error',
-    message: process.env.NODE_ENV === 'development' ? err.message : undefined
-  });
-});
+// 404 handler for undefined routes (must be BEFORE error handler)
+app.use(notFoundHandler);
+
+// Global error handling middleware (must be LAST)
+app.use(errorHandler);
 
 // Start server
 app.listen(PORT, () => {

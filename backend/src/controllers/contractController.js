@@ -1,4 +1,6 @@
 const ContractModel = require('../models/contractModel');
+const ApiError = require('../utils/ApiError');
+const { validateContractData } = require('../utils/contractValidation');
 
 const ContractController = {
   // GET /api/contracts
@@ -26,7 +28,7 @@ const ContractController = {
     try {
       const contract = await ContractModel.getById(req.params.id);
       if (!contract) {
-        return res.status(404).json({ error: 'Contract not found' });
+        throw ApiError.notFound('Contract not found');
       }
       res.json(contract);
     } catch (error) {
@@ -37,6 +39,9 @@ const ContractController = {
   // POST /api/contracts
   async create(req, res, next) {
     try {
+      // Validate contract data
+      validateContractData(req.body, false);
+
       const contract = await ContractModel.create(req.body);
       res.status(201).json(contract);
     } catch (error) {
@@ -47,9 +52,12 @@ const ContractController = {
   // PUT /api/contracts/:id
   async update(req, res, next) {
     try {
+      // Validate contract data (partial update allowed)
+      validateContractData(req.body, true);
+
       const contract = await ContractModel.update(req.params.id, req.body);
       if (!contract) {
-        return res.status(404).json({ error: 'Contract not found' });
+        throw ApiError.notFound('Contract not found');
       }
       res.json(contract);
     } catch (error) {
@@ -62,7 +70,7 @@ const ContractController = {
     try {
       const contract = await ContractModel.delete(req.params.id);
       if (!contract) {
-        return res.status(404).json({ error: 'Contract not found' });
+        throw ApiError.notFound('Contract not found');
       }
       res.json({ message: 'Contract deleted successfully' });
     } catch (error) {

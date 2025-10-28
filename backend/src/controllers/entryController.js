@@ -1,5 +1,7 @@
 const EntryModel = require('../models/entryModel');
 const pool = require('../config/database');
+const ApiError = require('../utils/ApiError');
+const { validateEntryData, validateBulkOperation, validateStatus } = require('../utils/entryValidation');
 
 const EntryController = {
   // GET /api/entries with optional filters
@@ -48,7 +50,7 @@ const EntryController = {
     try {
       const entry = await EntryModel.getById(req.params.id);
       if (!entry) {
-        return res.status(404).json({ error: 'Entry not found' });
+        throw ApiError.notFound('Entry not found');
       }
       res.json(entry);
     } catch (error) {
@@ -59,6 +61,9 @@ const EntryController = {
   // POST /api/entries
   async create(req, res, next) {
     try {
+      // Validate entry data
+      await validateEntryData(req.body, false);
+
       const entry = await EntryModel.create(req.body);
       res.status(201).json(entry);
     } catch (error) {
@@ -69,9 +74,12 @@ const EntryController = {
   // PUT /api/entries/:id
   async update(req, res, next) {
     try {
+      // Validate entry data (partial update allowed)
+      await validateEntryData(req.body, true);
+
       const entry = await EntryModel.update(req.params.id, req.body);
       if (!entry) {
-        return res.status(404).json({ error: 'Entry not found' });
+        throw ApiError.notFound('Entry not found');
       }
       res.json(entry);
     } catch (error) {
@@ -84,7 +92,7 @@ const EntryController = {
     try {
       const entry = await EntryModel.delete(req.params.id);
       if (!entry) {
-        return res.status(404).json({ error: 'Entry not found' });
+        throw ApiError.notFound('Entry not found');
       }
       res.json({ message: 'Entry deleted successfully' });
     } catch (error) {
@@ -264,9 +272,8 @@ const EntryController = {
     try {
       const { ids } = req.body;
 
-      if (!Array.isArray(ids) || ids.length === 0) {
-        return res.status(400).json({ error: 'Invalid or empty IDs array' });
-      }
+      // Validate bulk operation data
+      validateBulkOperation(ids);
 
       const result = await EntryModel.bulkDelete(ids);
       res.json({
@@ -284,13 +291,9 @@ const EntryController = {
     try {
       const { ids, status } = req.body;
 
-      if (!Array.isArray(ids) || ids.length === 0) {
-        return res.status(400).json({ error: 'Invalid or empty IDs array' });
-      }
-
-      if (!['completed', 'pending'].includes(status)) {
-        return res.status(400).json({ error: 'Invalid status. Must be completed or pending' });
-      }
+      // Validate bulk operation data and status
+      validateBulkOperation(ids);
+      validateStatus(status);
 
       const result = await EntryModel.bulkUpdateStatus(ids, status);
       res.json({
