@@ -110,14 +110,18 @@ Authorization: Bearer <token>
 All entry endpoints require authentication.
 
 ### GET /api/entries
-Get all entries with optional filtering.
+Get all entries with optional search and filtering.
 
 **Query Parameters:**
-- `type` (optional): `income` or `expense`
-- `category` (optional): Category name
 - `startDate` (optional): Filter by date range start (YYYY-MM-DD)
 - `endDate` (optional): Filter by date range end (YYYY-MM-DD)
-- `status` (optional): `completed` or `pending`
+- `search` (optional): Search across description, category, and employee name (case-insensitive)
+- `categories` (optional): Array of category names (can pass multiple: `categories=Software&categories=Marketing`)
+- `employeeId` (optional): Filter by specific employee ID
+- `minAmount` (optional): Minimum total amount
+- `maxAmount` (optional): Maximum total amount
+- `status` (optional): `completed`, `pending`, or `all` (default: all)
+- `currency` (optional): `USD`, `EUR`, `PLN`, `GBP`, or `all` (default: all)
 
 **Response:**
 ```json
@@ -133,6 +137,8 @@ Get all entries with optional filtering.
     "entry_date": "2025-01-15",
     "status": "completed",
     "employee_id": null,
+    "employee_name": null,
+    "pay_type": null,
     "contract_id": 1,
     "currency": "USD",
     "created_at": "2025-01-15T10:00:00Z"
@@ -140,10 +146,30 @@ Get all entries with optional filtering.
 ]
 ```
 
-**Example:**
+**Examples:**
+
+Basic date filtering:
 ```bash
 curl -H "Authorization: Bearer <token>" \
-  "http://localhost:3001/api/entries?type=income&startDate=2025-01-01"
+  "http://localhost:3001/api/entries?startDate=2025-01-01&endDate=2025-01-31"
+```
+
+Search with filters:
+```bash
+curl -H "Authorization: Bearer <token>" \
+  "http://localhost:3001/api/entries?search=office&minAmount=100&maxAmount=1000"
+```
+
+Multiple categories:
+```bash
+curl -H "Authorization: Bearer <token>" \
+  "http://localhost:3001/api/entries?categories=Software&categories=Marketing&status=completed"
+```
+
+Employee filter:
+```bash
+curl -H "Authorization: Bearer <token>" \
+  "http://localhost:3001/api/entries?employeeId=5&currency=USD"
 ```
 
 **Implementation:**
@@ -323,11 +349,26 @@ Get financial totals and balance.
 ---
 
 ### GET /api/entries/income
-Get income entries only.
+Get income entries only with optional search and filtering.
 
 **Query Parameters:** Same as GET /api/entries
+- `startDate` (optional): Filter by date range start (YYYY-MM-DD)
+- `endDate` (optional): Filter by date range end (YYYY-MM-DD)
+- `search` (optional): Search across description, category, and employee name
+- `categories` (optional): Array of category names
+- `employeeId` (optional): Filter by specific employee ID
+- `minAmount` (optional): Minimum total amount
+- `maxAmount` (optional): Maximum total amount
+- `status` (optional): `completed`, `pending`, or `all`
+- `currency` (optional): `USD`, `EUR`, `PLN`, `GBP`, or `all`
 
 **Response:** Array of income entries
+
+**Example:**
+```bash
+curl -H "Authorization: Bearer <token>" \
+  "http://localhost:3001/api/entries/income?search=consulting&minAmount=5000"
+```
 
 **Implementation:**
 - Controller: `backend/src/controllers/entryController.js:getIncome`
@@ -336,11 +377,26 @@ Get income entries only.
 ---
 
 ### GET /api/entries/expenses
-Get expense entries (excluding employee salaries).
+Get expense entries (excluding employee salaries) with optional search and filtering.
 
 **Query Parameters:** Same as GET /api/entries
+- `startDate` (optional): Filter by date range start (YYYY-MM-DD)
+- `endDate` (optional): Filter by date range end (YYYY-MM-DD)
+- `search` (optional): Search across description, category, and employee name
+- `categories` (optional): Array of category names
+- `employeeId` (optional): Filter by specific employee ID
+- `minAmount` (optional): Minimum total amount
+- `maxAmount` (optional): Maximum total amount
+- `status` (optional): `completed`, `pending`, or `all`
+- `currency` (optional): `USD`, `EUR`, `PLN`, `GBP`, or `all`
 
 **Response:** Array of expense entries
+
+**Example:**
+```bash
+curl -H "Authorization: Bearer <token>" \
+  "http://localhost:3001/api/entries/expenses?categories=Software&categories=Marketing&status=completed"
+```
 
 **Implementation:**
 - Controller: `backend/src/controllers/entryController.js:getExpenses`
@@ -349,13 +405,25 @@ Get expense entries (excluding employee salaries).
 ---
 
 ### GET /api/entries/salaries
-Get employee salary entries only.
+Get employee salary entries only with optional search and filtering.
 
-**Query Parameters:**
-- `startDate` (optional): Filter by date range
-- `endDate` (optional): Filter by date range
+**Query Parameters:** Same as GET /api/entries
+- `startDate` (optional): Filter by date range start (YYYY-MM-DD)
+- `endDate` (optional): Filter by date range end (YYYY-MM-DD)
+- `search` (optional): Search across description and employee name
+- `employeeId` (optional): Filter by specific employee ID
+- `minAmount` (optional): Minimum total amount
+- `maxAmount` (optional): Maximum total amount
+- `status` (optional): `completed`, `pending`, or `all`
+- `currency` (optional): `USD`, `EUR`, `PLN`, `GBP`, or `all`
 
 **Response:** Array of salary entries with employee details
+
+**Example:**
+```bash
+curl -H "Authorization: Bearer <token>" \
+  "http://localhost:3001/api/entries/salaries?employeeId=5&status=pending"
+```
 
 **Implementation:**
 - Controller: `backend/src/controllers/entryController.js:getSalaries`
