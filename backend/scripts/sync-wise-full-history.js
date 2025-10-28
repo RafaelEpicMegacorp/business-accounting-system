@@ -3,16 +3,22 @@
 /**
  * Wise Full History Sync Script
  *
- * Fetches complete transaction history from Wise for all currency balances
+ * Fetches transaction history from Wise using Activities API + Transfer API
  * and imports them into the accounting system.
  *
+ * NOTE: Uses Activities API instead of Balance Statement API to avoid SCA requirements.
+ *
  * Usage:
- *   node scripts/sync-wise-full-history.js [--from YYYY-MM-DD] [--to YYYY-MM-DD]
+ *   node scripts/sync-wise-full-history.js [--dry-run]
  *
  * Options:
- *   --from: Start date (default: 6 months ago)
- *   --to: End date (default: today)
  *   --dry-run: Show what would be imported without actually importing
+ *
+ * API Flow:
+ *   1. GET /v1/profiles/{profileId}/activities - Get list of activities
+ *   2. For each TRANSFER activity:
+ *      GET /v1/transfers/{transferId} - Get full transfer details
+ *   3. Classify and import transaction
  */
 
 require('dotenv').config();
@@ -87,12 +93,12 @@ async function getBalances() {
 }
 
 /**
- * Fetch statement for a specific balance
+ * Fetch activities from profile
  */
-async function getBalanceStatement(balanceId, currency, intervalStart, intervalEnd) {
-  console.log(`\n💳 Fetching ${currency} transactions from ${intervalStart} to ${intervalEnd}...`);
+async function getActivities() {
+  console.log('\n📋 Fetching activities from Wise...');
 
-  const url = `${WISE_API_URL}/v1/profiles/${WISE_PROFILE_ID}/balance-statements/${balanceId}/statement.json?currency=${currency}&intervalStart=${intervalStart}T00:00:00.000Z&intervalEnd=${intervalEnd}T23:59:59.999Z&type=COMPACT`;
+  const url = `${WISE_API_URL}/v1/profiles/${WISE_PROFILE_ID}/activities`;
 
   const response = await fetch(url, {
     method: 'GET',
@@ -104,23 +110,45 @@ async function getBalanceStatement(balanceId, currency, intervalStart, intervalE
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`Failed to fetch statement for ${currency}: ${response.status} ${errorText}`);
+    throw new Error(`Failed to fetch activities: ${response.status} ${errorText}`);
   }
 
-  const statement = await response.json();
-  const transactionCount = statement.transactions?.length || 0;
+  const data = await response.json();
+  const activityCount = data.activities?.length || 0;
 
-  console.log(`✓ Found ${transactionCount} transaction(s)`);
+  console.log(`✓ Found ${activityCount} activity(ies)`);
 
-  return statement;
+  return data.activities || [];
 }
 
 /**
- * Process a single transaction
+ * Fetch transfer details by ID
  */
-async function processTransaction(transaction, currency) {
+async function getTransferDetails(transferId) {
+  const url = `${WISE_API_URL}/v1/transfers/${transferId}`;
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${WISE_API_TOKEN}`,
+      'Content-Type': 'application/json'
+    }
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to fetch transfer ${transferId}: ${response.status} ${errorText}`);
+  }
+
+  return await response.json();
+}
+
+/**
+ * Process a single transfer from Wise API
+ */
+async function processTransfer(transfer) {
   try {
-    const transactionId = transaction.referenceNumber;
+    const transactionId = transfer.customerTransactionId || `TRANSFER-${transfer.id}`;
 
     // Check for duplicates
     const existing = await WiseTransactionModel.exists(transactionId);
@@ -132,22 +160,28 @@ async function processTransaction(transaction, currency) {
 
     if (isDryRun) {
       stats.newTransactions++;
-      console.log(`  [DRY RUN] Would import: ${transactionId} - ${transaction.details?.description || 'No description'} (${transaction.amount.value} ${transaction.amount.currency})`);
+      console.log(`  [DRY RUN] Would import: ${transactionId} - ${transfer.details?.reference || 'No reference'} (${transfer.sourceValue} ${transfer.sourceCurrency})`);
       return { action: 'dry-run' };
     }
 
-    // Extract transaction details
-    const amount = Math.abs(parseFloat(transaction.amount.value));
-    const description = transaction.details?.description || '';
-    const merchantName = transaction.details?.senderName || transaction.details?.recipientName || '';
-    const referenceNumber = transaction.referenceNumber;
-    const transactionDate = transaction.date;
+    // Extract transfer details
+    const amount = Math.abs(parseFloat(transfer.sourceValue || transfer.targetValue));
+    const currency = transfer.sourceCurrency || transfer.targetCurrency;
+    const description = transfer.details?.reference || '';
+    const merchantName = ''; // Not available in transfer API
+    const referenceNumber = transfer.customerTransactionId || `TRANSFER-${transfer.id}`;
+    const transactionDate = transfer.created;
+
+    // Determine if this is a credit or debit (incoming or outgoing)
+    // If sourceValue is present, it's outgoing (DEBIT)
+    // If only targetValue is present, it's incoming (CREDIT)
+    const type = transfer.sourceValue ? 'DEBIT' : 'CREDIT';
 
     // Prepare transaction data for classification
     const transactionData = {
-      type: transaction.type, // CREDIT or DEBIT
+      type,
       amount,
-      currency: transaction.amount.currency,
+      currency,
       description,
       merchantName,
       referenceNumber,
@@ -160,13 +194,13 @@ async function processTransaction(transaction, currency) {
     // Store transaction in database
     const savedTransaction = await WiseTransactionModel.create({
       wiseTransactionId: transactionId,
-      wiseResourceId: null,
+      wiseResourceId: transfer.id.toString(),
       profileId: WISE_PROFILE_ID,
-      accountId: null,
-      type: transaction.type,
-      state: 'completed',
+      accountId: transfer.sourceAccount || transfer.targetAccount,
+      type,
+      state: transfer.status || 'completed',
       amount,
-      currency: transaction.amount.currency,
+      currency,
       description,
       merchantName,
       referenceNumber,
@@ -177,13 +211,13 @@ async function processTransaction(transaction, currency) {
       matchedEmployeeId: classification.employeeId,
       confidenceScore: classification.confidenceScore,
       needsReview: classification.needsReview,
-      rawPayload: transaction
+      rawPayload: transfer
     });
 
     stats.newTransactions++;
     console.log(`  ✅ Imported: ${transactionId}`);
     console.log(`     Description: ${description.substring(0, 50)}${description.length > 50 ? '...' : ''}`);
-    console.log(`     Amount: ${transaction.amount.value} ${transaction.amount.currency}`);
+    console.log(`     Amount: ${amount} ${currency}`);
     console.log(`     Category: ${classification.category} (${classification.confidenceScore}% confidence)`);
 
     // Auto-create entry if high confidence
@@ -257,10 +291,10 @@ async function autoCreateEntry(transaction, classification) {
  * Main sync function
  */
 async function syncFullHistory() {
-  console.log('🚀 Wise Full History Sync');
+  console.log('🚀 Wise Activity Sync (via Activities API)');
   console.log('=' .repeat(60));
   console.log(`   Profile ID: ${WISE_PROFILE_ID}`);
-  console.log(`   Date Range: ${fromDate} to ${toDate}`);
+  console.log(`   Method: Activities API + Transfer API`);
   console.log(`   Mode: ${isDryRun ? 'DRY RUN (no changes will be made)' : 'LIVE IMPORT'}`);
   console.log('=' .repeat(60));
 
@@ -273,34 +307,47 @@ async function syncFullHistory() {
   }
 
   try {
-    // Get all balances
-    const balances = await getBalances();
-    stats.balances = balances.length;
+    // Fetch activities from Wise
+    const activities = await getActivities();
 
-    // Process each balance
-    for (const balance of balances) {
-      const currency = balance.currency;
-      const balanceId = balance.id;
+    if (!activities || activities.length === 0) {
+      console.log('\nℹ️  No activities found');
+      console.log('💡 This could mean:');
+      console.log('   - No recent transfers on this account');
+      console.log('   - Activities API only shows certain activity types');
+      console.log('   - Try making a test transfer to verify webhook integration');
+      return;
+    }
 
+    stats.totalTransactions = activities.length;
+
+    // Process each activity
+    for (const activity of activities) {
       try {
-        // Fetch statement for this balance
-        const statement = await getBalanceStatement(balanceId, currency, fromDate, toDate);
+        console.log(`\n📝 Processing activity: ${activity.type}`);
+        console.log(`   Title: ${activity.title}`);
+        console.log(`   Description: ${activity.description}`);
+        console.log(`   Amount: ${activity.primaryAmount}`);
 
-        if (!statement.transactions || statement.transactions.length === 0) {
-          console.log(`  ℹ️  No transactions found for ${currency}`);
-          continue;
-        }
+        // Only process TRANSFER activities
+        if (activity.type === 'TRANSFER' && activity.resource?.id) {
+          const transferId = activity.resource.id;
 
-        stats.totalTransactions += statement.transactions.length;
+          console.log(`   Fetching transfer details for ID: ${transferId}...`);
 
-        // Process each transaction
-        for (const transaction of statement.transactions) {
-          await processTransaction(transaction, currency);
+          // Fetch full transfer details
+          const transfer = await getTransferDetails(transferId);
+
+          // Process the transfer
+          await processTransfer(transfer);
+
+        } else {
+          console.log(`   ⏭️  Skipping non-transfer activity: ${activity.type}`);
         }
 
       } catch (error) {
         stats.errors++;
-        console.error(`\n❌ Error processing ${currency} balance:`, error.message);
+        console.error(`\n❌ Error processing activity ${activity.id}:`, error.message);
       }
     }
 
@@ -310,9 +357,8 @@ async function syncFullHistory() {
     console.log('\n' + '=' .repeat(60));
     console.log('📊 Sync Complete');
     console.log('=' .repeat(60));
-    console.log(`   Balances processed: ${stats.balances}`);
-    console.log(`   Total transactions found: ${stats.totalTransactions}`);
-    console.log(`   New transactions: ${stats.newTransactions}`);
+    console.log(`   Activities processed: ${stats.totalTransactions}`);
+    console.log(`   New transactions imported: ${stats.newTransactions}`);
     console.log(`   Duplicates skipped: ${stats.duplicateTransactions}`);
     console.log(`   Entries created: ${stats.entriesCreated}`);
     console.log(`   Errors: ${stats.errors}`);
