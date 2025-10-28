@@ -1151,8 +1151,8 @@ async function processBalanceTransaction(data, direction) {
 
     let entryCreated = false;
 
-    // If high confidence (80%+) and doesn't need review, auto-create entry
-    if (!classification.needsReview && classification.confidenceScore >= 80) {
+    // If confidence meets threshold (40% per CLAUDE.md line 784) and doesn't need review, auto-create entry
+    if (!classification.needsReview && classification.confidenceScore >= 40) {
       console.log('Auto-creating entry for high-confidence transaction...');
       await autoCreateEntry(savedTransaction, classification);
       entryCreated = true;
@@ -1502,6 +1502,12 @@ router.post('/sync', auth, async (req, res) => {
         };
 
         const classification = await wiseClassifier.classifyTransaction(transactionData);
+        console.log(`[Wise Sync] Transaction ${transactionId} classified:`, {
+          category: classification.category,
+          confidence: classification.confidenceScore,
+          needsReview: classification.needsReview,
+          reasoning: classification.reasoning
+        });
 
         // Store transaction
         await WiseTransactionModel.create({
@@ -1529,8 +1535,8 @@ router.post('/sync', auth, async (req, res) => {
         stats.newTransactions++;
         console.log(`✅ Imported: ${transactionId} - ${description} (${amount} ${currency})`);
 
-        // Auto-create entry if high confidence
-        if (!classification.needsReview && classification.confidenceScore >= 80) {
+        // Auto-create entry if confidence meets threshold (40% per CLAUDE.md line 784)
+        if (!classification.needsReview && classification.confidenceScore >= 40) {
           // Get exchange rate if needed
           let amountUsd = amount;
           let exchangeRate = 1;
@@ -1567,6 +1573,60 @@ router.post('/sync', auth, async (req, res) => {
 
           stats.entriesCreated++;
           console.log(`✓ Entry auto-created`);
+        }
+        // If confidence is low but transaction is valid, create entry as "pending" for manual review
+        else if (classification.confidenceScore >= 20 && classification.category !== 'Uncategorized') {
+          console.log(`⚠️  Creating pending entry for low-confidence transaction...`);
+
+          // Get exchange rate if needed
+          let amountUsd = amount;
+          let exchangeRate = 1;
+
+          if (currency !== 'USD') {
+            try {
+              const rateResponse = await fetch(`https://api.exchangerate-api.com/v4/latest/${currency}`);
+              const rateData = await rateResponse.json();
+              exchangeRate = rateData.rates.USD;
+              amountUsd = amount * exchangeRate;
+            } catch (err) {
+              console.warn('Failed to get exchange rate, using 1:1');
+            }
+          }
+
+          const entryType = type === 'CREDIT' ? 'income' : 'expense';
+          const category = classification.category;
+
+          const entryResult = await pool.query(
+            `INSERT INTO entries (type, category, description, detail, base_amount, total, entry_date, status, employee_id, currency, amount_original, amount_usd, exchange_rate)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+             RETURNING id`,
+            [
+              entryType,
+              category,
+              `${description || 'Wise transaction'} (Requires Review)`,
+              `Auto-imported from Wise. Confidence: ${classification.confidenceScore}%. Ref: ${transactionId}`,
+              amount,
+              amount,
+              transactionDate.split('T')[0],
+              'pending', // Mark as pending for manual review
+              classification.employeeId || null,
+              currency,
+              amount,
+              amountUsd,
+              exchangeRate
+            ]
+          );
+
+          // Link entry to transaction
+          await WiseTransactionModel.updateStatus(transactionId, {
+            entryId: entryResult.rows[0].id,
+            syncStatus: 'pending_review'
+          });
+
+          stats.entriesCreated++;
+          console.log(`⚠️  Pending entry created (${classification.confidenceScore}% confidence)`);
+        } else {
+          console.log(`⏭️  Skipping entry creation - confidence too low or uncategorized`);
         }
 
       } catch (error) {

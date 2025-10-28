@@ -196,10 +196,13 @@ class WiseClassifier {
       };
     } catch (error) {
       console.error('Error classifying expense:', error);
+      console.error('Error details:', error.message, error.stack);
+      // Return a safe default instead of Uncategorized with 0%
       return {
-        category: 'Uncategorized',
-        confidence: 0,
-        reasoning: ['Error during classification']
+        category: 'Other Expenses',
+        confidence: 25, // Low but not zero
+        needsReview: true,
+        reasoning: ['Classification error - needs manual review', `Error: ${error.message}`]
       };
     }
   }
