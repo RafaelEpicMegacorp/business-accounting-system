@@ -1,8 +1,27 @@
 # Session Status - Wise Integration & Sync Button Implementation
 
+> **👋 STARTING FRESH? [CLICK HERE - Jump to "When Computer Restarts"](#-immediate-when-computer-restarts-start-here)**
+
 **Date**: October 28, 2025
 **Branch**: `live` (auto-deploys to production)
-**Status**: ✅ Sync button implemented, deployed, and TESTED SUCCESSFULLY on production
+**Status**: 🔄 Waiting for Railway deployment + user testing of entry creation fix
+
+---
+
+## 📖 Quick Start After Restart
+
+**TL;DR - What you need to do:**
+1. ✅ Read this file (you're here)
+2. ⚠️ **ALWAYS use feature-supervisor agent** for all work
+3. 🧪 Test Wise sync on production: https://ds-accounting.netlify.app
+4. ✅ Verify entries were created (Income/Expenses tabs should NOT be empty)
+5. 📝 Update this file with test results
+
+**Last Thing We Did**: Fixed Wise sync to create entries (threshold 80%→40%, added fallback logic)
+
+**What Needs Testing**: Whether the fix actually creates entries from the 5 synced transactions
+
+**Jump to Details**: [See "When Computer Restarts" section below](#-immediate-when-computer-restarts-start-here)
 
 ---
 
@@ -255,18 +274,92 @@ All pointing to: `https://business-accounting-system-production.up.railway.app/a
 
 ## 📝 Next Steps
 
-### Immediate Next Steps (When Session Resumes)
+### 🚀 IMMEDIATE: When Computer Restarts (START HERE)
 
-1. **⚠️ MANDATORY: Use feature-supervisor Agent**
-   - All work must be delegated to `general-purpose` subagent
-   - Use Task tool with clear task description
-   - Example: `"Test the Wise sync button on production and verify it works correctly"`
+**Last Code State**:
+- ✅ All code committed and pushed to `live` branch
+- ✅ Railway auto-deployment triggered (commit d355a0a)
+- 🔄 Waiting for deployment to complete (~2-3 minutes from push time)
+- 📊 5 transactions synced but 0 entries created (fixed in d355a0a)
 
-2. **Test Sync Button on Production**
-   - Wait for Railway/Netlify deployment to complete (~2-5 minutes)
-   - Login to https://ds-accounting.netlify.app
+**What Just Happened**:
+1. User reported Wise sync button created 0 entries (Income/Expenses tabs empty)
+2. Investigated: 80% confidence threshold too high, transactions had 0% confidence
+3. Fixed: Lowered threshold to 40%, added fallback logic for 20-39% confidence
+4. Deployed: Commit d355a0a pushed to production (waiting for Railway)
+
+**FIRST THING TO DO**:
+
+1. **⚠️ MANDATORY: Use feature-supervisor Agent for ALL work**
+   - Use Task tool with `subagent_type: "general-purpose"`
+   - Never work directly - always delegate to agent
+
+2. **Wait for Railway Deployment** (if just restarted)
+   - Check deployment status: `railway logs --service business-accounting-system`
+   - Or visit: https://railway.app/project/your-project/deployments
+   - Should see commit d355a0a deployed
+
+3. **Test the Fix on Production**
+   - URL: https://ds-accounting.netlify.app
+   - Login: rafael / asdflkj@3!
    - Click "Sync from Wise" button
-   - Verify behavior (even if returns 0 activities)
+   - **Expected**: "X entries created" where X > 0 (not 0!)
+   - **Check**: Income/Expenses tabs should show entries
+   - **Note**: Some entries may be "pending" status (this is correct)
+
+4. **Verify Entry Creation**
+   - Navigate to "Expenses" tab
+   - Should see 5 entries (or some entries) from Wise transactions
+   - Check if they have proper amounts, dates, categories
+   - Some may say "(Requires Review)" - this is expected for low confidence
+
+5. **Check Railway Logs** (if issues)
+   ```bash
+   railway logs --service business-accounting-system --follow
+   ```
+   - Look for: `[Wise Sync] Transaction X classified:` logs
+   - Should show confidence scores and categories
+   - Any errors will appear here
+
+### If Testing Succeeds ✅
+
+1. **Update SESSION_STATUS.md**:
+   - Change status to: "✅ Entry creation fix verified working"
+   - Document test results
+
+2. **Move to Next Feature**: Transaction Review Interface (top priority)
+   - See "Future Enhancements" section below
+
+### If Testing Fails ❌
+
+1. **Gather Evidence**:
+   - Screenshot of sync result message
+   - Screenshot of Income/Expenses tabs (still empty?)
+   - Railway logs showing classification results
+
+2. **Delegate Investigation** to feature-supervisor agent:
+   - Query database to check transaction confidence scores
+   - Check if entries were created with different status
+   - Review logs for classification errors
+
+### Resume Working Context (When Session Resumes)
+
+**Quick Checklist**:
+- [ ] Read SESSION_STATUS.md (this file) - you're doing it now ✅
+- [ ] Check git status: `git status` (should be clean)
+- [ ] Check current branch: `git branch` (should be `live`)
+- [ ] Review last commits: `git log --oneline -5`
+- [ ] Check Railway deployment status
+- [ ] Test Wise sync on production (see steps above)
+- [ ] Use feature-supervisor agent for all work
+
+**Context Files to Review**:
+- `.claude/CLAUDE.md` - Project instructions, agent policy
+- `SESSION_STATUS.md` - This file, current state
+- `WISE_SYNC_FIX_SUMMARY.md` - Details of the fix just deployed
+- `DOCS/API/WISE_API_WORKING_PATTERNS.md` - Wise API reference
+
+### Previous Next Steps (Lower Priority Now)
 
 3. **Make Test Transfer (If Needed)**
    - If Activities API returns empty, consider making a small test transfer
