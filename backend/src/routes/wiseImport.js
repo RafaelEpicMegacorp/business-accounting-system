@@ -546,92 +546,17 @@ router.post('/import', auth, upload.single('csvFile'), async (req, res) => {
   }
 });
 
-// Webhook signature validation function
-function validateWebhookSignature(rawBody, signature) {
-  const webhookSecret = process.env.WISE_WEBHOOK_SECRET;
-
-  // If no secret configured, ALLOW webhooks through (not an error!)
-  if (!webhookSecret) {
-    console.warn('⚠️ WISE_WEBHOOK_SECRET not set - skipping signature validation');
-    console.warn('⚠️ Webhooks will be accepted without validation');
-    return true; // ALLOW webhook when no secret configured
-  }
-
-  if (!signature) {
-    console.warn('⚠️ No signature header found');
-    console.warn('⚠️ Wise personal accounts do not send signatures - accepting webhook');
-    return true; // ALLOW webhooks without signature (personal accounts)
-  }
-
-  console.log('=== SIGNATURE VALIDATION DEBUG ===');
-  console.log('Found signature in header:', signature);
-  console.log('Webhook secret length:', webhookSecret.length);
-  console.log('Raw body length:', rawBody.length);
-  console.log('Raw body preview:', rawBody.substring(0, 200));
-
-  // Calculate expected signature using RAW body (before JSON parsing)
-  // Wise sends signatures in base64 format, not hex
-  const expectedSignature = crypto
-    .createHmac('sha256', webhookSecret)
-    .update(rawBody)
-    .digest('base64');
-
-  console.log('Expected signature (HMAC-SHA256-base64):', expectedSignature);
-  console.log('Received signature:', signature);
-  console.log('=== END SIGNATURE DEBUG ===');
-
-  // Check if signatures have the same length first
-  if (signature.length !== expectedSignature.length) {
-    console.error('Webhook signature validation failed - length mismatch');
-    console.error('Expected length:', expectedSignature.length);
-    console.error('Received length:', signature.length);
-    return false;
-  }
-
-  // Compare signatures using timing-safe comparison
-  try {
-    const isValid = crypto.timingSafeEqual(
-      Buffer.from(signature),
-      Buffer.from(expectedSignature)
-    );
-
-    if (!isValid) {
-      console.error('Webhook signature validation failed');
-      console.error('Expected:', expectedSignature);
-      console.error('Received:', signature);
-    }
-
-    return isValid;
-  } catch (error) {
-    console.error('Error during signature comparison:', error.message);
-    return false;
-  }
-}
-
 // POST /api/wise/webhook - Receive Wise webhook events
-// Use express.raw to capture raw body BEFORE JSON parsing (needed for signature validation)
+// Note: No signature validation required per Wise personal account setup
+// Just log and process all incoming webhooks
 router.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
   const startTime = Date.now();
   const receivedAt = new Date();
 
-  // ========== ULTRA VERBOSE LOGGING - LOG EVERYTHING ==========
-  console.log('\n\n');
-  console.log('='.repeat(80));
-  console.log('🔔 WEBHOOK REQUEST RECEIVED');
-  console.log('='.repeat(80));
-  console.log('📅 Timestamp:', receivedAt.toISOString());
-  console.log('🌐 Method:', req.method);
-  console.log('🔗 URL:', req.url);
-  console.log('📍 Path:', req.path);
-  console.log('🔍 Query:', JSON.stringify(req.query));
-  console.log('📦 Body Type:', typeof req.body);
-  console.log('📦 Body Length:', req.body ? req.body.length : 0);
-  console.log('📋 All Headers:');
-  Object.keys(req.headers).forEach(key => {
-    console.log(`  ${key}: ${req.headers[key]}`);
-  });
-  console.log('='.repeat(80));
-  console.log('\n');
+  // Log incoming webhook
+  console.log('\n🔔 Wise Webhook Received:', receivedAt.toISOString());
+  console.log('   Delivery ID:', req.headers['x-delivery-id'] || 'none');
+  console.log('   Test:', req.headers['x-test-notification'] === 'true' ? 'YES' : 'NO');
 
   // CHECK TEST NOTIFICATION FIRST - before ANY body parsing
   // Wise sends X-Test-Notification: true during URL validation
@@ -706,31 +631,21 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
   if (!event.event_type) {
     // Minimal body = validation request
     if (rawBody === '{}' || Object.keys(event).length === 0) {
-      console.log('✓ Minimal body validation request');
+      console.log('   ✓ Minimal body validation request');
       return res.status(200).json({ status: 'ok' });
     }
 
     // Has body but no event_type = error
-    console.error('Webhook body missing event_type:', rawBody.substring(0, 200));
+    console.error('   ✗ Webhook missing event_type');
     return res.status(400).json({
       error: 'Missing event_type',
       message: 'Webhook body must include event_type field'
     });
   }
 
-  // DEBUG: Log everything about the request
-  console.log('=== WEBHOOK DEBUG INFO ===');
-  console.log('All Headers:', JSON.stringify(req.headers, null, 2));
-  console.log('Event Type:', event.event_type);
-  console.log('Body:', JSON.stringify(event, null, 2));
-  console.log('Signature Header (x-signature-sha256):', req.headers['x-signature-sha256']);
-  console.log('Signature Header (x-signature):', req.headers['x-signature']);
-  console.log('Signature Header (x-wise-signature):', req.headers['x-wise-signature']);
-  console.log('Test Notification:', req.headers['x-test-notification']);
-  console.log('Delivery ID:', req.headers['x-delivery-id']);
-  console.log('Content-Type:', req.headers['content-type']);
-  console.log('Raw Body length:', rawBody.length);
-  console.log('=== END DEBUG INFO ===');
+  // Log event details
+  console.log('   Event Type:', event.event_type);
+  console.log('   Event Data:', event.data ? 'present' : 'none');
 
   // Create webhook tracking object
   const webhookData = {
@@ -738,7 +653,6 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
     event_type: event.event_type,
     payload: event,
     headers: {
-      signature: req.headers['x-signature-sha256'] || req.headers['x-signature'] || req.headers['x-wise-signature'],
       testNotification: req.headers['x-test-notification'],
       deliveryId: req.headers['x-delivery-id'],
       contentType: req.headers['content-type']
@@ -749,49 +663,9 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
   };
 
   try {
-    // Get signature from headers
-    // NOTE: Wise official docs say they send X-Signature-SHA256
-    const signature = req.headers['x-signature-sha256'] || req.headers['x-signature'] || req.headers['x-wise-signature'] || req.headers['x-2fa-approval'] || req.headers['x-hub-signature'];
-
-    // Validate signature using RAW body
-    const isValid = validateWebhookSignature(rawBody, signature);
-
-    if (!isValid) {
-      console.error('Invalid webhook signature');
-
-      // Log failed signature validation
-      webhookData.processing_status = 'failed';
-      webhookData.error = 'Invalid webhook signature';
-
-      // Add to in-memory array
-      recentWebhooks.unshift(webhookData);
-      if (recentWebhooks.length > MAX_RECENT_WEBHOOKS) {
-        recentWebhooks.pop();
-      }
-
-      // Log to database
-      await pool.query(
-        `INSERT INTO wise_sync_audit_log (action, notes, new_values)
-         VALUES ($1, $2, $3)`,
-        [
-          'webhook_signature_failed',
-          'Webhook received but signature validation failed',
-          JSON.stringify(webhookData)
-        ]
-      );
-
-      return res.status(401).json({
-        error: 'Invalid signature',
-        message: 'Webhook signature validation failed'
-      });
-    }
-
-    // Signature is valid (or validation was skipped)
-    console.log('✅ Webhook accepted');
-    webhookData.processing_status = 'validated';
-
-    console.log('Event Type:', event.event_type);
-    console.log('Event Data:', JSON.stringify(event.data));
+    // Process webhook (no signature validation required)
+    console.log('   ✓ Webhook accepted - processing...');
+    webhookData.processing_status = 'processing';
 
     // Handle test events
     if (event.event_type === 'test' || event.event_type === 'webhook#test') {
