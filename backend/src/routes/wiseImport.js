@@ -1361,6 +1361,7 @@ router.post('/sync', auth, async (req, res) => {
     stats.activitiesFound = activities.length;
 
     console.log(`✓ Found ${activities.length} activities`);
+    console.log(`📊 Activity types found:`, activities.map(a => a.type).join(', '));
 
     if (activities.length === 0) {
       return res.json({
@@ -1375,6 +1376,8 @@ router.post('/sync', auth, async (req, res) => {
     const validActivityTypes = ['TRANSFER', 'CARD_PAYMENT', 'CARD_CHECK', 'CONVERSION'];
 
     for (const activity of activities) {
+      console.log(`🔍 Processing activity: ${activity.type}, Resource ID: ${activity.resource?.id}, Title: ${activity.title}`);
+
       // Skip activities that aren't transactions or don't have resource details
       if (!validActivityTypes.includes(activity.type) || !activity.resource?.id) {
         console.log(`⏭️  Skipping activity type: ${activity.type}`);
@@ -1499,11 +1502,20 @@ router.post('/sync', auth, async (req, res) => {
         stats.errors++;
         stats.errorDetails.push({
           transferId: activity.resource.id,
-          error: error.message
+          error: error.message,
+          stack: error.stack
         });
         console.error(`❌ Error processing transfer ${activity.resource.id}:`, error.message);
+        console.error(`❌ Stack trace:`, error.stack);
       }
     }
+
+    console.log(`\n📈 SYNC SUMMARY:`);
+    console.log(`   Activities found: ${stats.activitiesFound}`);
+    console.log(`   New transactions: ${stats.newTransactions}`);
+    console.log(`   Duplicates skipped: ${stats.duplicatesSkipped}`);
+    console.log(`   Entries created: ${stats.entriesCreated}`);
+    console.log(`   Errors: ${stats.errors}\n`);
 
     // Fetch and update real Wise account balances from API
     console.log('🔄 Fetching real Wise account balances from API...');
