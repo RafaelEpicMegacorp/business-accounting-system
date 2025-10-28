@@ -9,6 +9,7 @@ const dashboardRoutes = require('./routes/dashboardRoutes');
 const wiseImportRoutes = require('./routes/wiseImport');
 const currencyRoutes = require('./routes/currencyRoutes');
 const wiseTestRoutes = require('./routes/wiseTestRoutes');
+const wiseDebugRoutes = require('./routes/wiseDebug');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 
 const app = express();
@@ -45,6 +46,7 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/wise', wiseImportRoutes); // CSV upload only
 app.use('/api/currency', currencyRoutes);
 app.use('/api/wise-test', wiseTestRoutes); // Wise API testing endpoints
+app.use('/api/wise/debug', wiseDebugRoutes); // Wise profile debugging endpoints
 
 // Health check
 app.get('/health', (req, res) => {
