@@ -1401,47 +1401,39 @@ router.post('/sync', auth, async (req, res) => {
           continue;
         }
 
-        // Extract common transaction details from activity data
-        const activityData = activity.data || {};
+        // Extract transaction details directly from activity object
+        // Activities API provides: title, primaryAmount, secondaryAmount, status, createdOn
 
-        // Extract amount and currency
+        // Extract amount and currency from primaryAmount (format: "128.12 EUR")
         let amount = 0;
         let currency = 'USD';
         let type = 'DEBIT'; // Default to expense
 
-        // Parse amount from activity data - Wise uses different field names
-        if (activityData.amount) {
-          amount = Math.abs(parseFloat(activityData.amount.value || activityData.amount));
-          currency = activityData.amount.currency || activityData.currency || currency;
-        } else if (activityData.totalFees) {
-          amount = Math.abs(parseFloat(activityData.totalFees.value || activityData.totalFees));
-          currency = activityData.totalFees.currency || currency;
+        if (activity.primaryAmount) {
+          // Parse "128.12 EUR" format
+          const amountMatch = activity.primaryAmount.match(/([\d,]+\.?\d*)\s*([A-Z]{3})/);
+          if (amountMatch) {
+            amount = Math.abs(parseFloat(amountMatch[1].replace(/,/g, '')));
+            currency = amountMatch[2];
+          }
         }
 
-        // Determine transaction direction (DEBIT = expense, CREDIT = income)
-        // For card payments and most activities, these are expenses (money out)
-        if (activity.type === 'CARD_PAYMENT' || activity.type === 'CARD_CHECK') {
-          type = 'DEBIT'; // Card payments are always expenses
-        } else if (activityData.direction) {
-          type = activityData.direction === 'OUT' ? 'DEBIT' : 'CREDIT';
+        // Determine transaction direction from activity description
+        // "Sent by you", "By you" = DEBIT (expense)
+        // "Received", "To you" = CREDIT (income)
+        const description = activity.description || '';
+        if (description.includes('Received') || description.includes('To you')) {
+          type = 'CREDIT';
+        } else {
+          type = 'DEBIT';
         }
 
-        // Extract description and merchant info
-        let description = '';
-        let merchantName = '';
+        // Extract merchant/recipient name from title (remove HTML tags)
+        let merchantName = activity.title || '';
+        merchantName = merchantName.replace(/<strong>|<\/strong>|<positive>|<\/positive>|<negative>|<\/negative>/g, '').trim();
 
-        description =
-          activityData.title ||
-          activityData.merchant?.name ||
-          activityData.recipient?.name ||
-          activityData.sender?.name ||
-          activityData.reference ||
-          `${activity.type} transaction`;
-
-        merchantName = activityData.merchant?.name || activityData.recipient?.name || '';
-
-        // Transaction date
-        const transactionDate = activity.occurredAt || new Date().toISOString();
+        // Transaction date from createdOn
+        const transactionDate = activity.createdOn || new Date().toISOString();
 
         stats.transfersProcessed++;
 
@@ -1450,12 +1442,12 @@ router.post('/sync', auth, async (req, res) => {
           wiseTransactionId: transactionId,
           wiseResourceId: resourceId.toString(),
           profileId: WISE_PROFILE_ID,
-          accountId: activityData.accountId || null,
+          accountId: null,
           type,
-          state: activityData.status || 'completed',
+          state: activity.status || 'completed',
           amount,
           currency,
-          description,
+          description: merchantName,
           merchantName,
           referenceNumber: transactionId,
           transactionDate,
@@ -1469,7 +1461,7 @@ router.post('/sync', auth, async (req, res) => {
         });
 
         stats.newTransactions++;
-        console.log(`✅ Imported: ${transactionId} - ${description} (${amount} ${currency})`);
+        console.log(`✅ Imported: ${transactionId} - ${merchantName} (${amount} ${currency})`);
 
         // Create entry immediately - no confidence thresholds
         // All Wise transactions are completed (they already happened)
@@ -1483,7 +1475,7 @@ router.post('/sync', auth, async (req, res) => {
           [
             entryType,
             category,
-            description || 'Wise transaction',
+            merchantName || 'Wise transaction',
             `Imported from Wise (Ref: ${transactionId})`,
             amount,
             amount,
