@@ -1486,7 +1486,28 @@ router.post('/sync', auth, async (req, res) => {
         // Extract transfer details
         const amount = Math.abs(parseFloat(transfer.sourceValue || transfer.targetValue));
         const currency = transfer.sourceCurrency || transfer.targetCurrency;
-        const description = transfer.details?.reference || '';
+
+        // Extract description from activity data (richer than transfer details)
+        let description = '';
+        let merchantName = '';
+
+        if (activity.data) {
+          // Try multiple fields to get the best description
+          description =
+            activity.data.title ||
+            activity.data.recipient?.name ||
+            activity.data.sender?.name ||
+            activity.data.merchant?.name ||
+            activity.data.reference ||
+            transfer.details?.reference ||
+            '';
+
+          merchantName = activity.data.merchant?.name || activity.data.recipient?.name || '';
+        } else {
+          // Fallback to transfer details
+          description = transfer.details?.reference || '';
+        }
+
         const transactionDate = transfer.created;
         const type = transfer.sourceValue ? 'DEBIT' : 'CREDIT';
 
@@ -1496,7 +1517,7 @@ router.post('/sync', auth, async (req, res) => {
           amount,
           currency,
           description,
-          merchantName: '',
+          merchantName,
           referenceNumber: transactionId,
           transactionDate
         };
@@ -1509,7 +1530,7 @@ router.post('/sync', auth, async (req, res) => {
           reasoning: classification.reasoning
         });
 
-        // Store transaction
+        // Store transaction with full activity data
         await WiseTransactionModel.create({
           wiseTransactionId: transactionId,
           wiseResourceId: transfer.id.toString(),
@@ -1520,7 +1541,7 @@ router.post('/sync', auth, async (req, res) => {
           amount,
           currency,
           description,
-          merchantName: '',
+          merchantName,
           referenceNumber: transactionId,
           transactionDate,
           valueDate: transactionDate,
@@ -1529,7 +1550,7 @@ router.post('/sync', auth, async (req, res) => {
           matchedEmployeeId: classification.employeeId,
           confidenceScore: classification.confidenceScore,
           needsReview: classification.needsReview,
-          rawPayload: transfer
+          rawPayload: { transfer, activity } // Store both for complete data
         });
 
         stats.newTransactions++;
