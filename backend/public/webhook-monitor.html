@@ -425,6 +425,7 @@
         let autoRefresh = true;
         let refreshInterval;
         let currentFilter = 'all';
+        let clearedAtTimestamp = null; // Track when user clicked Clear
 
         // Start auto-refresh
         function startAutoRefresh() {
@@ -464,11 +465,23 @@
             fetchWebhooks();
         }
 
-        // Clear webhooks display
+        // Clear webhooks display - only show new webhooks after this point
         function clearWebhooks() {
+            // Store current timestamp - only show webhooks received after this
+            clearedAtTimestamp = new Date().toISOString();
             webhooks = [];
             renderWebhooks();
             updateStats();
+
+            // Show a brief confirmation message
+            const container = document.getElementById('webhooksList');
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">🧹</div>
+                    <h3>Display cleared</h3>
+                    <p>Only new webhooks received after ${new Date().toLocaleTimeString()} will be shown</p>
+                </div>
+            `;
         }
 
         // Filter webhooks
@@ -491,7 +504,16 @@
                 const data = await response.json();
 
                 if (data.success) {
-                    webhooks = data.webhooks;
+                    // If user clicked Clear, only show webhooks received after that timestamp
+                    if (clearedAtTimestamp) {
+                        webhooks = data.webhooks.filter(w => {
+                            const webhookTime = w.received_at || w.created_at;
+                            return webhookTime > clearedAtTimestamp;
+                        });
+                    } else {
+                        webhooks = data.webhooks;
+                    }
+
                     renderWebhooks();
                     updateStats();
                 } else {
