@@ -1,7 +1,7 @@
 const { Pool } = require('pg');
 
 // Connect to production database using DATABASE_URL
-const DATABASE_URL = 'postgresql://postgres:VSDwOduVchAHaBYXJrtoFvJBgLOQHUpz@gondola.proxy.rlwy.net:41656/railway';
+const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://postgres:iiijaeSBDPUckvGWSopVfrJmvlpNzmDp@gondola.proxy.rlwy.net:41656/railway';
 
 const pool = new Pool({
   connectionString: DATABASE_URL,
