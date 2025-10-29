@@ -5,6 +5,7 @@ const router = express.Router();
 const pool = require('../config/database');
 const auth = require('../middleware/auth');
 const WiseTransactionModel = require('../models/wiseTransactionModel');
+const wiseTransactionProcessor = require('../services/wiseTransactionProcessor');
 const { syncCompleteHistory } = require('./wiseSync_new');
 
 // In-memory storage for recent webhooks (for monitoring dashboard)
@@ -25,18 +26,33 @@ const upload = multer({
   }
 });
 
-// Category mapping
-const categoryMapping = {
-  'Office expenses': 'office_supplies',
-  'Contract services': 'contractor_payments',
-  'Software and web hosting': 'software_subscriptions',
-  'Marketing': 'marketing',
-  'Travel': 'travel',
-  'General': 'other_expenses',
-  'Entertainment': 'meals_entertainment',
-  'Rewards': 'other_income',
-  'Money added': 'bank_transfer'
+// Category mapping for Wise CSV categories
+const wiseCategoryMapping = {
+  'Office expenses': 'Administration',
+  'Contract services': 'Professional Services',
+  'Software and web hosting': 'Software',
+  'Marketing': 'Marketing',
+  'Travel': 'Transportation',
+  'General': 'Other Expenses',
+  'Entertainment': 'Entertainment',
+  'Rewards': 'Other Income',
+  'Money added': 'Other Income',
+  'Groceries': 'Groceries',
+  'Restaurants': 'Restaurants',
+  'Transportation': 'Transportation',
+  'Utilities': 'Utilities',
+  'Shopping': 'Shopping'
 };
+
+/**
+ * Map Wise CSV category to our classification category
+ * @param {string} wiseCategory - Category from Wise CSV
+ * @returns {string} Mapped category
+ */
+function mapWiseCategory(wiseCategory) {
+  if (!wiseCategory) return null;
+  return wiseCategoryMapping[wiseCategory] || null;
+}
 
 function parseCSVLine(line) {
   const result = [];
@@ -73,20 +89,7 @@ function parseCurrency(value) {
 function parseDate(dateStr) {
   if (!dateStr || dateStr === '') return null;
   const date = new Date(dateStr);
-  return date.toISOString().split('T')[0];
-}
-
-function determineType(direction, category) {
-  if (direction === 'IN' || category === 'Rewards' || category === 'Money added') {
-    return 'income';
-  }
-  return 'expense';
-}
-
-function getCategory(wiseCategory, type) {
-  const mapped = categoryMapping[wiseCategory];
-  if (mapped) return mapped;
-  return type === 'income' ? 'other_income' : 'other_expenses';
+  return date.toISOString();
 }
 
 // Expected CSV header for Wise export
@@ -293,6 +296,119 @@ router.delete('/webhooks/clear-db', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/wise/webhooks/health
+ * Get webhook health and statistics
+ */
+router.get('/webhooks/health', auth, async (req, res) => {
+  try {
+    console.log('[Webhook Health] Fetching webhook statistics...');
+
+    // Get webhook statistics from audit log
+    const statsQuery = `
+      SELECT
+        COUNT(*) as total_webhooks,
+        COUNT(DISTINCT wise_transaction_id) as unique_transactions,
+        COUNT(CASE WHEN action LIKE 'webhook_%' THEN 1 END) as webhook_events,
+        COUNT(CASE WHEN action = 'webhook_balance_credit' THEN 1 END) as balance_credits,
+        COUNT(CASE WHEN action = 'webhook_balance_update' THEN 1 END) as balance_updates,
+        COUNT(CASE WHEN action = 'webhook_transfer_state_change' THEN 1 END) as transfer_state_changes,
+        COUNT(CASE WHEN action = 'webhook_card_transaction' THEN 1 END) as card_transactions,
+        COUNT(CASE WHEN action = 'webhook_transfer_issue' THEN 1 END) as transfer_issues,
+        MAX(created_at) as last_webhook_received,
+        MIN(created_at) as first_webhook_received
+      FROM wise_sync_audit_log
+      WHERE action LIKE 'webhook_%'
+        AND created_at > NOW() - INTERVAL '30 days'
+    `;
+
+    const statsResult = await pool.query(statsQuery);
+    const stats = statsResult.rows[0];
+
+    // Get recent webhook processing status
+    const recentQuery = `
+      SELECT
+        action,
+        notes,
+        created_at,
+        wise_transaction_id
+      FROM wise_sync_audit_log
+      WHERE action LIKE 'webhook_%'
+      ORDER BY created_at DESC
+      LIMIT 10
+    `;
+
+    const recentResult = await pool.query(recentQuery);
+
+    // Calculate days since last webhook
+    const daysSinceLastWebhook = stats.last_webhook_received
+      ? Math.floor((new Date() - new Date(stats.last_webhook_received)) / (1000 * 60 * 60 * 24))
+      : null;
+
+    // Determine health status
+    let status = 'healthy';
+    let statusMessage = 'Webhooks are being received and processed normally';
+
+    if (!stats.last_webhook_received) {
+      status = 'no_data';
+      statusMessage = 'No webhook data found in the last 30 days';
+    } else if (daysSinceLastWebhook > 7) {
+      status = 'stale';
+      statusMessage = `No webhooks received in ${daysSinceLastWebhook} days`;
+    } else if (daysSinceLastWebhook > 1) {
+      status = 'warning';
+      statusMessage = `Last webhook received ${daysSinceLastWebhook} days ago`;
+    }
+
+    // Get webhook configuration
+    const webhooksConfigured = [
+      'transfers#state-change',
+      'balances#credit',
+      'balances#update',
+      'card-transactions#created',
+      'card-transactions#updated',
+      'transfers#active-cases'
+    ];
+
+    console.log('[Webhook Health] Statistics retrieved:', {
+      total_webhooks: stats.total_webhooks,
+      status,
+      days_since_last: daysSinceLastWebhook
+    });
+
+    res.json({
+      success: true,
+      data: {
+        status,
+        status_message: statusMessage,
+        webhooks_configured: webhooksConfigured,
+        statistics: {
+          total_webhooks: parseInt(stats.total_webhooks) || 0,
+          unique_transactions: parseInt(stats.unique_transactions) || 0,
+          webhook_events: parseInt(stats.webhook_events) || 0,
+          balance_credits: parseInt(stats.balance_credits) || 0,
+          balance_updates: parseInt(stats.balance_updates) || 0,
+          transfer_state_changes: parseInt(stats.transfer_state_changes) || 0,
+          card_transactions: parseInt(stats.card_transactions) || 0,
+          transfer_issues: parseInt(stats.transfer_issues) || 0,
+          last_received: stats.last_webhook_received,
+          first_received: stats.first_webhook_received,
+          days_since_last_webhook: daysSinceLastWebhook
+        },
+        recent_webhooks: recentResult.rows,
+        endpoint: `${process.env.API_BASE_URL || 'http://localhost:7393'}/api/wise/webhook`
+      }
+    });
+  } catch (error) {
+    console.error('[Webhook Health] Error getting webhook health:', error);
+    res.status(500).json({
+      success: false,
+      error: 'server_error',
+      message: 'Failed to get webhook health'
+    });
+  }
+});
+
 // GET /api/wise/transactions/pending - Get transactions needing review
 router.get('/transactions/pending', auth, async (req, res) => {
   try {
@@ -326,7 +442,7 @@ router.get('/transactions/pending', auth, async (req, res) => {
 
 // POST /api/wise/import - Upload and import Wise CSV
 router.post('/import', auth, upload.single('csvFile'), async (req, res) => {
-  console.log('=== CSV Import Started ===');
+  console.log('=== CSV Import Started (Enhanced with Shared Processor) ===');
   console.log('User:', req.user?.id, req.user?.username);
   console.log('File:', req.file?.originalname, req.file?.size, 'bytes');
 
@@ -366,10 +482,6 @@ router.post('/import', auth, upload.single('csvFile'), async (req, res) => {
     console.log('CSV Headers found:', headerFields.length, 'columns');
     console.log('First 5 headers:', headerFields.slice(0, 5).join(', '));
 
-    // Check if header matches expected format (case-insensitive)
-    const headerLower = headerFields.map(h => h.trim().toLowerCase());
-    const expectedLower = EXPECTED_HEADERS.map(h => h.toLowerCase());
-
     if (headerFields.length !== 21) {
       console.error('ERROR: Wrong number of columns. Expected 21, got', headerFields.length);
       return res.status(400).json({
@@ -379,6 +491,7 @@ router.post('/import', auth, upload.single('csvFile'), async (req, res) => {
     }
 
     // Verify key columns exist
+    const headerLower = headerFields.map(h => h.trim().toLowerCase());
     const hasID = headerLower.includes('id');
     const hasStatus = headerLower.includes('status');
     const hasDirection = headerLower.includes('direction');
@@ -393,165 +506,121 @@ router.post('/import', auth, upload.single('csvFile'), async (req, res) => {
 
     console.log('✓ CSV header validation passed');
 
-    let imported = 0;
-    let skipped = 0;
-    let errors = [];
+    // Parse CSV rows into transaction data
+    const transactions = [];
+    const parseErrors = [];
 
-    // Get database client
-    let client;
-    try {
-      client = await pool.getClient();
-      console.log('✓ Database connection established');
-    } catch (err) {
-      console.error('ERROR: Failed to connect to database:', err.message);
-      return res.status(500).json({
-        error: 'Database connection failed',
-        details: 'Unable to connect to database. Please try again later.'
-      });
-    }
+    for (let i = 1; i < lines.length; i++) {
+      try {
+        const fields = parseCSVLine(lines[i]);
 
-    try {
-      await client.query('BEGIN');
-      console.log('✓ Transaction started');
+        // Validate row has correct number of fields
+        if (fields.length !== 21) {
+          parseErrors.push({ line: i + 1, error: `Expected 21 fields, found ${fields.length}` });
+          continue;
+        }
 
-      for (let i = 1; i < lines.length; i++) {
-        try {
-          const fields = parseCSVLine(lines[i]);
+        const [
+          id, status, direction, createdOn, finishedOn,
+          sourceFeeAmount, sourceFeeCurrency, targetFeeAmount, targetFeeCurrency,
+          sourceName, sourceAmount, sourceCurrency,
+          targetName, targetAmount, targetCurrency,
+          exchangeRate, reference, batch, createdBy, wiseCategory, note
+        ] = fields;
 
-          // Validate row has correct number of fields
-          if (fields.length !== 21) {
-            const errorMsg = `Row ${i + 1}: Expected 21 fields, found ${fields.length}`;
-            console.warn('SKIP:', errorMsg);
-            errors.push({ line: i + 1, error: errorMsg });
-            skipped++;
-            continue;
-          }
+        // Validate required fields
+        if (!id || !id.trim()) {
+          parseErrors.push({ line: i + 1, error: 'Missing transaction ID' });
+          continue;
+        }
 
-          const [
+        // Skip cancelled/refunded transactions
+        if (status === 'CANCELLED' || status === 'REFUNDED') {
+          continue;
+        }
+
+        // Determine amount and currency based on direction
+        let amount, currency;
+        if (direction === 'OUT') {
+          amount = parseCurrency(sourceAmount);
+          currency = sourceCurrency;
+        } else {
+          amount = parseCurrency(targetAmount);
+          currency = targetCurrency;
+        }
+
+        // Skip zero amount transactions
+        if (!amount || amount === 0) {
+          continue;
+        }
+
+        // Determine transaction type
+        const txnType = direction === 'OUT' ? 'DEBIT' : 'CREDIT';
+
+        // Prepare transaction data for processor
+        const txnData = {
+          wise_transaction_id: `CSV-IMPORT-${id}`,
+          wise_resource_id: id,
+          profile_id: process.env.WISE_PROFILE_ID || 'unknown',
+          account_id: null,
+          type: txnType,
+          state: status,
+          amount: Math.abs(amount),
+          currency: currency,
+          description: targetName || sourceName || 'Wise Transaction',
+          merchant_name: targetName || sourceName || null,
+          reference_number: reference || null,
+          transaction_date: parseDate(finishedOn) || parseDate(createdOn),
+          value_date: parseDate(finishedOn) || null,
+          classified_category: mapWiseCategory(wiseCategory),
+          raw_payload: {
+            csvRow: i + 1,
             id, status, direction, createdOn, finishedOn,
             sourceFeeAmount, sourceFeeCurrency, targetFeeAmount, targetFeeCurrency,
             sourceName, sourceAmount, sourceCurrency,
             targetName, targetAmount, targetCurrency,
             exchangeRate, reference, batch, createdBy, wiseCategory, note
-          ] = fields;
-
-          // Validate required fields
-          if (!id || !id.trim()) {
-            const errorMsg = `Row ${i + 1}: Missing transaction ID`;
-            console.warn('SKIP:', errorMsg);
-            errors.push({ line: i + 1, error: errorMsg });
-            skipped++;
-            continue;
           }
+        };
 
-          if (status === 'CANCELLED' || status === 'REFUNDED') {
-            skipped++;
-            continue;
-          }
+        transactions.push(txnData);
 
-          let amount, currency;
-          if (direction === 'OUT') {
-            amount = parseCurrency(sourceAmount);
-            currency = sourceCurrency;
-          } else {
-            amount = parseCurrency(targetAmount);
-            currency = targetCurrency;
-          }
-
-          if (!amount || amount === 0) {
-            skipped++;
-            continue;
-          }
-
-          const type = determineType(direction, wiseCategory);
-          const category = getCategory(wiseCategory, type);
-          const entryDate = parseDate(finishedOn) || parseDate(createdOn);
-
-          let description = targetName || sourceName || 'Wise Transaction';
-          if (reference) description += ` (${reference})`;
-
-          let detail = `Wise ID: ${id}\n`;
-          if (note) detail += `Note: ${note}\n`;
-          if (createdBy) detail += `Created by: ${createdBy}`;
-
-          // Check for existing entry
-          const existingCheck = await client.query(
-            'SELECT id FROM entries WHERE detail LIKE $1',
-            [`%Wise ID: ${id}%`]
-          );
-
-          if (existingCheck.rows.length > 0) {
-            skipped++;
-            continue;
-          }
-
-          // Insert new entry
-          await client.query(
-            `INSERT INTO entries
-             (type, category, description, detail, base_amount, total, entry_date, status)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-            [type, category, description, detail, amount, amount, entryDate, 'completed']
-          );
-
-          imported++;
-
-        } catch (rowErr) {
-          const errorMsg = `Row ${i + 1}: ${rowErr.message}`;
-          console.error('ERROR processing row:', errorMsg);
-          errors.push({ line: i + 1, id: fields[0] || 'unknown', error: rowErr.message });
-          // Continue processing other rows
-        }
+      } catch (rowErr) {
+        parseErrors.push({ line: i + 1, error: rowErr.message });
+        console.error(`Error parsing row ${i + 1}:`, rowErr.message);
       }
-
-      console.log('Processing complete. Imported:', imported, 'Skipped:', skipped, 'Errors:', errors.length);
-
-      await client.query('COMMIT');
-      console.log('✓ Transaction committed');
-
-      // Get updated balance
-      const balanceResult = await client.query(`
-        SELECT
-          SUM(CASE WHEN type = 'income' THEN total ELSE 0 END) as total_income,
-          SUM(CASE WHEN type = 'expense' THEN total ELSE 0 END) as total_expenses,
-          COUNT(*) as total_entries
-        FROM entries
-      `);
-
-      const { total_income, total_expenses, total_entries } = balanceResult.rows[0];
-      const balance = (parseFloat(total_income) || 0) - (parseFloat(total_expenses) || 0);
-
-      const response = {
-        success: true,
-        message: `Successfully processed ${lines.length - 1} transactions`,
-        summary: {
-          imported,
-          skipped,
-          errors: errors.length,
-          totalProcessed: lines.length - 1
-        },
-        balance: {
-          totalIncome: parseFloat(total_income) || 0,
-          totalExpenses: parseFloat(total_expenses) || 0,
-          netBalance: balance,
-          totalEntries: parseInt(total_entries)
-        },
-        errors: errors.length > 0 ? errors.slice(0, 10) : undefined // Show first 10 errors
-      };
-
-      console.log('=== Import Complete ===');
-      console.log('Response:', JSON.stringify(response.summary));
-      res.json(response);
-
-    } catch (err) {
-      console.error('ERROR during transaction:', err.message);
-      console.error('Stack:', err.stack);
-      await client.query('ROLLBACK');
-      console.log('✓ Transaction rolled back');
-      throw err;
-    } finally {
-      client.release();
-      console.log('✓ Database connection released');
     }
+
+    console.log(`✓ Parsed ${transactions.length} valid transactions (${parseErrors.length} parse errors)`);
+
+    // Process transactions using shared processor
+    console.log('Processing transactions with shared processor...');
+    const processingStats = await wiseTransactionProcessor.processBatch(transactions, 'csv');
+
+    // Prepare response
+    const response = {
+      success: true,
+      message: `CSV import complete`,
+      summary: {
+        totalRows: lines.length - 1,
+        parsed: transactions.length,
+        parseErrors: parseErrors.length,
+        imported: processingStats.imported,
+        updated: processingStats.updated,
+        skipped: processingStats.skipped,
+        processingErrors: processingStats.errors,
+        entriesCreated: processingStats.entriesCreated,
+        durationMs: processingStats.durationMs
+      },
+      details: {
+        parseErrors: parseErrors.length > 0 ? parseErrors.slice(0, 10) : [],
+        processingErrors: processingStats.errorDetails.length > 0 ? processingStats.errorDetails.slice(0, 10) : []
+      }
+    };
+
+    console.log('=== Import Complete ===');
+    console.log('Summary:', JSON.stringify(response.summary));
+    res.json(response);
 
   } catch (error) {
     console.error('=== Import Failed ===');
@@ -559,24 +628,10 @@ router.post('/import', auth, upload.single('csvFile'), async (req, res) => {
     console.error('Error message:', error.message);
     console.error('Error stack:', error.stack);
 
-    // Provide specific error messages based on error type
-    let errorResponse = {
+    res.status(500).json({
       error: 'Failed to import CSV',
       details: error.message
-    };
-
-    if (error.message.includes('connect')) {
-      errorResponse.error = 'Database connection failed';
-      errorResponse.details = 'Unable to connect to database. Please try again later.';
-    } else if (error.message.includes('permission')) {
-      errorResponse.error = 'Permission denied';
-      errorResponse.details = 'You do not have permission to import transactions.';
-    } else if (error.message.includes('duplicate')) {
-      errorResponse.error = 'Duplicate transaction';
-      errorResponse.details = 'Some transactions already exist in the database.';
-    }
-
-    res.status(500).json(errorResponse);
+    });
   }
 });
 
@@ -934,6 +989,55 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
       }
     }
 
+    // Handle card transaction events (new)
+    if (event.event_type === 'card-transactions#created' || event.event_type === 'card-transactions#updated') {
+      console.log('Processing card transaction event...');
+
+      try {
+        const result = await processCardTransaction(event.data);
+
+        const elapsed = Date.now() - startTime;
+        console.log(`✓ Card transaction processed in ${elapsed}ms`);
+
+        webhookData.processing_status = 'success';
+        webhookData.processing_result = result;
+        webhookData.processing_time_ms = elapsed;
+
+        recentWebhooks.unshift(webhookData);
+        if (recentWebhooks.length > MAX_RECENT_WEBHOOKS) {
+          recentWebhooks.pop();
+        }
+
+        await pool.query(
+          `INSERT INTO wise_sync_audit_log (wise_transaction_id, action, notes, new_values)
+           VALUES ($1, $2, $3, $4)`,
+          [
+            result?.transactionId || null,
+            'webhook_card_transaction',
+            `Card transaction processed: ${result?.message || 'Transaction created'}`,
+            JSON.stringify({ webhook: webhookData, result })
+          ]
+        );
+
+        return res.status(200).json({
+          success: true,
+          message: 'Card transaction processed',
+          processing_time_ms: elapsed,
+          result
+        });
+      } catch (error) {
+        const elapsed = Date.now() - startTime;
+        webhookData.processing_status = 'failed';
+        webhookData.error = error.message;
+        webhookData.processing_time_ms = elapsed;
+        recentWebhooks.unshift(webhookData);
+        if (recentWebhooks.length > MAX_RECENT_WEBHOOKS) {
+          recentWebhooks.pop();
+        }
+        throw error;
+      }
+    }
+
     // Unknown event type
     console.warn('Unknown event type:', event.event_type);
 
@@ -948,9 +1052,10 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
     }
 
     await pool.query(
-      `INSERT INTO wise_sync_audit_log (action, notes, new_values)
-       VALUES ($1, $2, $3)`,
+      `INSERT INTO wise_sync_audit_log (wise_transaction_id, action, notes, new_values)
+       VALUES ($1, $2, $3, $4)`,
       [
+        `WEBHOOK-UNKNOWN-${Date.now()}`,  // Placeholder ID for unknown events
         'webhook_unknown_event',
         `Unknown event type received: ${event.event_type}`,
         JSON.stringify(webhookData)
@@ -1008,6 +1113,8 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
 // Process balance transaction from webhook
 async function processBalanceTransaction(data, direction) {
   try {
+    console.log('[Webhook] Processing balance transaction...');
+
     // Extract resource ID and timestamp from webhook
     const balanceId = data.resource?.id;
     const occurredAt = data.occurred_at;
@@ -1017,10 +1124,12 @@ async function processBalanceTransaction(data, direction) {
       throw new Error('Webhook missing required fields: resource.id or occurred_at');
     }
 
-    console.log('Fetching transaction details from Wise API...');
-    console.log(`  Balance ID: ${balanceId}`);
-    console.log(`  Occurred At: ${occurredAt}`);
-    console.log(`  Profile ID: ${profileId}`);
+    console.log('[Webhook] Balance event details:', {
+      balance_id: balanceId,
+      occurred_at: occurredAt,
+      profile_id: profileId,
+      direction
+    });
 
     // Call Wise Balance Statement API to get full transaction details
     const WISE_API_TOKEN = process.env.WISE_API_TOKEN;
@@ -1041,7 +1150,7 @@ async function processBalanceTransaction(data, direction) {
 
     const statementUrl = `${WISE_API_URL}/v1/profiles/${profileId}/balance-statements/${balanceId}/statement.json?currency=${currency}&intervalStart=${intervalStart}&intervalEnd=${intervalEnd}&type=COMPACT`;
 
-    console.log(`  API URL: ${statementUrl}`);
+    console.log('[Webhook] Fetching transaction from Wise API...');
 
     const response = await fetch(statementUrl, {
       method: 'GET',
@@ -1053,12 +1162,12 @@ async function processBalanceTransaction(data, direction) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('Wise API Error:', response.status, errorText);
+      console.error('[Webhook] Wise API Error:', response.status, errorText);
       throw new Error(`Wise API returned ${response.status}: ${errorText}`);
     }
 
     const statement = await response.json();
-    console.log(`  ✓ Received statement with ${statement.transactions?.length || 0} transactions`);
+    console.log(`[Webhook] Received statement with ${statement.transactions?.length || 0} transactions`);
 
     // Find the transaction that matches our event time
     const transactions = statement.transactions || [];
@@ -1069,7 +1178,7 @@ async function processBalanceTransaction(data, direction) {
     });
 
     if (!matchingTransaction) {
-      console.log('  ⚠️ No matching transaction found in statement');
+      console.log('[Webhook] No matching transaction found in statement');
       return {
         action: 'not_found',
         message: 'Transaction not found in statement',
@@ -1078,107 +1187,50 @@ async function processBalanceTransaction(data, direction) {
       };
     }
 
-    console.log('  ✓ Found matching transaction');
+    console.log('[Webhook] Found matching transaction:', matchingTransaction.referenceNumber);
 
-    // Extract transaction details from API response
-    const transactionId = matchingTransaction.referenceNumber;
-    const amount = Math.abs(parseFloat(matchingTransaction.amount.value));
-    const txnCurrency = matchingTransaction.amount.currency;
-    const description = matchingTransaction.details?.description || '';
-    const merchantName = matchingTransaction.details?.senderName || matchingTransaction.details?.recipientName || '';
-    const referenceNumber = matchingTransaction.referenceNumber;
-    const transactionDate = matchingTransaction.date;
-
-    // Check for duplicates
-    const existing = await WiseTransactionModel.exists(transactionId);
-    if (existing) {
-      console.log(`Transaction ${transactionId} already exists, skipping`);
-      return {
-        transactionId,
-        action: 'skipped',
-        message: 'Transaction already exists in database'
-      };
-    }
-
-    // Prepare transaction data for classification
-    const transactionData = {
-      type: direction === 'CREDIT' ? 'CREDIT' : 'DEBIT',
-      amount,
-      currency: txnCurrency,
-      description,
-      merchantName,
-      referenceNumber,
-      transactionDate
+    // Map transaction to normalized format for shared processor
+    const txnData = {
+      wise_transaction_id: matchingTransaction.referenceNumber,
+      wise_resource_id: balanceId,
+      profile_id: profileId,
+      account_id: balanceId,
+      type: matchingTransaction.type, // CREDIT or DEBIT from API
+      state: 'COMPLETED',
+      amount: Math.abs(parseFloat(matchingTransaction.amount.value)),
+      currency: matchingTransaction.amount.currency,
+      description: matchingTransaction.details?.description || 'Wise Balance Transaction',
+      merchant_name: matchingTransaction.details?.senderName || matchingTransaction.details?.recipientName || null,
+      reference_number: matchingTransaction.referenceNumber,
+      transaction_date: matchingTransaction.date,
+      value_date: matchingTransaction.date,
+      raw_payload: matchingTransaction
     };
 
-    // Store transaction in database (no classification needed)
-    const savedTransaction = await WiseTransactionModel.create({
-      wiseTransactionId: transactionId,
-      wiseResourceId: balanceId,
-      profileId: profileId,
-      accountId: balanceId,
-      type: matchingTransaction.type, // CREDIT or DEBIT from API
-      state: 'completed',
-      amount,
-      currency: txnCurrency,
-      description,
-      merchantName,
-      referenceNumber,
-      transactionDate,
-      valueDate: transactionDate,
-      syncStatus: 'processed',
-      classifiedCategory: null,
-      matchedEmployeeId: null,
-      confidenceScore: null,
-      needsReview: false,
-      rawPayload: matchingTransaction
+    // Process with shared processor
+    const result = await wiseTransactionProcessor.processTransaction(txnData, 'webhook');
+
+    console.log('[Webhook] Balance transaction processed:', {
+      transaction_id: txnData.wise_transaction_id,
+      action: result.action,
+      entry_created: result.entryCreated,
+      amount: txnData.amount,
+      currency: txnData.currency
     });
-
-    console.log(`✓ Transaction saved: ${transactionId} - ${description} (${amount} ${txnCurrency})`);
-
-    // Create entry immediately (all Wise transactions are completed)
-    const entryType = matchingTransaction.type === 'CREDIT' ? 'income' : 'expense';
-    const category = entryType === 'income' ? 'other_income' : 'other_expenses';
-
-    const entryResult = await pool.query(
-      `INSERT INTO entries (type, category, description, detail, base_amount, total, entry_date, status, currency, amount_original)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-       RETURNING id`,
-      [
-        entryType,
-        category,
-        description || 'Wise transaction',
-        `Imported from Wise (Ref: ${transactionId})`,
-        amount,
-        amount,
-        transactionDate.split('T')[0],
-        'completed',
-        txnCurrency,
-        amount
-      ]
-    );
-
-    // Link entry to transaction
-    await WiseTransactionModel.updateStatus(transactionId, {
-      entryId: entryResult.rows[0].id,
-      syncStatus: 'processed'
-    });
-
-    console.log(`✓ Entry created: ${entryType} ${amount} ${txnCurrency}`);
 
     return {
-      transactionId,
-      action: 'created',
-      message: `Transaction imported and entry created`,
-      transactionDbId: savedTransaction.id,
-      entryId: entryResult.rows[0].id,
-      entryCreated: true,
-      amount,
-      currency: txnCurrency
+      transactionId: txnData.wise_transaction_id,
+      action: result.action,
+      message: result.entryCreated ? 'Transaction imported and entry created' : 'Transaction processed',
+      entryCreated: result.entryCreated,
+      entryId: result.entryId,
+      confidence: result.confidence,
+      amount: txnData.amount,
+      currency: txnData.currency
     };
 
   } catch (error) {
-    console.error('Error processing balance transaction:', error);
+    console.error('[Webhook] Error processing balance transaction:', error);
     throw error;
   }
 }
@@ -1186,41 +1238,102 @@ async function processBalanceTransaction(data, direction) {
 // Process transfer state change from webhook
 async function processTransferStateChange(data) {
   try {
+    console.log('[Webhook] Processing transfer state change...');
+
     const transferId = data.resource?.id || data.transfer_id || data.id;
     const currentState = data.current_state || data.state;
+    const profileId = data.profile_id || process.env.WISE_PROFILE_ID;
 
-    console.log(`Transfer ${transferId} changed to state: ${currentState}`);
+    console.log('[Webhook] Transfer event details:', {
+      transfer_id: transferId,
+      current_state: currentState,
+      previous_state: data.previous_state,
+      profile_id: profileId
+    });
 
     // Check if we have this transaction
     const existing = await WiseTransactionModel.getByWiseId(transferId);
 
     if (existing) {
-      // Update transaction state
-      await WiseTransactionModel.updateStatus(transferId, {
-        state: currentState
+      // Transaction exists - fetch full details from Wise API and reprocess
+      console.log('[Webhook] Transfer found in database, fetching updated details...');
+
+      const WISE_API_TOKEN = process.env.WISE_API_TOKEN;
+      const WISE_API_URL = process.env.WISE_API_URL || 'https://api.wise.com';
+
+      if (!WISE_API_TOKEN) {
+        throw new Error('WISE_API_TOKEN environment variable not set');
+      }
+
+      // Fetch transfer details from Wise API
+      const transferUrl = `${WISE_API_URL}/v1/transfers/${transferId}`;
+      const response = await fetch(transferUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${WISE_API_TOKEN}`,
+          'Content-Type': 'application/json'
+        }
       });
-      console.log(`✓ Updated transaction state for ${transferId}`);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[Webhook] Wise API Error:', response.status, errorText);
+        throw new Error(`Wise API returned ${response.status}: ${errorText}`);
+      }
+
+      const transferDetails = await response.json();
+
+      // Map to transaction data format
+      const txnData = {
+        wise_transaction_id: transferDetails.customerTransactionId || `TRANSFER-${transferDetails.id}`,
+        wise_resource_id: transferId,
+        profile_id: profileId,
+        account_id: transferDetails.sourceAccount || transferDetails.targetAccount,
+        type: transferDetails.sourceValue ? 'DEBIT' : 'CREDIT',
+        state: currentState,
+        amount: Math.abs(transferDetails.sourceValue || transferDetails.targetValue || 0),
+        currency: transferDetails.sourceCurrency || transferDetails.targetCurrency,
+        description: transferDetails.details?.reference || 'Wire Transfer',
+        merchant_name: null,
+        reference_number: transferDetails.reference,
+        transaction_date: transferDetails.created,
+        value_date: transferDetails.created,
+        raw_payload: transferDetails
+      };
+
+      // Process with shared processor (will update existing transaction)
+      const processor = new wiseTransactionProcessor();
+      const result = await processor.processTransaction(txnData, 'webhook');
+
+      console.log('[Webhook] Transfer state change processed:', {
+        transfer_id: transferId,
+        previous_state: existing.state,
+        current_state: currentState,
+        action: result.action
+      });
 
       return {
         transferId,
-        action: 'updated',
+        action: result.action,
         message: `Transfer state updated to ${currentState}`,
         previousState: existing.state,
-        currentState
+        currentState,
+        entryCreated: result.entryCreated,
+        entryId: result.entryId
       };
     } else {
-      console.log(`Transaction ${transferId} not found in database`);
+      console.log('[Webhook] Transfer not found in database - will be created when full sync runs');
 
       return {
         transferId,
         action: 'not_found',
-        message: 'Transfer not found in database',
+        message: 'Transfer not found in database - will be synced later',
         currentState
       };
     }
 
   } catch (error) {
-    console.error('Error processing transfer state change:', error);
+    console.error('[Webhook] Error processing transfer state change:', error);
     throw error;
   }
 }
@@ -1293,6 +1406,79 @@ async function processTransferIssue(data) {
 
   } catch (error) {
     console.error('Error processing transfer issue:', error);
+    throw error;
+  }
+}
+
+// Process card transaction from webhook
+async function processCardTransaction(data) {
+  try {
+    console.log('[Webhook] Processing card transaction...');
+
+    const cardTransactionId = data.id || data.transaction_id;
+    const profileId = data.profile_id || process.env.WISE_PROFILE_ID;
+
+    if (!cardTransactionId) {
+      throw new Error('Webhook missing required field: card transaction ID');
+    }
+
+    console.log('[Webhook] Card transaction details:', {
+      transaction_id: cardTransactionId,
+      type: data.type,
+      state: data.state,
+      merchant: data.merchant?.name,
+      amount: data.amount?.value,
+      currency: data.amount?.currency
+    });
+
+    // Map card transaction to normalized format
+    const txnData = {
+      wise_transaction_id: cardTransactionId,
+      wise_resource_id: cardTransactionId,
+      profile_id: profileId,
+      account_id: data.card_id || data.account_id,
+      type: data.type === 'CARD_DEBIT' || data.type === 'DEBIT' ? 'DEBIT' : 'CREDIT',
+      state: data.state || 'COMPLETED',
+      amount: Math.abs(parseFloat(data.amount?.value || 0)),
+      currency: data.amount?.currency,
+      description: data.merchant?.name || data.description || 'Card Payment',
+      merchant_name: data.merchant?.name || null,
+      merchant_category: data.merchant?.category || null,
+      merchant_city: data.merchant?.city || null,
+      merchant_country: data.merchant?.country || null,
+      reference_number: data.reference || cardTransactionId,
+      transaction_date: data.createdAt || data.created_at || data.date,
+      value_date: data.createdAt || data.created_at || data.date,
+      raw_payload: data
+    };
+
+    // Process with shared processor
+    const result = await wiseTransactionProcessor.processTransaction(txnData, 'webhook');
+
+    console.log('[Webhook] Card transaction processed:', {
+      transaction_id: txnData.wise_transaction_id,
+      action: result.action,
+      entry_created: result.entryCreated,
+      merchant: txnData.merchant_name,
+      amount: txnData.amount,
+      currency: txnData.currency,
+      confidence: result.confidence
+    });
+
+    return {
+      transactionId: txnData.wise_transaction_id,
+      action: result.action,
+      message: result.entryCreated ? 'Card transaction imported and entry created' : 'Card transaction processed',
+      entryCreated: result.entryCreated,
+      entryId: result.entryId,
+      confidence: result.confidence,
+      merchant: txnData.merchant_name,
+      amount: txnData.amount,
+      currency: txnData.currency
+    };
+
+  } catch (error) {
+    console.error('[Webhook] Error processing card transaction:', error);
     throw error;
   }
 }

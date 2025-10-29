@@ -11,6 +11,7 @@ const currencyRoutes = require('./routes/currencyRoutes');
 const wiseTestRoutes = require('./routes/wiseTestRoutes');
 const wiseDebugRoutes = require('./routes/wiseDebug');
 const wiseTransactionReviewRoutes = require('./routes/wiseTransactionReview');
+const wiseSyncRoutes = require('./routes/wiseSync_new');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 
 const app = express();
@@ -46,6 +47,7 @@ app.use('/api/contracts', contractRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/wise', wiseImportRoutes); // CSV upload only
 app.use('/api/wise', wiseTransactionReviewRoutes); // Transaction review endpoints
+app.use('/api/wise', wiseSyncRoutes); // Wise API sync endpoints
 app.use('/api/currency', currencyRoutes);
 app.use('/api/wise-test', wiseTestRoutes); // Wise API testing endpoints
 app.use('/api/wise/debug', wiseDebugRoutes); // Wise profile debugging endpoints
@@ -64,6 +66,37 @@ app.use(notFoundHandler);
 
 // Global error handling middleware (must be LAST)
 app.use(errorHandler);
+
+// Wise Sync Scheduler (Cron Job)
+const cron = require('node-cron');
+const { runScheduledSync } = require('./routes/wiseSync_new');
+
+const WISE_SYNC_ENABLED = process.env.WISE_SYNC_ENABLED !== 'false';
+const WISE_SYNC_CRON = process.env.WISE_SYNC_CRON || '0 */6 * * *'; // Every 6 hours by default
+
+if (WISE_SYNC_ENABLED) {
+  console.log(`📅 Wise sync scheduler enabled: ${WISE_SYNC_CRON}`);
+
+  cron.schedule(WISE_SYNC_CRON, async () => {
+    const timestamp = new Date().toISOString();
+    console.log(`\n🕐 [${timestamp}] Running scheduled Wise sync...`);
+
+    try {
+      const result = await runScheduledSync();
+      if (result.success) {
+        console.log(`✓ [${timestamp}] Sync completed:`, result.stats);
+      } else {
+        console.log(`⊘ [${timestamp}] Sync skipped:`, result.message);
+      }
+    } catch (error) {
+      console.error(`✗ [${timestamp}] Sync failed:`, error.message);
+    }
+  });
+
+  console.log('✓ Wise sync scheduler initialized');
+} else {
+  console.log('⊘ Wise sync scheduler disabled');
+}
 
 // Start server
 app.listen(PORT, () => {

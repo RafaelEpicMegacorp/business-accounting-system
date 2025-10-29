@@ -1,8 +1,39 @@
 // Complete historical sync implementation using Activities API + Transfer API
 // This avoids SCA requirements and fetches complete transaction history
 
+const express = require('express');
+const router = express.Router();
 const pool = require('../config/database');
 const WiseTransactionModel = require('../models/wiseTransactionModel');
+const authMiddleware = require('../middleware/auth');
+
+/**
+ * Get metadata value from wise_sync_metadata table
+ * @param {string} key - Metadata key
+ * @returns {string|null} Metadata value
+ */
+async function getMetadata(key) {
+  const result = await pool.query(
+    'SELECT value FROM wise_sync_metadata WHERE key = $1',
+    [key]
+  );
+  return result.rows.length > 0 ? result.rows[0].value : null;
+}
+
+/**
+ * Set metadata value in wise_sync_metadata table
+ * @param {string} key - Metadata key
+ * @param {string} value - Metadata value
+ */
+async function setMetadata(key, value) {
+  await pool.query(
+    `INSERT INTO wise_sync_metadata (key, value)
+     VALUES ($1, $2)
+     ON CONFLICT (key)
+     DO UPDATE SET value = $2, updated_at = CURRENT_TIMESTAMP`,
+    [key, value]
+  );
+}
 
 /**
  * Fetch historical transfers from Wise Transfer API
@@ -554,4 +585,360 @@ async function syncCompleteHistory(req, res) {
   }
 }
 
-module.exports = { syncCompleteHistory };
+/**
+ * Incremental sync - fetches only new transactions since last sync
+ * Uses Activities API with date range filtering
+ * @param {number} lookbackHours - Safety margin to fetch slightly older transactions (default: 12)
+ * @returns {Object} Sync statistics
+ */
+async function runIncrementalSync(lookbackHours = 12) {
+  console.log('🔄 Starting incremental Wise sync...');
+
+  const WISE_API_TOKEN = process.env.WISE_API_TOKEN;
+  const WISE_API_URL = process.env.WISE_API_URL || 'https://api.wise.com';
+  const WISE_PROFILE_ID = process.env.WISE_PROFILE_ID;
+
+  if (!WISE_API_TOKEN || !WISE_PROFILE_ID) {
+    throw new Error('Wise API not configured. Missing WISE_API_TOKEN or WISE_PROFILE_ID');
+  }
+
+  const stats = {
+    activitiesProcessed: 0,
+    transactionsFound: 0,
+    newTransactions: 0,
+    duplicatesSkipped: 0,
+    entriesCreated: 0,
+    errors: 0,
+    errorDetails: [],
+    dateRange: { since: null, until: null }
+  };
+
+  try {
+    // Get last sync timestamp
+    const lastSyncTimestamp = await getMetadata('last_sync_timestamp');
+
+    // Calculate date range with lookback buffer
+    const now = new Date();
+    let since;
+
+    if (lastSyncTimestamp) {
+      const lastSync = new Date(lastSyncTimestamp);
+      since = new Date(lastSync.getTime() - (lookbackHours * 60 * 60 * 1000));
+      console.log(`   Last sync: ${lastSync.toISOString()}`);
+      console.log(`   Fetching since: ${since.toISOString()} (${lookbackHours}h lookback buffer)`);
+    } else {
+      // First sync - go back 7 days
+      since = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000));
+      console.log(`   First sync - fetching last 7 days since: ${since.toISOString()}`);
+    }
+
+    stats.dateRange.since = since.toISOString();
+    stats.dateRange.until = now.toISOString();
+
+    // Fetch activities from Wise API with pagination
+    const allActivities = [];
+    let cursor = null;
+    let pageCount = 0;
+
+    do {
+      pageCount++;
+      const url = cursor
+        ? `${WISE_API_URL}/v1/profiles/${WISE_PROFILE_ID}/activities?cursor=${cursor}&size=100`
+        : `${WISE_API_URL}/v1/profiles/${WISE_PROFILE_ID}/activities?since=${since.toISOString()}&size=100`;
+
+      console.log(`   Fetching page ${pageCount}...`);
+
+      const activitiesResponse = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${WISE_API_TOKEN}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!activitiesResponse.ok) {
+        const errorText = await activitiesResponse.text();
+        throw new Error(`Wise API error: ${activitiesResponse.status} ${errorText}`);
+      }
+
+      const data = await activitiesResponse.json();
+      const activities = data.activities || [];
+
+      allActivities.push(...activities);
+      cursor = data.nextCursor;
+
+      console.log(`   ✓ Fetched ${activities.length} activities (Total: ${allActivities.length})`);
+
+    } while (cursor);
+
+    stats.activitiesProcessed = allActivities.length;
+
+    // Process each activity
+    console.log(`\n📋 Processing ${allActivities.length} activities...`);
+
+    for (const activity of allActivities) {
+      try {
+        // Process TRANSFER activities
+        if (activity.type === 'TRANSFER' && activity.resource?.id) {
+          const transferId = activity.resource.id;
+
+          // Fetch full transfer details
+          const transferResponse = await fetch(
+            `${WISE_API_URL}/v1/transfers/${transferId}`,
+            {
+              method: 'GET',
+              headers: {
+                'Authorization': `Bearer ${WISE_API_TOKEN}`,
+                'Content-Type': 'application/json'
+              }
+            }
+          );
+
+          if (!transferResponse.ok) {
+            throw new Error(`Transfer API error for ${transferId}: ${transferResponse.status}`);
+          }
+
+          const transfer = await transferResponse.json();
+
+          // Determine transaction type
+          const txnType = transfer.sourceValue ? 'DEBIT' : 'CREDIT';
+          const amount = Math.abs(parseFloat(transfer.sourceValue || transfer.targetValue));
+          const currency = transfer.sourceCurrency || transfer.targetCurrency;
+          const description = transfer.details?.reference || '';
+          const transactionId = transfer.customerTransactionId || `TRANSFER-${transfer.id}`;
+          const transactionDate = transfer.created;
+
+          // Check for duplicates
+          const existing = await WiseTransactionModel.exists(transactionId);
+          if (existing) {
+            stats.duplicatesSkipped++;
+            continue;
+          }
+
+          stats.transactionsFound++;
+
+          // Store transaction in database
+          await WiseTransactionModel.create({
+            wiseTransactionId: transactionId,
+            wiseResourceId: transfer.id.toString(),
+            profileId: WISE_PROFILE_ID,
+            accountId: transfer.sourceAccount || transfer.targetAccount,
+            type: txnType,
+            state: transfer.status || 'completed',
+            amount,
+            currency,
+            description,
+            merchantName: '',
+            referenceNumber: transactionId,
+            transactionDate,
+            valueDate: transactionDate,
+            syncStatus: 'processed',
+            classifiedCategory: null,
+            matchedEmployeeId: null,
+            confidenceScore: null,
+            needsReview: false,
+            rawPayload: transfer
+          });
+
+          stats.newTransactions++;
+
+          // Create entry
+          const entryType = txnType === 'CREDIT' ? 'income' : 'expense';
+          const category = entryType === 'income' ? 'other_income' : 'other_expenses';
+
+          const entryResult = await pool.query(
+            `INSERT INTO entries (type, category, description, detail, base_amount, total, entry_date, status, currency, amount_original, wise_transaction_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+             RETURNING id`,
+            [
+              entryType,
+              category,
+              description || 'Wise transaction',
+              `Imported from Wise (Ref: ${transactionId})`,
+              amount,
+              amount,
+              transactionDate.split('T')[0],
+              'completed',
+              currency,
+              amount,
+              transactionId
+            ]
+          );
+
+          // Link entry to transaction
+          await WiseTransactionModel.updateStatus(transactionId, {
+            entryId: entryResult.rows[0].id,
+            syncStatus: 'processed'
+          });
+
+          stats.entriesCreated++;
+
+        } else if (activity.type === 'CARD_PAYMENT' && activity.resource?.id) {
+          // Process CARD_PAYMENT activities
+          const cardTransactionId = activity.resource.id;
+          const primaryAmount = activity.primaryAmount || '';
+          const amountMatch = primaryAmount.match(/^(-?[\d,]+\.?\d*)\s+([A-Z]{3})$/);
+
+          if (!amountMatch) {
+            console.warn(`      ⚠️  Cannot parse primaryAmount: ${primaryAmount}`);
+            continue;
+          }
+
+          const amount = Math.abs(parseFloat(amountMatch[1].replace(/,/g, '')));
+          const currency = amountMatch[2];
+          const txnType = 'DEBIT';
+          const description = (activity.title || 'Card payment').replace(/<[^>]*>/g, '').trim();
+          const transactionDate = activity.createdOn;
+          const transactionId = `CARD_PAYMENT-${cardTransactionId}`;
+
+          // Check for duplicate
+          const existing = await WiseTransactionModel.exists(transactionId);
+          if (existing) {
+            stats.duplicatesSkipped++;
+            continue;
+          }
+
+          stats.transactionsFound++;
+
+          // Store in wise_transactions table
+          await WiseTransactionModel.create({
+            wiseTransactionId: transactionId,
+            wiseResourceId: cardTransactionId.toString(),
+            profileId: WISE_PROFILE_ID,
+            accountId: null,
+            type: txnType,
+            state: 'completed',
+            amount,
+            currency,
+            description,
+            merchantName: '',
+            referenceNumber: transactionId,
+            transactionDate,
+            valueDate: transactionDate,
+            syncStatus: 'processed',
+            classifiedCategory: 'other_expenses',
+            matchedEmployeeId: null,
+            confidenceScore: 100,
+            needsReview: false,
+            rawPayload: activity
+          });
+
+          stats.newTransactions++;
+
+          // Create entry in entries table
+          const entryResult = await pool.query(
+            `INSERT INTO entries (type, category, description, detail, base_amount, total, entry_date, status, currency, amount_original, wise_transaction_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+             RETURNING id`,
+            [
+              'expense',
+              'other_expenses',
+              description,
+              `Imported from Wise (Card Payment)`,
+              amount,
+              amount,
+              transactionDate.split('T')[0],
+              'completed',
+              currency,
+              amount,
+              transactionId
+            ]
+          );
+
+          // Link entry to transaction
+          await WiseTransactionModel.updateStatus(transactionId, {
+            entryId: entryResult.rows[0].id,
+            syncStatus: 'processed'
+          });
+
+          stats.entriesCreated++;
+        }
+
+      } catch (error) {
+        stats.errors++;
+        stats.errorDetails.push({
+          activity: activity.type,
+          resourceId: activity.resource?.id,
+          error: error.message
+        });
+        console.error(`   ❌ Error processing activity:`, error.message);
+      }
+    }
+
+    // Update last sync timestamp
+    await setMetadata('last_sync_timestamp', now.toISOString());
+
+    // Increment sync count
+    const syncCount = parseInt(await getMetadata('sync_count') || '0') + 1;
+    await setMetadata('sync_count', syncCount.toString());
+
+    // Store stats
+    await setMetadata('last_sync_stats', JSON.stringify(stats));
+
+    console.log('\n📊 Incremental sync complete:');
+    console.log(`   Activities processed: ${stats.activitiesProcessed}`);
+    console.log(`   New transactions: ${stats.newTransactions}`);
+    console.log(`   Duplicates skipped: ${stats.duplicatesSkipped}`);
+    console.log(`   Entries created: ${stats.entriesCreated}`);
+    console.log(`   Errors: ${stats.errors}`);
+
+    return stats;
+
+  } catch (error) {
+    console.error('❌ Incremental sync failed:', error.message);
+    throw error;
+  }
+}
+
+/**
+ * POST /api/wise/sync/manual - Manual sync trigger endpoint
+ */
+router.post('/sync/manual', authMiddleware, async (req, res) => {
+  try {
+    const stats = await runIncrementalSync();
+    res.json({
+      success: true,
+      message: 'Manual sync completed',
+      stats
+    });
+  } catch (error) {
+    console.error('Manual sync error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'sync_failed',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/wise/sync - Complete historical sync (existing endpoint)
+ */
+router.post('/sync', authMiddleware, syncCompleteHistory);
+
+/**
+ * Export sync function for cron job use
+ */
+async function runScheduledSync() {
+  console.log('\n🕐 [CRON] Running scheduled Wise sync...');
+
+  // Check if sync is enabled
+  const syncEnabled = await getMetadata('sync_enabled');
+  if (syncEnabled === 'false') {
+    console.log('⊘ Sync disabled in metadata - skipping');
+    return { success: false, message: 'Sync disabled' };
+  }
+
+  try {
+    const stats = await runIncrementalSync();
+    return { success: true, stats };
+  } catch (error) {
+    console.error('❌ [CRON] Scheduled sync failed:', error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+module.exports = router;
+module.exports.runScheduledSync = runScheduledSync;
+module.exports.runIncrementalSync = runIncrementalSync;
+module.exports.syncCompleteHistory = syncCompleteHistory;
