@@ -13,11 +13,12 @@ import ForecastView from './ForecastView';
 import SalaryCalendar from './SalaryCalendar';
 import SearchBar from './SearchBar';
 import FilterPanel from './FilterPanel';
+import TransactionReview from './TransactionReview';
 import { exportEntriesToCSV, exportEmployeesToCSV, exportContractsToCSV } from '../utils/csvExport';
 
 export default function AccountingApp() {
   const { user, logout } = useAuth();
-  const [currentView, setCurrentView] = useState('dashboard'); // 'dashboard', 'forecast', 'income', 'expenses', 'salaries', 'employees', 'contracts'
+  const [currentView, setCurrentView] = useState('dashboard'); // 'dashboard', 'forecast', 'income', 'expenses', 'salaries', 'employees', 'contracts', 'transaction-review'
   const [entries, setEntries] = useState([]);
   const [totals, setTotals] = useState({
     total_income: '0',
@@ -499,6 +500,16 @@ export default function AccountingApp() {
             >
               Employees
             </button>
+            <button
+              onClick={() => setCurrentView('transaction-review')}
+              className={`px-4 py-2 font-medium transition ${
+                currentView === 'transaction-review'
+                  ? 'text-blue-600 border-b-2 border-blue-600'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Review Transactions
+            </button>
           </div>
 
           {(currentView === 'income' || currentView === 'expenses' || currentView === 'salaries') && (
@@ -774,6 +785,11 @@ export default function AccountingApp() {
             onEmployeeSelect={null}
             onEdit={handleEmployeeEdit}
           />
+        )}
+
+        {/* Transaction Review View */}
+        {currentView === 'transaction-review' && (
+          <TransactionReview />
         )}
 
         {/* Contracts View */}

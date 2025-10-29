@@ -5,9 +5,164 @@ const pool = require('../config/database');
 const WiseTransactionModel = require('../models/wiseTransactionModel');
 
 /**
+ * Fetch historical transfers from Wise Transfer API
+ * Transfer API has no date limitations and can fetch complete history
+ * @param {string} startDate - ISO date string (e.g., "2024-08-01T00:00:00.000Z")
+ * @param {string} endDate - ISO date string
+ * @param {object} config - API configuration (token, URL, profile)
+ * @returns {Object} Stats object with counts
+ */
+async function syncTransfersFromAPI(startDate, endDate, config) {
+  const { WISE_API_TOKEN, WISE_API_URL, WISE_PROFILE_ID } = config;
+  const stats = {
+    transfersProcessed: 0,
+    imported: 0,
+    duplicatesSkipped: 0,
+    errors: 0
+  };
+
+  let offset = 0;
+  const limit = 100;
+  let hasMore = true;
+
+  console.log(`\n📅 Syncing transfers from ${startDate.split('T')[0]} to ${endDate.split('T')[0]}`);
+
+  while (hasMore) {
+    try {
+      const url = `${WISE_API_URL}/v1/transfers`;
+      const params = new URLSearchParams({
+        profile: WISE_PROFILE_ID,
+        createdDateStart: startDate,
+        createdDateEnd: endDate,
+        limit: limit.toString(),
+        offset: offset.toString()
+      });
+
+      console.log(`   📄 Fetching page ${Math.floor(offset / limit) + 1} (offset: ${offset})...`);
+
+      const response = await fetch(`${url}?${params}`, {
+        headers: {
+          'Authorization': `Bearer ${WISE_API_TOKEN}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Transfer API error: ${response.status} - ${errorText}`);
+      }
+
+      const transfers = await response.json();
+
+      console.log(`   ✓ Retrieved ${transfers.length} transfers`);
+
+      if (transfers.length === 0) {
+        hasMore = false;
+        continue;
+      }
+
+      // Process each transfer
+      for (const transfer of transfers) {
+        stats.transfersProcessed++;
+
+        // Determine transaction type from transfer structure
+        // sourceValue present = outgoing money (DEBIT/expense)
+        // only targetValue = incoming money (CREDIT/income)
+        const hasSourceValue = transfer.sourceValue && transfer.sourceValue > 0;
+        const txnType = hasSourceValue ? 'DEBIT' : 'CREDIT';
+        const entryType = txnType === 'CREDIT' ? 'income' : 'expense';
+
+        // Extract transaction details
+        const amount = Math.abs(hasSourceValue ? transfer.sourceValue : transfer.targetValue);
+        const currency = hasSourceValue ? transfer.sourceCurrency : transfer.targetCurrency;
+        const description = transfer.details?.reference || transfer.reference || `Transfer ${transfer.id}`;
+        const transactionDate = transfer.created;
+        const transactionId = transfer.customerTransactionId || `TRANSFER-${transfer.id}`;
+
+        console.log(`      💰 ${transactionId}: ${txnType} ${amount} ${currency}`);
+
+        // Check for duplicates
+        const existing = await WiseTransactionModel.exists(transactionId);
+        if (existing) {
+          stats.duplicatesSkipped++;
+          console.log(`      ⏭️  Duplicate - skipping`);
+          continue;
+        }
+
+        // Store in wise_transactions table
+        await WiseTransactionModel.create({
+          wiseTransactionId: transactionId,
+          wiseResourceId: transfer.id.toString(),
+          profileId: WISE_PROFILE_ID,
+          accountId: (hasSourceValue ? transfer.sourceAccount : transfer.targetAccount) || null,
+          type: txnType,
+          state: transfer.status || 'completed',
+          amount: amount,
+          currency: currency,
+          description: description,
+          merchantName: '',
+          referenceNumber: transactionId,
+          transactionDate: transactionDate,
+          valueDate: transactionDate,
+          syncStatus: 'processed',
+          classifiedCategory: entryType === 'income' ? 'other_income' : 'other_expenses',
+          matchedEmployeeId: null,
+          confidenceScore: 80,
+          needsReview: false,
+          rawPayload: transfer
+        });
+
+        // Create entry in entries table
+        const entryResult = await pool.query(
+          `INSERT INTO entries (type, category, description, detail, base_amount, total, entry_date, status, currency, amount_original, wise_transaction_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+           RETURNING id`,
+          [
+            entryType,
+            entryType === 'income' ? 'other_income' : 'other_expenses',
+            description,
+            `Imported from Wise Transfer API (Ref: ${transactionId})`,
+            amount,
+            amount,
+            transactionDate.split('T')[0],
+            'completed',
+            currency,
+            amount,
+            transactionId
+          ]
+        );
+
+        // Link entry to transaction
+        await WiseTransactionModel.updateStatus(transactionId, {
+          entryId: entryResult.rows[0].id,
+          syncStatus: 'processed'
+        });
+
+        stats.imported++;
+        console.log(`      ✅ Imported`);
+      }
+
+      // Check if more pages exist
+      hasMore = transfers.length === limit;
+      offset += limit;
+
+    } catch (error) {
+      console.error(`   ❌ Error fetching transfers at offset ${offset}:`, error.message);
+      stats.errors++;
+      hasMore = false; // Stop on error
+    }
+  }
+
+  return stats;
+}
+
+/**
  * POST /api/wise/sync
  * Complete historical sync using Activities API + Transfer API
  * Fetches ALL transactions without requiring SCA approval
+ *
+ * Query Parameters:
+ *   - mode: "recent" (Activities API only), "transfers" (Transfer API only), "all" (both APIs)
  *
  * API Flow:
  *   1. GET /v1/profiles/{profileId}/activities - Get list of activities (with pagination)

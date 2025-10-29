@@ -5,8 +5,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project Overview
 Complete business accounting system with income/expense tracking, employee management, contract automation, salary calendar view, multi-currency support, and Wise banking integration.
 
-You must to use feature-supervisor agent for every feature or task you are building and then use quality-assurance-tester to test. If the quality-assurance-tester find an issue, he should report back to the feature-supervisor and the feature-supervisor should fix it. Once fixed, the quality-assurance-tester should test again, and repeat the process in case the test fails. Until the test succeeds.
-
 **GitHub Repository**: https://github.com/RafaelEpicMegacorp/business-accounting-system
 
 ## 📋 Session Continuity
