@@ -21,7 +21,7 @@ const transactionService = {
     if (filters.offset) params.append('offset', filters.offset);
 
     const queryString = params.toString();
-    const url = `/api/wise/transactions/review${queryString ? `?${queryString}` : ''}`;
+    const url = `/wise/transactions/review${queryString ? `?${queryString}` : ''}`;
 
     const response = await api.get(url);
     return response.data;
@@ -32,7 +32,7 @@ const transactionService = {
    * @returns {Promise} API response
    */
   async getReviewStats() {
-    const response = await api.get('/api/wise/transactions/review/stats');
+    const response = await api.get('/wise/transactions/review/stats');
     return response.data;
   },
 
@@ -43,7 +43,7 @@ const transactionService = {
    * @returns {Promise} API response
    */
   async updateTransactionClassification(id, updates) {
-    const response = await api.patch(`/api/wise/transactions/${id}`, updates);
+    const response = await api.patch(`/wise/transactions/${id}`, updates);
     return response.data;
   },
 
@@ -54,7 +54,7 @@ const transactionService = {
    * @returns {Promise} API response
    */
   async approveTransaction(id, data = {}) {
-    const response = await api.post(`/api/wise/transactions/${id}/approve`, data);
+    const response = await api.post(`/wise/transactions/${id}/approve`, data);
     return response.data;
   },
 
@@ -65,7 +65,7 @@ const transactionService = {
    * @returns {Promise} API response
    */
   async rejectTransaction(id, reason) {
-    const response = await api.post(`/api/wise/transactions/${id}/reject`, { reason });
+    const response = await api.post(`/wise/transactions/${id}/reject`, { reason });
     return response.data;
   },
 
@@ -76,7 +76,7 @@ const transactionService = {
    * @returns {Promise} API response
    */
   async bulkApproveTransactions(transaction_ids, data = {}) {
-    const response = await api.post('/api/wise/transactions/bulk-approve', {
+    const response = await api.post('/wise/transactions/bulk-approve', {
       transaction_ids,
       default_category: data.default_category,
       status: data.status || 'completed'
@@ -91,7 +91,7 @@ const transactionService = {
    * @returns {Promise} API response
    */
   async bulkRejectTransactions(transaction_ids, reason) {
-    const response = await api.post('/api/wise/transactions/bulk-reject', {
+    const response = await api.post('/wise/transactions/bulk-reject', {
       transaction_ids,
       reason
     });
