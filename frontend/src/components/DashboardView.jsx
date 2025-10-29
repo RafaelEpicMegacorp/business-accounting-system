@@ -102,6 +102,26 @@ function DashboardView({ onNavigateToForecast }) {
       setTimeout(() => setSyncMessage(null), 15000);
     } catch (error) {
       console.error('Sync failed:', error);
+
+      // Check if error is SCA authentication requirement
+      if (error.response?.status === 403 && error.response?.data?.requiresSCA) {
+        const data = error.response.data;
+        const instructions = data.instructions || [];
+
+        // Format SCA message with clear instructions
+        let scaMessage = `🔐 ${data.message}\n\n`;
+        scaMessage += instructions.join('\n');
+
+        if (data.currency) {
+          scaMessage += `\n\nCurrency: ${data.currency}`;
+        }
+
+        setSyncMessage({ type: 'sca', text: scaMessage });
+
+        // Don't auto-clear SCA messages - user needs time to approve
+        return;
+      }
+
       const errorMsg = error.response?.data?.error || error.message || 'Failed to sync from Wise';
       setSyncMessage({ type: 'error', text: errorMsg });
 
@@ -241,10 +261,24 @@ function DashboardView({ onNavigateToForecast }) {
 
           {/* Sync Message */}
           {syncMessage && (
-            <div className={`mb-4 p-4 rounded-lg ${syncMessage.type === 'success' ? 'bg-green-100 text-green-800 border border-green-300' : 'bg-red-100 text-red-800 border border-red-300'}`}>
+            <div className={`mb-4 p-4 rounded-lg ${
+              syncMessage.type === 'success'
+                ? 'bg-green-100 text-green-800 border border-green-300'
+                : syncMessage.type === 'sca'
+                ? 'bg-blue-100 text-blue-900 border border-blue-400'
+                : 'bg-red-100 text-red-800 border border-red-300'
+            }`}>
               <div className="whitespace-pre-line font-mono text-sm">
                 {syncMessage.text}
               </div>
+              {syncMessage.type === 'sca' && (
+                <button
+                  onClick={() => setSyncMessage(null)}
+                  className="mt-3 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm"
+                >
+                  Dismiss
+                </button>
+              )}
             </div>
           )}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

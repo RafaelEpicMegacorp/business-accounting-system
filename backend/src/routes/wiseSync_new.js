@@ -1,5 +1,5 @@
-// New complete historical sync implementation using Balance Statements API
-// This replaces the old Activities API approach
+// Complete historical sync implementation using Balance Statements API
+// This replaces the old Activities API approach which only returned recent transactions
 
 const pool = require('../config/database');
 const WiseTransactionModel = require('../models/wiseTransactionModel');
@@ -8,9 +8,13 @@ const WiseTransactionModel = require('../models/wiseTransactionModel');
  * POST /api/wise/sync
  * Complete historical sync using Balance Statements API
  * Fetches ALL transactions for each currency from account creation to now
+ *
+ * IMPORTANT: This endpoint requires SCA (Strong Customer Authentication)
+ * If you receive a 403 error, you must approve the request in your Wise app/website
+ * SCA approval is required every 90 days for security
  */
 async function syncCompleteHistory(req, res) {
-  console.log('🔄 Complete Wise Historical Sync Started');
+  console.log('🔄 Complete Wise Historical Sync Started (Balance Statements API)');
 
   const WISE_API_TOKEN = process.env.WISE_API_TOKEN;
   const WISE_API_URL = process.env.WISE_API_URL || 'https://api.wise.com';
@@ -31,7 +35,8 @@ async function syncCompleteHistory(req, res) {
     entriesCreated: 0,
     errors: 0,
     errorDetails: [],
-    currencyBreakdown: {}
+    currencyBreakdown: {},
+    scaRequired: false
   };
 
   try {
@@ -65,232 +70,233 @@ async function syncCompleteHistory(req, res) {
         duplicatesSkipped: 0,
         entriesCreated: 0,
         errors: 0,
-        currentBalance: balance.amount.value
+        currentBalance: balance.amount.value,
+        balanceId: balance.id
       };
     });
 
-    // STEP 2: Fetch ALL activities (not filtered by currency)
-    console.log('\n📋 STEP 2: Fetching ALL activities from Wise API...');
+    // STEP 2: Fetch transaction statements for EACH currency balance
+    console.log('\n📋 STEP 2: Fetching transaction statements from Wise Balance Statements API...');
+    console.log('   ⚠️  Note: This may require SCA (Strong Customer Authentication) approval');
 
     // Find the earliest account creation date
     const earliestDate = new Date(Math.min(...balances.map(b => new Date(b.creationTime))));
     const now = new Date();
-    const createdDateStart = earliestDate.toISOString();
-    const createdDateEnd = now.toISOString();
 
-    console.log(`   Date range: ${createdDateStart.split('T')[0]} to ${createdDateEnd.split('T')[0]}`);
-    console.log(`   Full start: ${createdDateStart}`);
-    console.log(`   Full end: ${createdDateEnd}`);
+    // Balance Statements API supports up to 469 days of history
+    // Format: YYYY-MM-DDTHH:MM:SS.SSSZ
+    const intervalStart = earliestDate.toISOString();
+    const intervalEnd = now.toISOString();
 
-    // Fetch activities with pagination support
-    let allActivities = [];
-    let offset = 0;
-    const limit = 100; // Fetch 100 at a time
-    let hasMore = true;
+    console.log(`   Date range: ${intervalStart.split('T')[0]} to ${intervalEnd.split('T')[0]}`);
+    console.log(`   Total days: ${Math.ceil((now - earliestDate) / (1000 * 60 * 60 * 24))} days\n`);
 
-    while (hasMore) {
-      const activitiesUrl = `${WISE_API_URL}/v1/profiles/${WISE_PROFILE_ID}/activities?` +
-        `createdDateStart=${createdDateStart}&` +
-        `createdDateEnd=${createdDateEnd}&` +
-        `limit=${limit}&` +
-        `offset=${offset}`;
+    // Process each currency balance separately
+    for (const balance of balances) {
+      const currency = balance.currency;
+      const balanceId = balance.id;
 
-      console.log(`   Requesting: ${activitiesUrl.substring(0, 100)}...`);
+      console.log(`\n   💱 Processing ${currency} (Balance ID: ${balanceId})...`);
 
-      const activitiesResponse = await fetch(
-        activitiesUrl,
-        {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${WISE_API_TOKEN}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-
-      console.log(`   Response status: ${activitiesResponse.status}`);
-
-      if (!activitiesResponse.ok) {
-        const errorText = await activitiesResponse.text();
-        throw new Error(`Activities API error: ${activitiesResponse.status} ${errorText}`);
-      }
-
-      const activitiesData = await activitiesResponse.json();
-      const activities = activitiesData.activities || [];
-
-      if (activities.length === 0) {
-        hasMore = false;
-        break;
-      }
-
-      allActivities = allActivities.concat(activities);
-      offset += limit;
-
-      // If we got less than limit, we've reached the end
-      if (activities.length < limit) {
-        hasMore = false;
-      }
-
-      console.log(`   Fetched ${activities.length} activities (offset: ${offset - limit}), ${allActivities.length} total...`);
-    }
-
-    console.log(`   ✓ Total activities fetched: ${allActivities.length}\n`);
-
-    // STEP 3: Process activities and group by currency
-    console.log('📋 STEP 3: Processing activities...\n');
-
-    const validActivityTypes = ['TRANSFER', 'CARD_PAYMENT', 'CARD_CHECK', 'CONVERSION'];
-
-    for (const activity of allActivities) {
       try {
-        // Skip non-transaction activities
-        if (!validActivityTypes.includes(activity.type) || !activity.resource?.id) {
-          continue;
-        }
+        // Balance Statements API endpoint
+        const statementUrl = `${WISE_API_URL}/v1/profiles/${WISE_PROFILE_ID}/balance-statements/${balanceId}/statement.json?` +
+          `currency=${currency}&` +
+          `intervalStart=${intervalStart}&` +
+          `intervalEnd=${intervalEnd}&` +
+          `type=COMPACT`;
 
-        // Extract currency from primaryAmount
-        let activityCurrency = 'USD';
-        let amount = 0;
-        if (activity.primaryAmount) {
-          const amountMatch = activity.primaryAmount.match(/([\d,]+\.?\d*)\s*([A-Z]{3})/);
-          if (amountMatch) {
-            amount = Math.abs(parseFloat(amountMatch[1].replace(/,/g, '')));
-            activityCurrency = amountMatch[2];
+        console.log(`      Fetching: ${statementUrl.substring(0, 120)}...`);
+
+        const statementResponse = await fetch(
+          statementUrl,
+          {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${WISE_API_TOKEN}`,
+              'Content-Type': 'application/json'
+            }
           }
-        }
-
-        // Skip if amount is zero (e.g., cancelled transactions)
-        if (amount === 0) {
-          console.log(`   ⊘ Skipping zero-amount transaction: ${activity.type}-${activity.resource?.id}`);
-          continue;
-        }
-
-        // Skip if currency not in our balances
-        if (!stats.currencyBreakdown[activityCurrency]) {
-          continue;
-        }
-
-        stats.currencyBreakdown[activityCurrency].transactionsFound++;
-        stats.transactionsFound++;
-
-        const resourceId = activity.resource.id;
-        const transactionId = `${activity.type}-${resourceId}`;
-
-        // Check for duplicates
-        const existing = await WiseTransactionModel.exists(transactionId);
-        if (existing) {
-          stats.duplicatesSkipped++;
-          stats.currencyBreakdown[activityCurrency].duplicatesSkipped++;
-          continue;
-        }
-
-        // Determine transaction direction from description field
-        // Wise Activities API uses phrases like "Spent by you", "Sent by you" for expenses
-        // and "To you", "Received" for income
-        const activityDescription = activity.description || '';
-        const description = activityDescription.toLowerCase();
-
-        // Check for income indicators first (less common)
-        const isIncome = description.includes('to you') ||
-                         description.includes('received') ||
-                         description.includes('from');
-
-        // Check for expense indicators
-        const isExpense = description.includes('by you') ||
-                          description.includes('spent by you') ||
-                          description.includes('sent by you');
-
-        // Default to DEBIT (expense) if no clear indicator
-        // This is safer as most transactions are expenses
-        const txnType = isIncome ? 'CREDIT' : 'DEBIT';
-
-        // Extract merchant name from title (remove HTML tags)
-        let merchantName = activity.title || '';
-        merchantName = merchantName.replace(/<strong>|<\/strong>|<positive>|<\/positive>|<negative>|<\/negative>/g, '').trim();
-
-        // Transaction date from createdOn
-        const transactionDate = activity.createdOn || new Date().toISOString();
-
-        // Find the balance ID for this currency
-        const balance = balances.find(b => b.currency === activityCurrency);
-        const balanceId = balance ? balance.id : null;
-
-        // Store transaction in wise_transactions table
-        await WiseTransactionModel.create({
-          wiseTransactionId: transactionId,
-          wiseResourceId: resourceId.toString(),
-          profileId: WISE_PROFILE_ID,
-          accountId: balanceId,
-          type: txnType,
-          state: activity.status || 'completed',
-          amount,
-          currency: activityCurrency,
-          description: merchantName,
-          merchantName,
-          referenceNumber: transactionId,
-          transactionDate,
-          valueDate: transactionDate,
-          syncStatus: 'processed',
-          classifiedCategory: null,
-          matchedEmployeeId: null,
-          confidenceScore: null,
-          needsReview: false,
-          rawPayload: activity
-        });
-
-        stats.newTransactions++;
-        stats.currencyBreakdown[activityCurrency].newTransactions++;
-
-        // Create entry immediately
-        const entryType = txnType === 'CREDIT' ? 'income' : 'expense';
-        const category = entryType === 'income' ? 'other_income' : 'other_expenses';
-
-        const entryResult = await pool.query(
-          `INSERT INTO entries (type, category, description, detail, base_amount, total, entry_date, status, currency, amount_original, wise_transaction_id)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-           RETURNING id`,
-          [
-            entryType,
-            category,
-            merchantName || 'Wise transaction',
-            `Imported from Wise (Ref: ${transactionId})`,
-            amount,
-            amount,
-            transactionDate.split('T')[0],
-            'completed',
-            activityCurrency,
-            amount,
-            transactionId
-          ]
         );
 
-        // Link entry to transaction
-        await WiseTransactionModel.updateStatus(transactionId, {
-          entryId: entryResult.rows[0].id,
-          syncStatus: 'processed'
-        });
+        // Check for SCA requirement (403 with x-2fa-approval header)
+        if (statementResponse.status === 403) {
+          const approval2FA = statementResponse.headers.get('x-2fa-approval');
+          const approvalResult = statementResponse.headers.get('x-2fa-approval-result');
 
-        stats.entriesCreated++;
-        stats.currencyBreakdown[activityCurrency].entriesCreated++;
+          if (approval2FA) {
+            stats.scaRequired = true;
+            console.log(`\n   🔐 SCA AUTHENTICATION REQUIRED`);
+            console.log(`      Approval ID: ${approval2FA}`);
+            console.log(`      Status: ${approvalResult || 'PENDING'}`);
 
-        console.log(`   ✓ ${activityCurrency} ${entryType} ${amount} - ${merchantName.substring(0, 40)}...`);
+            return res.status(403).json({
+              success: false,
+              requiresSCA: true,
+              approvalId: approval2FA,
+              approvalResult: approvalResult,
+              message: '🔐 Strong Customer Authentication (SCA) Required',
+              instructions: [
+                '1. Open your Wise mobile app or go to wise.com',
+                '2. Look for a pending authorization request',
+                '3. Review and approve the "Balance Statements API" access',
+                '4. Once approved, click "Sync Wise History" button again',
+                '',
+                '⚠️  Note: SCA approval is required every 90 days for security',
+                '✅ This is a one-time setup - future syncs will work automatically'
+              ],
+              currency: currency,
+              balanceId: balanceId,
+              stats
+            });
+          }
+        }
+
+        if (!statementResponse.ok) {
+          const errorText = await statementResponse.text();
+          throw new Error(`Balance Statement API error for ${currency}: ${statementResponse.status} ${errorText}`);
+        }
+
+        const statement = await statementResponse.json();
+        const transactions = statement.transactions || [];
+
+        console.log(`      ✓ Fetched ${transactions.length} transactions for ${currency}`);
+
+        stats.currencyBreakdown[currency].transactionsFound = transactions.length;
+        stats.transactionsFound += transactions.length;
+
+        // STEP 3: Process transactions for this currency
+        for (const transaction of transactions) {
+          try {
+            // Skip if no reference number (invalid transaction)
+            if (!transaction.referenceNumber) {
+              console.log(`      ⊘ Skipping transaction without reference number`);
+              continue;
+            }
+
+            // Extract amount and determine transaction type
+            const amount = Math.abs(transaction.amount.value);
+            const txnCurrency = transaction.amount.currency;
+
+            // Skip zero-amount transactions
+            if (amount === 0) {
+              console.log(`      ⊘ Skipping zero-amount transaction: ${transaction.referenceNumber}`);
+              continue;
+            }
+
+            // Generate unique transaction ID
+            const transactionId = `STATEMENT-${transaction.referenceNumber}`;
+
+            // Check for duplicates
+            const existing = await WiseTransactionModel.exists(transactionId);
+            if (existing) {
+              stats.duplicatesSkipped++;
+              stats.currencyBreakdown[currency].duplicatesSkipped++;
+              continue;
+            }
+
+            // Determine transaction direction
+            // Positive amount = CREDIT (money received / income)
+            // Negative amount = DEBIT (money sent / expense)
+            const txnType = transaction.amount.value > 0 ? 'CREDIT' : 'DEBIT';
+
+            // Extract merchant/description from details
+            let merchantName = transaction.details?.description ||
+                              transaction.details?.merchantName ||
+                              transaction.details?.paymentReference ||
+                              'Wise transaction';
+
+            // Clean up merchant name (remove extra whitespace)
+            merchantName = merchantName.trim();
+
+            // Transaction date
+            const transactionDate = transaction.date || new Date().toISOString();
+
+            // Store transaction in wise_transactions table
+            await WiseTransactionModel.create({
+              wiseTransactionId: transactionId,
+              wiseResourceId: transaction.referenceNumber,
+              profileId: WISE_PROFILE_ID,
+              accountId: balanceId,
+              type: txnType,
+              state: 'completed',
+              amount,
+              currency: txnCurrency,
+              description: merchantName,
+              merchantName,
+              referenceNumber: transaction.referenceNumber,
+              transactionDate,
+              valueDate: transactionDate,
+              syncStatus: 'processed',
+              classifiedCategory: null,
+              matchedEmployeeId: null,
+              confidenceScore: null,
+              needsReview: false,
+              rawPayload: transaction
+            });
+
+            stats.newTransactions++;
+            stats.currencyBreakdown[currency].newTransactions++;
+
+            // Create entry immediately
+            const entryType = txnType === 'CREDIT' ? 'income' : 'expense';
+            const category = entryType === 'income' ? 'other_income' : 'other_expenses';
+
+            const entryResult = await pool.query(
+              `INSERT INTO entries (type, category, description, detail, base_amount, total, entry_date, status, currency, amount_original, wise_transaction_id)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+               RETURNING id`,
+              [
+                entryType,
+                category,
+                merchantName || 'Wise transaction',
+                `Imported from Wise (Ref: ${transaction.referenceNumber})`,
+                amount,
+                amount,
+                transactionDate.split('T')[0],
+                'completed',
+                txnCurrency,
+                amount,
+                transactionId
+              ]
+            );
+
+            // Link entry to transaction
+            await WiseTransactionModel.updateStatus(transactionId, {
+              entryId: entryResult.rows[0].id,
+              syncStatus: 'processed'
+            });
+
+            stats.entriesCreated++;
+            stats.currencyBreakdown[currency].entriesCreated++;
+
+            console.log(`      ✓ ${txnCurrency} ${entryType} ${amount} - ${merchantName.substring(0, 40)}${merchantName.length > 40 ? '...' : ''}`);
+
+          } catch (error) {
+            stats.errors++;
+            stats.currencyBreakdown[currency].errors++;
+            stats.errorDetails.push({
+              currency: currency,
+              transaction: transaction.referenceNumber,
+              error: error.message
+            });
+            console.error(`      ❌ Error processing transaction ${transaction.referenceNumber}:`, error.message);
+          }
+        }
+
+        stats.balancesProcessed++;
 
       } catch (error) {
         stats.errors++;
-        const activityCurrency = activity.primaryAmount?.match(/([A-Z]{3})/)?.[1] || 'UNKNOWN';
-        if (stats.currencyBreakdown[activityCurrency]) {
-          stats.currencyBreakdown[activityCurrency].errors++;
-        }
+        stats.currencyBreakdown[currency].errors++;
         stats.errorDetails.push({
-          activity: activity.resource?.id,
+          currency: currency,
+          balanceId: balanceId,
           error: error.message
         });
-        console.error(`   ❌ Error processing activity ${activity.resource?.id}:`, error.message);
+        console.error(`   ❌ Error fetching statement for ${currency}:`, error.message);
       }
     }
-
-    // Remove the per-currency loop - we've processed everything above
-    stats.balancesProcessed = balances.length;
 
     // STEP 4: Update currency_balances table
     console.log('\n🔄 STEP 4: Updating currency balances...');
@@ -305,12 +311,9 @@ async function syncCompleteHistory(req, res) {
       console.log(`   ✓ ${balance.currency}: ${balance.amount.value}`);
     }
 
-    // Continue with final summary...
-    const transactions = allActivities; // For compatibility
-
     // Final summary
     console.log('\n📊 SYNC COMPLETE - SUMMARY:');
-    console.log(`   Balances Processed: ${stats.balancesProcessed}`);
+    console.log(`   Balances Processed: ${stats.balancesProcessed}/${balances.length}`);
     console.log(`   Total Transactions Found: ${stats.transactionsFound}`);
     console.log(`   New Transactions: ${stats.newTransactions}`);
     console.log(`   Duplicates Skipped: ${stats.duplicatesSkipped}`);
@@ -324,7 +327,7 @@ async function syncCompleteHistory(req, res) {
 
     res.json({
       success: true,
-      message: `Complete historical sync finished: ${stats.newTransactions} new transactions imported`,
+      message: `Complete historical sync finished: ${stats.newTransactions} new transactions imported from ${stats.balancesProcessed} currencies`,
       stats
     });
 
