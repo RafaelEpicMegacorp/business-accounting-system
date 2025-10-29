@@ -218,16 +218,18 @@ async function syncCompleteHistory(req, res) {
           console.log(`      Title: ${activity.title || 'N/A'}`);
           console.log(`      Amount: ${activity.primaryAmount || 'N/A'}`);
 
-          // Parse primaryAmount (format: "29.99 USD")
+          // Parse primaryAmount (format: "29.99 USD" or "1,939.19 USD")
           const primaryAmount = activity.primaryAmount || '';
-          const amountMatch = primaryAmount.match(/^(-?\d+\.?\d*)\s+([A-Z]{3})$/);
+          // Remove commas from amount before parsing
+          const amountMatch = primaryAmount.match(/^(-?[\d,]+\.?\d*)\s+([A-Z]{3})$/);
 
           if (!amountMatch) {
             console.warn(`      ⚠️  Cannot parse primaryAmount: ${primaryAmount}`);
             continue;
           }
 
-          const amount = Math.abs(parseFloat(amountMatch[1]));
+          // Remove commas and parse as float
+          const amount = Math.abs(parseFloat(amountMatch[1].replace(/,/g, '')));
           const currency = amountMatch[2];
 
           // Card payments are always DEBIT (expenses)
