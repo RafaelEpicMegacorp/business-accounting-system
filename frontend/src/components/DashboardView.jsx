@@ -57,9 +57,39 @@ function DashboardView({ onNavigateToForecast }) {
 
       const result = await wiseService.syncFromWise();
 
-      // Show success message with stats
+      // Format success message with per-currency breakdown
       const stats = result.stats || {};
-      const message = `Sync completed: ${stats.newTransactions || 0} new transactions, ${stats.duplicatesSkipped || 0} duplicates skipped, ${stats.entriesCreated || 0} entries created`;
+      const currencyBreakdown = stats.currencyBreakdown || {};
+
+      let message = '';
+
+      if (stats.newTransactions === 0 && stats.duplicatesSkipped > 0) {
+        // All duplicates case
+        message = `✅ Wise Sync Complete\nAll transactions up to date (${stats.duplicatesSkipped} duplicates skipped)`;
+      } else if (stats.newTransactions > 0) {
+        // New transactions case - show per-currency breakdown
+        const currencyFlags = {
+          'USD': '🇺🇸',
+          'EUR': '🇪🇺',
+          'PLN': '🇵🇱',
+          'GBP': '🇬🇧'
+        };
+
+        message = '✅ Wise Sync Complete\n';
+        Object.keys(currencyBreakdown).forEach(currency => {
+          const cb = currencyBreakdown[currency];
+          if (cb.newTransactions > 0) {
+            const flag = currencyFlags[currency] || '💱';
+            const formattedBalance = cb.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            message += `\n${flag} ${currency}: ${cb.newTransactions} new transaction${cb.newTransactions > 1 ? 's' : ''} (${formattedBalance} ${currency})`;
+          }
+        });
+        message += `\n\nTotal: ${stats.newTransactions} transaction${stats.newTransactions > 1 ? 's' : ''} imported`;
+      } else {
+        // Fallback message
+        message = `Sync completed: ${stats.newTransactions || 0} new transactions, ${stats.duplicatesSkipped || 0} duplicates skipped`;
+      }
+
       setSyncMessage({ type: 'success', text: message });
 
       // Reload dashboard data
@@ -68,8 +98,8 @@ function DashboardView({ onNavigateToForecast }) {
       // Trigger chart refresh
       setChartRefreshTrigger(prev => prev + 1);
 
-      // Clear message after 10 seconds
-      setTimeout(() => setSyncMessage(null), 10000);
+      // Clear message after 15 seconds (longer to read detailed breakdown)
+      setTimeout(() => setSyncMessage(null), 15000);
     } catch (error) {
       console.error('Sync failed:', error);
       const errorMsg = error.response?.data?.error || error.message || 'Failed to sync from Wise';
@@ -197,7 +227,7 @@ function DashboardView({ onNavigateToForecast }) {
                 className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <RefreshCw size={18} className={syncing ? 'animate-spin' : ''} />
-                {syncing ? 'Syncing...' : 'Sync from Wise'}
+                {syncing ? 'Syncing...' : 'Sync Wise History'}
               </button>
               <button
                 onClick={() => setShowImportModal(true)}
@@ -212,7 +242,9 @@ function DashboardView({ onNavigateToForecast }) {
           {/* Sync Message */}
           {syncMessage && (
             <div className={`mb-4 p-4 rounded-lg ${syncMessage.type === 'success' ? 'bg-green-100 text-green-800 border border-green-300' : 'bg-red-100 text-red-800 border border-red-300'}`}>
-              {syncMessage.text}
+              <div className="whitespace-pre-line font-mono text-sm">
+                {syncMessage.text}
+              </div>
             </div>
           )}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
