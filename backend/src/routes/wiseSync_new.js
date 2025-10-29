@@ -184,13 +184,24 @@ async function syncCompleteHistory(req, res) {
           continue;
         }
 
-        // Determine transaction direction from title HTML tags (Wise API pattern)
-        // Wise API includes <positive> tag for income and <negative> tag for expenses
-        const activityTitle = activity.title || '';
-        const isIncome = activityTitle.includes('<positive>');
-        const isExpense = activityTitle.includes('<negative>');
+        // Determine transaction direction from description field
+        // Wise Activities API uses phrases like "Spent by you", "Sent by you" for expenses
+        // and "To you", "Received" for income
+        const activityDescription = activity.description || '';
+        const description = activityDescription.toLowerCase();
 
-        // Default to DEBIT if neither tag present (fallback for edge cases)
+        // Check for income indicators first (less common)
+        const isIncome = description.includes('to you') ||
+                         description.includes('received') ||
+                         description.includes('from');
+
+        // Check for expense indicators
+        const isExpense = description.includes('by you') ||
+                          description.includes('spent by you') ||
+                          description.includes('sent by you');
+
+        // Default to DEBIT (expense) if no clear indicator
+        // This is safer as most transactions are expenses
         const txnType = isIncome ? 'CREDIT' : 'DEBIT';
 
         // Extract merchant name from title (remove HTML tags)
