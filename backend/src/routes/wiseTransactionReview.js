@@ -259,4 +259,40 @@ router.post('/transactions/bulk-reject', async (req, res) => {
   }
 });
 
+/**
+ * POST /api/wise/transactions/bulk-update-by-merchant
+ * Update all transactions with matching merchant name
+ */
+router.post('/transactions/bulk-update-by-merchant', async (req, res) => {
+  try {
+    const { merchant_name, classified_category } = req.body;
+
+    if (!merchant_name || !classified_category) {
+      return res.status(400).json({
+        success: false,
+        error: 'invalid_input',
+        message: 'merchant_name and classified_category are required'
+      });
+    }
+
+    const result = await WiseTransactionReviewModel.updateByMerchant(
+      merchant_name,
+      classified_category
+    );
+
+    res.json({
+      success: true,
+      data: result,
+      message: `Updated ${result.updated} transactions for merchant: ${merchant_name}`
+    });
+  } catch (error) {
+    console.error('Error updating by merchant:', error);
+    res.status(500).json({
+      success: false,
+      error: 'server_error',
+      message: 'Failed to update transactions by merchant'
+    });
+  }
+});
+
 module.exports = router;

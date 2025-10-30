@@ -448,6 +448,29 @@ const WiseTransactionReviewModel = {
   },
 
   /**
+   * Update all transactions with matching merchant name
+   * @param {string} merchantName - Merchant name to match
+   * @param {string} category - Category to assign
+   * @returns {Promise<Object>} Update results
+   */
+  async updateByMerchant(merchantName, category) {
+    const result = await pool.query(
+      `UPDATE wise_transactions
+       SET classified_category = $1,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE merchant_name = $2
+         AND sync_status = 'pending'
+       RETURNING id`,
+      [category, merchantName]
+    );
+
+    return {
+      updated: result.rows.length,
+      transaction_ids: result.rows.map(r => r.id)
+    };
+  },
+
+  /**
    * Get transaction review statistics
    * @returns {Promise<Object>} Review statistics
    */

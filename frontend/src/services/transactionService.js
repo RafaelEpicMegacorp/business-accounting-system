@@ -96,6 +96,20 @@ const transactionService = {
       reason
     });
     return response.data;
+  },
+
+  /**
+   * Update all transactions with matching merchant name
+   * @param {string} merchantName - Merchant name to match
+   * @param {string} category - Category to assign
+   * @returns {Promise} API response
+   */
+  async updateByMerchant(merchantName, category) {
+    const response = await api.post('/wise/transactions/bulk-update-by-merchant', {
+      merchant_name: merchantName,
+      classified_category: category
+    });
+    return response.data;
   }
 };
 

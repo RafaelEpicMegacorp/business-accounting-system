@@ -138,16 +138,46 @@ export default function TransactionReview() {
     }
   };
 
+  const getCategoryLabel = (value) => {
+    const category = categories.find(c => c.value === value);
+    return category ? category.label : value;
+  };
+
   const handleCategoryChange = async (id, category) => {
+    const transaction = transactions.find(t => t.id === id);
+
+    if (!transaction) {
+      showError('Transaction not found');
+      return;
+    }
+
+    // Ask user if they want to apply to all matching merchants
+    const applyToAll = window.confirm(
+      `Apply category "${getCategoryLabel(category)}" to ALL transactions from "${transaction.merchant_name}"?\n\n` +
+      `This will update all pending transactions with this merchant across all pages.`
+    );
+
     try {
-      await transactionService.updateTransactionClassification(id, {
-        classified_category: category
-      });
-      showSuccess('Category updated');
+      if (applyToAll) {
+        // Bulk update by merchant name
+        const result = await transactionService.updateByMerchant(
+          transaction.merchant_name,
+          category
+        );
+        showSuccess(`Updated ${result.data.updated} transactions for "${transaction.merchant_name}"`);
+      } else {
+        // Single transaction update
+        await transactionService.updateTransactionClassification(id, {
+          classified_category: category
+        });
+        showSuccess('Category updated');
+      }
+
+      // Reload to show changes
       loadData();
     } catch (error) {
       console.error('Failed to update category:', error);
-      showError('Failed to update category');
+      showError(error.response?.data?.message || 'Failed to update category');
     }
   };
 
