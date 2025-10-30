@@ -15,6 +15,7 @@ import SearchBar from './SearchBar';
 import FilterPanel from './FilterPanel';
 import TransactionReview from './TransactionReview';
 import { exportEntriesToCSV, exportEmployeesToCSV, exportContractsToCSV } from '../utils/csvExport';
+import { formatCurrency } from '../utils/currencyFormatter';
 
 export default function AccountingApp() {
   const { user, logout } = useAuth();
@@ -1092,10 +1093,10 @@ export default function AccountingApp() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{entry.description}</td>
                     <td className="px-6 py-4 text-sm text-gray-600">{entry.detail}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
-                      ${parseFloat(entry.base_amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      {formatCurrency(entry.base_amount, entry.currency)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 text-right">
-                      ${parseFloat(entry.total).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      {formatCurrency(entry.total, entry.currency)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       {entry.contract_id ? (
