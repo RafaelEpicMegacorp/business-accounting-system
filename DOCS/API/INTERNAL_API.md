@@ -18,7 +18,13 @@ Complete documentation for the Accounting System backend API.
 - [Contracts](#contracts)
 - [Dashboard](#dashboard)
 - [Currency](#currency)
-- [Wise Import](#wise-import)
+- [Wise Integration](#wise-integration)
+  - [CSV Import](#post-apiwiseimport)
+  - [Manual Sync](#post-apiwisesyncmanual)
+  - [Sync Health](#get-apiwisesynchealth)
+  - [Sync Statistics](#get-apiwisesyncstats)
+  - [Webhooks](#post-apiwisewebhook)
+  - [Automated Sync (Cron)](#automated-sync-cron-job)
 - [System](#system)
 
 ---
@@ -1238,7 +1244,9 @@ Manually trigger balance recalculation for all currencies.
 
 ---
 
-## Wise Import
+## Wise Integration
+
+The Wise integration supports three methods: CSV import, automated sync (cron), and real-time webhooks.
 
 ### POST /api/wise/import
 **Protected** - Upload and import Wise CSV transaction file.
@@ -1329,6 +1337,253 @@ curl -X POST \
 
 **Implementation:**
 - Route: `backend/src/routes/wiseImport.js:95-152`
+
+---
+
+### POST /api/wise/sync/manual
+**Protected** - Trigger immediate manual sync from Wise Activities API.
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Manual sync completed",
+  "stats": {
+    "activitiesProcessed": 13,
+    "transactionsFound": 1,
+    "newTransactions": 1,
+    "duplicatesSkipped": 8,
+    "entriesCreated": 1,
+    "errors": 0,
+    "errorDetails": [],
+    "dateRange": {
+      "since": "2025-10-29T18:00:00.311Z",
+      "until": "2025-10-30T09:08:10.523Z"
+    }
+  }
+}
+```
+
+**Sync Logic:**
+- Fetches Wise Activities API for last 30 days
+- Processes all activities chronologically
+- Checks for duplicate transactions by Wise ID
+- Classifies transactions using wiseClassifier
+- Creates entries for high-confidence matches
+- Updates wise_sync_metadata with sync stats
+
+**Example:**
+```bash
+curl -X POST \
+  -H "Authorization: Bearer <token>" \
+  https://business-accounting-system-production.up.railway.app/api/wise/sync/manual
+```
+
+**Implementation:**
+- Route: `backend/src/routes/wiseSync.js:manualSync`
+- Processor: `backend/src/services/sharedWiseProcessor.js`
+
+---
+
+### GET /api/wise/sync/health
+**Public** - Check Wise sync health and status.
+
+**Response:**
+```json
+{
+  "success": true,
+  "syncEnabled": true,
+  "cronSchedule": "0 */6 * * *",
+  "lastSync": {
+    "timestamp": "2025-10-30T06:00:00Z",
+    "status": "success",
+    "stats": {
+      "activitiesProcessed": 15,
+      "newTransactions": 2,
+      "duplicatesSkipped": 10,
+      "entriesCreated": 1
+    }
+  },
+  "nextScheduledSync": "2025-10-30T12:00:00Z",
+  "totalSyncs": 42,
+  "webhookStatus": {
+    "eventsReceived": 17,
+    "lastWebhookAt": "2025-10-30T08:59:51Z"
+  }
+}
+```
+
+**Purpose:** Monitor sync health and last execution time. Useful for debugging and status checks.
+
+**Implementation:**
+- Route: `backend/src/routes/wiseSync.js:getHealth`
+
+---
+
+### GET /api/wise/sync/stats
+**Protected** - Get detailed Wise sync statistics.
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "stats": {
+    "totalSyncs": 42,
+    "totalActivitiesProcessed": 550,
+    "totalNewTransactions": 287,
+    "totalDuplicatesSkipped": 195,
+    "totalEntriesCreated": 120,
+    "totalErrors": 0,
+    "lastSync": {
+      "timestamp": "2025-10-30T06:00:00Z",
+      "activitiesProcessed": 15,
+      "newTransactions": 2,
+      "duplicatesSkipped": 10,
+      "entriesCreated": 1,
+      "errors": 0
+    },
+    "webhookStats": {
+      "totalWebhooksReceived": 17,
+      "lastWebhookAt": "2025-10-30T08:59:51Z",
+      "eventTypes": {
+        "transfers#state-change": 12,
+        "balances#credit": 3,
+        "balances#update": 2
+      }
+    }
+  }
+}
+```
+
+**Implementation:**
+- Route: `backend/src/routes/wiseSync.js:getStats`
+- Database: `wise_sync_metadata`, `wise_sync_audit_log` tables
+
+---
+
+### POST /api/wise/webhook
+**Public** - Receive real-time webhook events from Wise.
+
+**Content-Type:** `application/json`
+
+**Headers:**
+```
+X-Signature-SHA256: <hmac_signature> (optional, validation disabled for personal accounts)
+```
+
+**Request Body:**
+```json
+{
+  "data": {
+    "resource": {
+      "id": 1794067192,
+      "profile_id": 74801125,
+      "account_id": 98765432,
+      "type": "transfer"
+    },
+    "current_state": "outgoing_payment_sent",
+    "previous_state": "funds_converted",
+    "occurred_at": "2025-10-30T08:59:51Z"
+  },
+  "subscription_id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+  "event_type": "transfers#state-change",
+  "schema_version": "2.0.0",
+  "sent_at": "2025-10-30T08:59:52Z"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Webhook processed successfully",
+  "event_type": "transfers#state-change",
+  "resource_id": 1794067192,
+  "processed_at": "2025-10-30T08:59:52Z"
+}
+```
+
+**Supported Event Types:**
+- `transfers#state-change` - Transfer state updates (most common)
+- `balances#credit` - Incoming money notifications
+- `balances#update` - Balance change notifications
+- `transfers#active-cases` - Transfer issues/problems
+
+**Webhook Configuration (Wise Dashboard):**
+1. Login to https://wise.com
+2. Navigate to Settings → Webhooks
+3. Create new subscription:
+   - **URL**: `https://business-accounting-system-production.up.railway.app/api/wise/webhook`
+   - **Events**: Select all transfer and balance events
+   - **Trigger**: Immediately on event occurrence
+
+**Security:**
+- Public endpoint (no JWT required)
+- Signature validation disabled for personal accounts
+- All events logged in `wise_sync_audit_log` table
+- Duplicate events handled gracefully
+
+**Processing Logic:**
+1. Webhook event received → Logged to audit table
+2. Extract transfer/resource ID from event
+3. Fetch full transaction details from Wise API
+4. Process transaction using sharedWiseProcessor
+5. Create entry if high-confidence classification
+6. Return success response to Wise
+
+**Example:**
+```bash
+# Test webhook endpoint
+curl -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"test": "ping"}' \
+  https://business-accounting-system-production.up.railway.app/api/wise/webhook
+```
+
+**Implementation:**
+- Route: `backend/src/routes/wiseSync.js:webhook`
+- Processor: `backend/src/services/sharedWiseProcessor.js`
+- Audit: `wise_sync_audit_log` table
+
+---
+
+### Automated Sync (Cron Job)
+
+**Schedule**: Every 6 hours (00:00, 06:00, 12:00, 18:00 UTC)
+**Configuration**:
+- `WISE_SYNC_ENABLED=true` - Enable/disable automated sync
+- `WISE_SYNC_CRON="0 */6 * * *"` - Override cron schedule (optional)
+
+**Behavior:**
+- Runs in background automatically
+- Fetches Wise Activities API for last 30 days
+- Processes all transactions (same logic as manual sync)
+- Updates `wise_sync_metadata` with stats
+- Logs execution to `wise_sync_audit_log`
+
+**Monitoring:**
+```bash
+# Check last sync time
+curl https://business-accounting-system-production.up.railway.app/api/wise/sync/health
+
+# View detailed statistics
+curl -H "Authorization: Bearer <token>" \
+  https://business-accounting-system-production.up.railway.app/api/wise/sync/stats
+```
+
+**Implementation:**
+- Initializer: `backend/src/server.js` (cron.schedule)
+- Sync Function: `backend/src/routes/wiseSync.js:runScheduledSync`
 
 ---
 
@@ -1455,6 +1710,6 @@ backend/src/
 
 ---
 
-**Last Updated:** 2025-10-27
+**Last Updated:** 2025-10-30
 **API Version:** 1.0
-**Total Endpoints:** 50
+**Total Endpoints:** 54 (includes 4 new Wise sync endpoints + automated cron)

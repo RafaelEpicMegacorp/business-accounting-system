@@ -87,6 +87,17 @@ cd backend && node scripts/import-wise-transactions.js <path-to-csv>
 
 # Production database cleanup
 cd backend && DATABASE_URL="postgresql://..." node scripts/cleanup-production.js
+
+# Manual Wise sync (immediate transaction sync)
+curl -X POST http://localhost:7393/api/wise/sync/manual \
+  -H "Authorization: Bearer <jwt-token>"
+
+# Check Wise sync health
+curl http://localhost:7393/api/wise/sync/health
+
+# View Wise sync statistics
+curl http://localhost:7393/api/wise/sync/stats \
+  -H "Authorization: Bearer <jwt-token>"
 ```
 
 ## Tech Stack
@@ -176,6 +187,9 @@ cd backend && DATABASE_URL="postgresql://..." node scripts/cleanup-production.js
 - **Get Entries**: `GET /api/entries` - List all entries with filtering
 - **Create Entry**: `POST /api/entries` - Add income/expense
 - **Import Wise CSV**: `POST /api/wise/import` - Upload Wise CSV file
+- **Manual Wise Sync**: `POST /api/wise/sync/manual` - Trigger immediate sync
+- **Wise Sync Health**: `GET /api/wise/sync/health` - Check sync status
+- **Wise Webhook**: `POST /api/wise/webhook` - Receive Wise events (public)
 - **Get Dashboard**: `GET /api/dashboard/stats` - Dashboard statistics
 - **Get Balances**: `GET /api/currency/balances` - Multi-currency balances
 
@@ -611,15 +625,34 @@ WISE_PROFILE_ID=74801125
 - Recalculation endpoint for balance updates
 
 ### ✅ Wise Banking Integration
-- **CSV Import Workflow** - Manual upload of Wise transaction exports
-- **21-column format validation** - Ensures correct Wise export format
-- **Duplicate prevention** - By Wise transaction ID
-- **Import statistics** - Real-time feedback (imported/skipped/errors)
-- **Automatic classification** - Intelligent transaction categorization
-- **Employee matching** - 40-100% confidence scoring
-- **Drag-and-drop interface** - Professional upload modal
 
-**Important**: Full Wise API integration was removed in October 2025. CSV import is the current solution. A freelancer is working on proper API integration.
+**Three Integration Methods** (All Operational):
+
+1. **CSV Import** - Manual upload of Wise transaction exports
+   - 21-column format validation
+   - Duplicate prevention by Wise transaction ID
+   - Import statistics (imported/skipped/errors)
+   - Drag-and-drop interface
+
+2. **Automated Daily Sync** - Background cron job (every 6 hours)
+   - Fetches Activities API for new transactions
+   - Automatic duplicate detection
+   - Runs at: 00:00, 06:00, 12:00, 18:00 UTC
+   - Syncs transactions from last 30 days
+   - Catches any missed webhooks
+
+3. **Real-time Webhooks** - Push notifications from Wise
+   - Instant transfer state change updates
+   - Event types: balances#credit, transfers#state-change, transfers#active-cases
+   - Webhook endpoint: `POST /api/wise/webhook`
+   - Verified operational (17+ events captured)
+
+**Shared Features**:
+- Automatic classification using wiseClassifier.js
+- Employee matching (40-100% confidence scoring)
+- Entry creation for high-confidence transactions
+- Review flagging for low-confidence transactions
+- Currency preservation (no forced USD conversion)
 
 ### ✅ Salary Calendar View
 - Monthly calendar grid showing all salary payments by date
@@ -684,6 +717,40 @@ WISE_PROFILE_ID=74801125
 
 ## Recent Changes (October 2025)
 
+### Complete Wise Integration (October 30, 2025) ✅
+**Status**: Production-ready and verified operational
+
+**Three Integration Methods**:
+1. **CSV Import** - Manual upload workflow
+2. **Automated Sync** - Cron job every 6 hours (00:00, 06:00, 12:00, 18:00 UTC)
+3. **Real-time Webhooks** - Push notifications from Wise (17+ events captured)
+
+**New Endpoints**:
+- `POST /api/wise/sync/manual` - Trigger immediate sync
+- `GET /api/wise/sync/health` - Check sync health and last run time
+- `GET /api/wise/sync/stats` - View detailed sync statistics
+- `POST /api/wise/webhook` - Webhook receiver (public endpoint)
+
+**Database Tables**:
+- `wise_sync_metadata` - Track last sync times and statistics
+- `wise_sync_audit_log` - Log all webhook events and sync operations
+- `wise_transactions` - Store all Wise transactions with classification
+
+**Cron Job Configuration**:
+- Schedule: Every 6 hours (0 */6 * * *)
+- Environment variable: `WISE_SYNC_ENABLED=true`
+- Custom schedule: `WISE_SYNC_CRON` (optional override)
+- Syncs last 30 days of transactions
+- Automatic duplicate prevention
+
+**Webhook Configuration** (Wise Dashboard):
+- URL: `https://business-accounting-system-production.up.railway.app/api/wise/webhook`
+- Events: balances#credit, balances#update, transfers#state-change, transfers#active-cases
+- Verification: 17+ webhook events captured and logged
+- No signature validation required for personal accounts
+
+**Verification Report**: See `/Users/rafael/Windsurf/accounting/WEBHOOK_VERIFICATION_REPORT.md`
+
 ### Configuration Standards Documentation
 - Added comprehensive "Configuration Standards" section
 - Mandatory project-wide rule - NEVER hardcode anything
@@ -696,7 +763,7 @@ WISE_PROFILE_ID=74801125
 - Endpoints changed profiles from /v2 to /v1 (verified working)
 - Complete setup guide added
 
-### Wise CSV Import (Active Solution)
+### Wise CSV Import
 - WiseImport.jsx professional upload modal
 - wiseImport.js route with 21-column format validation
 - Features: Duplicate detection, import statistics, error handling
