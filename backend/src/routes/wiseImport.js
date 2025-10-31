@@ -1431,7 +1431,7 @@ async function processTransferStateChange(data) {
           await pool.query(
             `UPDATE entries
              SET needs_review = true,
-                 detail = COALESCE(detail, '') || ' [TRANSFER ${upper($1)}]'
+                 detail = COALESCE(detail, '') || ' [TRANSFER ' || UPPER($1) || ']'
              WHERE id = $2`,
             [currentState, existing.entry_id]
           );
