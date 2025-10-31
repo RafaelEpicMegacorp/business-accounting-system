@@ -323,9 +323,17 @@ async function syncCompleteHistory(req, res) {
           const transactionDate = transfer.created;
           const transactionId = transfer.customerTransactionId || `TRANSFER-${transfer.id}`;
 
+          // Extract merchant/counterparty name
+          // For DEBIT (outgoing), targetName is the recipient/merchant
+          // For CREDIT (incoming), sourceName is the sender
+          const merchantName = txnType === 'DEBIT'
+            ? (transfer.details?.recipient?.name || transfer.targetName || '')
+            : (transfer.details?.sender?.name || transfer.sourceName || '');
+
           console.log(`      Type: ${txnType} (${txnType === 'CREDIT' ? 'income' : 'expense'})`);
           console.log(`      Amount: ${amount} ${currency}`);
           console.log(`      Description: ${description.substring(0, 50)}${description.length > 50 ? '...' : ''}`);
+          console.log(`      Merchant: ${merchantName.substring(0, 40)}${merchantName.length > 40 ? '...' : ''}`);
 
           // Check for duplicates
           const existing = await WiseTransactionModel.exists(transactionId);
@@ -348,7 +356,7 @@ async function syncCompleteHistory(req, res) {
             amount,
             currency,
             description,
-            merchantName: '',
+            merchantName: merchantName || '',
             referenceNumber,
             transactionDate,
             valueDate: transactionDate,
@@ -708,6 +716,11 @@ async function runIncrementalSync(lookbackHours = 12) {
           const transactionId = transfer.customerTransactionId || `TRANSFER-${transfer.id}`;
           const transactionDate = transfer.created;
 
+          // Extract merchant/counterparty name
+          const merchantName = txnType === 'DEBIT'
+            ? (transfer.details?.recipient?.name || transfer.targetName || '')
+            : (transfer.details?.sender?.name || transfer.sourceName || '');
+
           // Check for duplicates
           const existing = await WiseTransactionModel.exists(transactionId);
           if (existing) {
@@ -728,7 +741,7 @@ async function runIncrementalSync(lookbackHours = 12) {
             amount,
             currency,
             description,
-            merchantName: '',
+            merchantName: merchantName || '',
             referenceNumber: transactionId,
             transactionDate,
             valueDate: transactionDate,
@@ -863,6 +876,45 @@ async function runIncrementalSync(lookbackHours = 12) {
         });
         console.error(`   ❌ Error processing activity:`, error.message);
       }
+    }
+
+    // Update currency balances from Wise API
+    console.log('\n💰 Updating currency balances from Wise...');
+
+    try {
+      const balancesResponse = await fetch(
+        `${WISE_API_URL}/v4/profiles/${WISE_PROFILE_ID}/balances?types=STANDARD`,
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${WISE_API_TOKEN}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      if (!balancesResponse.ok) {
+        const errorText = await balancesResponse.text();
+        console.error(`   ⚠️  Failed to fetch balances: ${balancesResponse.status} ${errorText}`);
+      } else {
+        const balances = await balancesResponse.json();
+
+        for (const balance of balances) {
+          await pool.query(`
+            INSERT INTO currency_balances (currency, balance, last_updated)
+            VALUES ($1, $2, CURRENT_TIMESTAMP)
+            ON CONFLICT (currency)
+            DO UPDATE SET balance = $2, last_updated = CURRENT_TIMESTAMP
+          `, [balance.currency, balance.amount.value]);
+
+          console.log(`   ✓ ${balance.currency}: ${balance.amount.value}`);
+        }
+
+        console.log('✓ Currency balances updated successfully');
+      }
+    } catch (balanceError) {
+      console.error('   ⚠️  Error updating balances:', balanceError.message);
+      // Don't fail the sync if balance update fails
     }
 
     // Update last sync timestamp

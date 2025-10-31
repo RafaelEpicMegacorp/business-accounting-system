@@ -45,6 +45,52 @@ const wiseCategoryMapping = {
 };
 
 /**
+ * Update currency balance from Wise API for a specific currency
+ * @param {string} currency - Currency code (USD, EUR, PLN, GBP)
+ */
+async function updateCurrencyBalance(currency) {
+  const WISE_API_TOKEN = process.env.WISE_API_TOKEN;
+  const WISE_API_URL = process.env.WISE_API_URL || 'https://api.wise.com';
+  const WISE_PROFILE_ID = process.env.WISE_PROFILE_ID;
+
+  if (!WISE_API_TOKEN || !WISE_PROFILE_ID) {
+    throw new Error('WISE_API_TOKEN or WISE_PROFILE_ID not configured');
+  }
+
+  const response = await fetch(
+    `${WISE_API_URL}/v4/profiles/${WISE_PROFILE_ID}/balances?types=STANDARD`,
+    {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${WISE_API_TOKEN}`,
+        'Content-Type': 'application/json'
+      }
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Wise API error: ${response.status} ${errorText}`);
+  }
+
+  const balances = await response.json();
+
+  // Update all balances (or just the specific currency if provided)
+  for (const balance of balances) {
+    if (!currency || balance.currency === currency) {
+      await pool.query(`
+        INSERT INTO currency_balances (currency, balance, last_updated)
+        VALUES ($1, $2, CURRENT_TIMESTAMP)
+        ON CONFLICT (currency)
+        DO UPDATE SET balance = $2, last_updated = CURRENT_TIMESTAMP
+      `, [balance.currency, balance.amount.value]);
+
+      console.log(`   ✓ Updated ${balance.currency} balance: ${balance.amount.value}`);
+    }
+  }
+}
+
+/**
  * Map Wise CSV category to our classification category
  * @param {string} wiseCategory - Category from Wise CSV
  * @returns {string} Mapped category
@@ -1367,7 +1413,13 @@ async function processTransferStateChange(data) {
         const transactionId = transferDetails.customerTransactionId || `TRANSFER-${transferDetails.id}`;
         const transactionDate = transferDetails.created;
 
+        // Extract merchant/counterparty name
+        const merchantName = txnType === 'DEBIT'
+          ? (transferDetails.details?.recipient?.name || transferDetails.targetName || '')
+          : (transferDetails.details?.sender?.name || transferDetails.sourceName || '');
+
         console.log(`[Webhook] Creating new transaction: ${txnType} ${amount} ${currency}`);
+        console.log(`[Webhook] Merchant/Counterparty: ${merchantName}`);
 
         // Check for duplicates by customerTransactionId
         const duplicateCheck = await WiseTransactionModel.exists(transactionId);
@@ -1392,7 +1444,7 @@ async function processTransferStateChange(data) {
           amount,
           currency,
           description,
-          merchantName: '',
+          merchantName: merchantName || '',
           referenceNumber: transferDetails.reference || transactionId,
           transactionDate,
           valueDate: transactionDate,
@@ -1436,6 +1488,17 @@ async function processTransferStateChange(data) {
         });
 
         console.log(`[Webhook] Entry created (ID: ${entryResult.rows[0].id})`);
+
+        // Update currency balance for this currency
+        console.log(`[Webhook] Updating ${currency} balance from Wise...`);
+        try {
+          await updateCurrencyBalance(currency);
+          console.log(`[Webhook] ✓ ${currency} balance updated`);
+        } catch (balanceError) {
+          console.error(`[Webhook] ⚠️  Failed to update ${currency} balance:`, balanceError.message);
+          // Don't fail the webhook if balance update fails
+        }
+
         console.log(`[Webhook] ✅ Transfer ${transferId} fully imported via webhook-triggered immediate sync`);
 
         return {
