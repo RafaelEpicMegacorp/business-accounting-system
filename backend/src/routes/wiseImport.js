@@ -1322,14 +1322,145 @@ async function processTransferStateChange(data) {
         entryId: result.entryId
       };
     } else {
-      console.log('[Webhook] Transfer not found in database - will be created when full sync runs');
+      console.log('[Webhook] Transfer not found in database - fetching immediately from Wise API...');
 
-      return {
-        transferId,
-        action: 'not_found',
-        message: 'Transfer not found in database - will be synced later',
-        currentState
-      };
+      // IMMEDIATE SYNC: Fetch the transfer from Wise API now instead of waiting for cron
+      const WISE_API_TOKEN = process.env.WISE_API_TOKEN;
+      const WISE_API_URL = process.env.WISE_API_URL || 'https://api.wise.com';
+
+      if (!WISE_API_TOKEN) {
+        console.error('[Webhook] WISE_API_TOKEN not set - cannot fetch transfer immediately');
+        return {
+          transferId,
+          action: 'not_found',
+          message: 'Transfer not found in database - will be synced later (API token missing)',
+          currentState
+        };
+      }
+
+      try {
+        // Fetch transfer details from Wise API
+        console.log(`[Webhook] Fetching transfer ${transferId} from Wise API...`);
+        const transferUrl = `${WISE_API_URL}/v1/transfers/${transferId}`;
+        const response = await fetch(transferUrl, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${WISE_API_TOKEN}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('[Webhook] Wise API Error:', response.status, errorText);
+          throw new Error(`Wise API returned ${response.status}: ${errorText}`);
+        }
+
+        const transferDetails = await response.json();
+        console.log('[Webhook] Transfer fetched successfully:', transferDetails.id);
+
+        // Determine transaction type
+        const txnType = transferDetails.sourceValue ? 'DEBIT' : 'CREDIT';
+        const amount = Math.abs(parseFloat(transferDetails.sourceValue || transferDetails.targetValue));
+        const currency = transferDetails.sourceCurrency || transferDetails.targetCurrency;
+        const description = transferDetails.details?.reference || 'Wire Transfer';
+        const transactionId = transferDetails.customerTransactionId || `TRANSFER-${transferDetails.id}`;
+        const transactionDate = transferDetails.created;
+
+        console.log(`[Webhook] Creating new transaction: ${txnType} ${amount} ${currency}`);
+
+        // Check for duplicates by customerTransactionId
+        const duplicateCheck = await WiseTransactionModel.exists(transactionId);
+        if (duplicateCheck) {
+          console.log('[Webhook] Transaction already exists (found by customerTransactionId)');
+          return {
+            transferId,
+            action: 'duplicate',
+            message: 'Transaction already exists',
+            currentState
+          };
+        }
+
+        // Store in wise_transactions table
+        await WiseTransactionModel.create({
+          wiseTransactionId: transactionId,
+          wiseResourceId: transferId.toString(),
+          profileId: profileId,
+          accountId: transferDetails.sourceAccount || transferDetails.targetAccount,
+          type: txnType,
+          state: currentState,
+          amount,
+          currency,
+          description,
+          merchantName: '',
+          referenceNumber: transferDetails.reference || transactionId,
+          transactionDate,
+          valueDate: transactionDate,
+          syncStatus: 'processed',
+          classifiedCategory: null,
+          matchedEmployeeId: null,
+          confidenceScore: null,
+          needsReview: false,
+          rawPayload: transferDetails
+        });
+
+        console.log('[Webhook] Transaction stored in database');
+
+        // Create entry immediately
+        const entryType = txnType === 'CREDIT' ? 'income' : 'expense';
+        const category = entryType === 'income' ? 'other_income' : 'other_expenses';
+
+        const entryResult = await pool.query(
+          `INSERT INTO entries (type, category, description, detail, base_amount, total, entry_date, status, currency, amount_original, wise_transaction_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+           RETURNING id`,
+          [
+            entryType,
+            category,
+            description || 'Wise transaction',
+            `Imported from Wise via webhook (Ref: ${transactionId})`,
+            amount,
+            amount,
+            transactionDate.split('T')[0],
+            'completed',
+            currency,
+            amount,
+            transactionId
+          ]
+        );
+
+        // Link entry to transaction
+        await WiseTransactionModel.updateStatus(transactionId, {
+          entryId: entryResult.rows[0].id,
+          syncStatus: 'processed'
+        });
+
+        console.log(`[Webhook] Entry created (ID: ${entryResult.rows[0].id})`);
+        console.log(`[Webhook] ✅ Transfer ${transferId} fully imported via webhook-triggered immediate sync`);
+
+        return {
+          transferId,
+          action: 'immediate_sync',
+          message: `Transfer fetched and imported immediately via webhook`,
+          currentState,
+          transactionId,
+          entryId: entryResult.rows[0].id,
+          amount,
+          currency,
+          type: txnType
+        };
+
+      } catch (fetchError) {
+        console.error('[Webhook] Failed to fetch transfer immediately:', fetchError.message);
+        // Fallback: Return not_found so it gets synced in next cron run
+        return {
+          transferId,
+          action: 'fetch_failed',
+          message: `Failed to fetch transfer immediately - will be synced later: ${fetchError.message}`,
+          currentState,
+          error: fetchError.message
+        };
+      }
     }
 
   } catch (error) {
