@@ -26,6 +26,27 @@
 
 ## 🎯 Current State
 
+### Currency Display Fix - COMPLETE ✅ (Latest)
+
+**Bug Fixed**: Currency display showing hardcoded `$` symbol for all amounts
+**Status**: ✅ FIXED AND DEPLOYED (commit b8dd730)
+**Severity**: Medium - Cosmetic but confusing
+
+**Solution**:
+- Created `frontend/src/utils/currencyFormatter.js` utility
+- Maps currencies to symbols: USD ($), EUR (€), GBP (£), PLN (zł)
+- Updated `AccountingApp.jsx` lines 1095-1099 to use `formatCurrency()`
+- Both Base Amount and Total columns now display correct symbols
+
+**Verification**:
+- ✅ PLN accountant payment (369.00 PLN) displays as "zł369.00"
+- ✅ USD entries display as "$100.00"
+- ✅ Dashboard aggregates remain in USD (correct)
+
+**Deployed**: 2025-10-30, live branch, auto-deploying to Railway + Netlify
+
+---
+
 ### Webhook Verification - COMPLETE ✅
 
 **Webhook Status** (VERIFIED OPERATIONAL):
@@ -46,6 +67,7 @@
 - **Entry Created**: ✅ Yes (Entry ID: 1010)
 - **Status**: Processed successfully
 - **UI Visibility**: ✅ Visible in Transaction Review interface
+- **Display**: ✅ Shows as "zł369.00" (currency fix applied)
 
 **Manual Sync Test** (PASSED):
 - **Method**: POST /api/wise/sync/manual with JWT
@@ -73,11 +95,12 @@
 3. ✅ **Accountant Payment** - VERIFIED in database and UI
 4. ✅ **Entry Creation** - CONFIRMED (Entry ID: 1010)
 5. ✅ **Automated Sync** - Cron job running every 6 hours, 2+ syncs completed
+6. ✅ **Currency Display Fix** - All currencies show correct symbols (commit b8dd730)
 
 ### Documentation Tasks ✅
 1. ✅ **CLAUDE.md Updated** - Complete Wise integration section with 3 methods
 2. ✅ **DOCS/API/INTERNAL_API.md Updated** - 4 new endpoints documented with examples
-3. ✅ **SESSION_STATUS.md Updated** - All tasks marked complete
+3. ✅ **SESSION_STATUS.md Updated** - Currency fix documented
 4. ✅ **Quick Commands Added** - Manual sync and health check commands
 
 **Optional future improvements** (not urgent):
@@ -146,18 +169,19 @@ SELECT * FROM wise_sync_metadata WHERE key = 'last_sync_stats';
 ## 🚀 IMMEDIATE: When Computer Restarts (START HERE)
 
 **Last Code State**:
-- ✅ All code committed and pushed to `live` branch (commit a0cf069)
+- ✅ All code committed and pushed to `live` branch (commit b8dd730)
 - ✅ Complete Wise Integration deployed and verified
-- ✅ 286 transactions in production database
+- ✅ Currency display fix deployed (all currencies show correct symbols)
+- ✅ 287 transactions in production database
 - ✅ Cron job running every 6 hours
 - ✅ Webhooks endpoint active
 
 **What Just Happened**:
-1. Verified production deployment (commit a0cf069)
-2. Tested CSV import with 286 transactions via Playwright
-3. Confirmed cron job running (2 syncs completed)
-4. Tested webhook endpoint (responding correctly)
-5. Generated comprehensive verification report
+1. Fixed currency display bug - hardcoded `$` symbols replaced with correct currency symbols
+2. Created `currencyFormatter.js` utility for consistent formatting
+3. Updated entry display in AccountingApp.jsx
+4. Verified PLN entries show "zł" symbol correctly
+5. Deployed to production (commit b8dd730)
 
 **FIRST THING TO DO**:
 
@@ -376,6 +400,9 @@ curl -X POST https://business-accounting-system-production.up.railway.app/api/wi
 
 ---
 
-**Last Updated**: October 30, 2025 09:00 UTC
+**Last Updated**: October 30, 2025 10:30 UTC
 **Session Owner**: Rafael
-**Next Session**: Complete remaining tasks (webhook config, manual sync test, documentation)
+**Next Action**: All Wise integration tasks complete. System ready for normal use.
+
+**Recent Fixes**:
+- Currency display now shows correct symbols for all currencies (PLN: zł, EUR: €, GBP: £, USD: $)

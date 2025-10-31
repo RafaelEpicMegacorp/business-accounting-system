@@ -36,6 +36,34 @@ async function setMetadata(key, value) {
 }
 
 /**
+ * Extract complete recipient/sender details from transfer object
+ * @param {object} transferDetails - Full transfer object from Wise API
+ * @param {string} txnType - Transaction type ('DEBIT' or 'CREDIT')
+ * @returns {object} Structured recipient details
+ */
+function extractRecipientDetails(transferDetails, txnType) {
+  // For DEBIT (outgoing), get recipient details
+  // For CREDIT (incoming), get sender details
+  const party = txnType === 'DEBIT'
+    ? (transferDetails.details?.recipient || {})
+    : (transferDetails.details?.sender || {});
+
+  return {
+    name: party.name || transferDetails.targetName || transferDetails.sourceName || '',
+    accountNumber: party.accountNumber || party.iban || party.accountHolderName || '',
+    bankCode: party.bankCode || party.bic || party.sortCode || party.swiftCode || '',
+    address: {
+      city: party.address?.city || party.city || '',
+      country: party.address?.country || party.country || '',
+      postCode: party.address?.postCode || party.postCode || '',
+      firstLine: party.address?.firstLine || ''
+    },
+    email: party.email || '',
+    legalType: party.legalType || 'PERSON' // PERSON or BUSINESS
+  };
+}
+
+/**
  * Fetch historical transfers from Wise Transfer API
  * Transfer API has no date limitations and can fetch complete history
  * @param {string} startDate - ISO date string (e.g., "2024-08-01T00:00:00.000Z")
@@ -323,17 +351,18 @@ async function syncCompleteHistory(req, res) {
           const transactionDate = transfer.created;
           const transactionId = transfer.customerTransactionId || `TRANSFER-${transfer.id}`;
 
-          // Extract merchant/counterparty name
-          // For DEBIT (outgoing), targetName is the recipient/merchant
-          // For CREDIT (incoming), sourceName is the sender
-          const merchantName = txnType === 'DEBIT'
-            ? (transfer.details?.recipient?.name || transfer.targetName || '')
-            : (transfer.details?.sender?.name || transfer.sourceName || '');
+          // Extract complete recipient details, fees, and rates
+          const recipientDetails = extractRecipientDetails(transfer, txnType);
+          const transferFee = parseFloat(transfer.fee || 0);
+          const exchangeRate = transfer.rate ? parseFloat(transfer.rate) : null;
 
           console.log(`      Type: ${txnType} (${txnType === 'CREDIT' ? 'income' : 'expense'})`);
           console.log(`      Amount: ${amount} ${currency}`);
           console.log(`      Description: ${description.substring(0, 50)}${description.length > 50 ? '...' : ''}`);
-          console.log(`      Merchant: ${merchantName.substring(0, 40)}${merchantName.length > 40 ? '...' : ''}`);
+          console.log(`      Recipient: ${recipientDetails.name.substring(0, 40)}${recipientDetails.name.length > 40 ? '...' : ''}`);
+          if (recipientDetails.accountNumber) console.log(`      Account: ${recipientDetails.accountNumber}`);
+          if (transferFee > 0) console.log(`      Fee: ${transferFee}`);
+          if (exchangeRate) console.log(`      Rate: ${exchangeRate}`);
 
           // Check for duplicates
           const existing = await WiseTransactionModel.exists(transactionId);
@@ -345,7 +374,7 @@ async function syncCompleteHistory(req, res) {
 
           stats.transactionsFound++;
 
-          // STEP 5: Store transaction in database
+          // STEP 5: Store transaction in database with enhanced details
           await WiseTransactionModel.create({
             wiseTransactionId: transactionId,
             wiseResourceId: transfer.id.toString(),
@@ -356,7 +385,7 @@ async function syncCompleteHistory(req, res) {
             amount,
             currency,
             description,
-            merchantName: merchantName || '',
+            merchantName: recipientDetails.name,
             referenceNumber,
             transactionDate,
             valueDate: transactionDate,
@@ -365,7 +394,10 @@ async function syncCompleteHistory(req, res) {
             matchedEmployeeId: null,
             confidenceScore: null,
             needsReview: false,
-            rawPayload: transfer
+            rawPayload: transfer,
+            transferFee: transferFee,
+            transferExchangeRate: exchangeRate,
+            recipientDetails: recipientDetails
           });
 
           stats.newTransactions++;
@@ -716,10 +748,10 @@ async function runIncrementalSync(lookbackHours = 12) {
           const transactionId = transfer.customerTransactionId || `TRANSFER-${transfer.id}`;
           const transactionDate = transfer.created;
 
-          // Extract merchant/counterparty name
-          const merchantName = txnType === 'DEBIT'
-            ? (transfer.details?.recipient?.name || transfer.targetName || '')
-            : (transfer.details?.sender?.name || transfer.sourceName || '');
+          // Extract complete recipient details, fees, and rates
+          const recipientDetails = extractRecipientDetails(transfer, txnType);
+          const transferFee = parseFloat(transfer.fee || 0);
+          const exchangeRate = transfer.rate ? parseFloat(transfer.rate) : null;
 
           // Check for duplicates
           const existing = await WiseTransactionModel.exists(transactionId);
@@ -730,7 +762,7 @@ async function runIncrementalSync(lookbackHours = 12) {
 
           stats.transactionsFound++;
 
-          // Store transaction in database
+          // Store transaction in database with enhanced details
           await WiseTransactionModel.create({
             wiseTransactionId: transactionId,
             wiseResourceId: transfer.id.toString(),
@@ -741,7 +773,7 @@ async function runIncrementalSync(lookbackHours = 12) {
             amount,
             currency,
             description,
-            merchantName: merchantName || '',
+            merchantName: recipientDetails.name,
             referenceNumber: transactionId,
             transactionDate,
             valueDate: transactionDate,
@@ -750,7 +782,10 @@ async function runIncrementalSync(lookbackHours = 12) {
             matchedEmployeeId: null,
             confidenceScore: null,
             needsReview: false,
-            rawPayload: transfer
+            rawPayload: transfer,
+            transferFee: transferFee,
+            transferExchangeRate: exchangeRate,
+            recipientDetails: recipientDetails
           });
 
           stats.newTransactions++;

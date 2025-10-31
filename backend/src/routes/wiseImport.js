@@ -91,6 +91,69 @@ async function updateCurrencyBalance(currency) {
 }
 
 /**
+ * Map Wise transfer state to entry status
+ * @param {string} wiseState - Wise transfer state
+ * @returns {string|null} Entry status ('pending' or 'completed') or null if no mapping (for cancelled/failed)
+ */
+function mapWiseStateToEntryStatus(wiseState) {
+  const stateLower = (wiseState || '').toLowerCase();
+
+  // Completed states
+  if (stateLower.includes('completed') ||
+      stateLower.includes('funds_received') ||
+      stateLower === 'funds_converted') {
+    return 'completed';
+  }
+
+  // Pending/Processing states
+  if (stateLower.includes('processing') ||
+      stateLower.includes('outgoing_payment_sent') ||
+      stateLower.includes('incoming_payment_waiting') ||
+      stateLower.includes('waiting')) {
+    return 'pending';
+  }
+
+  // Failed/Cancelled states - return null to flag for review
+  if (stateLower.includes('cancelled') ||
+      stateLower.includes('bounced') ||
+      stateLower.includes('charged_back') ||
+      stateLower.includes('refunded')) {
+    return null; // Will flag for manual review
+  }
+
+  // Default to completed for unknown states
+  return 'completed';
+}
+
+/**
+ * Extract complete recipient/sender details from transfer object
+ * @param {object} transferDetails - Full transfer object from Wise API
+ * @param {string} txnType - Transaction type ('DEBIT' or 'CREDIT')
+ * @returns {object} Structured recipient details
+ */
+function extractRecipientDetails(transferDetails, txnType) {
+  // For DEBIT (outgoing), get recipient details
+  // For CREDIT (incoming), get sender details
+  const party = txnType === 'DEBIT'
+    ? (transferDetails.details?.recipient || {})
+    : (transferDetails.details?.sender || {});
+
+  return {
+    name: party.name || transferDetails.targetName || transferDetails.sourceName || '',
+    accountNumber: party.accountNumber || party.iban || party.accountHolderName || '',
+    bankCode: party.bankCode || party.bic || party.sortCode || party.swiftCode || '',
+    address: {
+      city: party.address?.city || party.city || '',
+      country: party.address?.country || party.country || '',
+      postCode: party.address?.postCode || party.postCode || '',
+      firstLine: party.address?.firstLine || ''
+    },
+    email: party.email || '',
+    legalType: party.legalType || 'PERSON' // PERSON or BUSINESS
+  };
+}
+
+/**
  * Map Wise CSV category to our classification category
  * @param {string} wiseCategory - Category from Wise CSV
  * @returns {string} Mapped category
@@ -1329,43 +1392,90 @@ async function processTransferStateChange(data) {
 
       const transferDetails = await response.json();
 
-      // Map to transaction data format
-      const txnData = {
-        wise_transaction_id: transferDetails.customerTransactionId || `TRANSFER-${transferDetails.id}`,
-        wise_resource_id: transferId,
-        profile_id: profileId,
-        account_id: transferDetails.sourceAccount || transferDetails.targetAccount,
-        type: transferDetails.sourceValue ? 'DEBIT' : 'CREDIT',
-        state: currentState,
-        amount: Math.abs(transferDetails.sourceValue || transferDetails.targetValue || 0),
-        currency: transferDetails.sourceCurrency || transferDetails.targetCurrency,
-        description: transferDetails.details?.reference || 'Wire Transfer',
-        merchant_name: null,
-        reference_number: transferDetails.reference,
-        transaction_date: transferDetails.created,
-        value_date: transferDetails.created,
-        raw_payload: transferDetails
-      };
+      // Extract enhanced details
+      const txnType = transferDetails.sourceValue ? 'DEBIT' : 'CREDIT';
+      const recipientDetails = extractRecipientDetails(transferDetails, txnType);
+      const transferFee = parseFloat(transferDetails.fee || 0);
+      const exchangeRate = transferDetails.rate ? parseFloat(transferDetails.rate) : null;
 
-      // Process with shared processor (will update existing transaction)
-      const processor = new wiseTransactionProcessor();
-      const result = await processor.processTransaction(txnData, 'webhook');
+      // Update wise_transactions with new state and enhanced details
+      await pool.query(
+        `UPDATE wise_transactions
+         SET state = $1,
+             raw_payload = $2,
+             recipient_details = $3,
+             transfer_fee = $4,
+             transfer_exchange_rate = $5
+         WHERE wise_resource_id = $6`,
+        [
+          currentState,
+          transferDetails,
+          recipientDetails,
+          transferFee,
+          exchangeRate,
+          transferId
+        ]
+      );
+
+      console.log(`[Webhook] Updated transaction state: ${existing.state} → ${currentState}`);
+      console.log(`[Webhook] Recipient: ${recipientDetails.name} (${recipientDetails.accountNumber})`);
+      if (transferFee > 0) console.log(`[Webhook] Fee: ${transferFee}`);
+      if (exchangeRate) console.log(`[Webhook] Exchange rate: ${exchangeRate}`);
+
+      // Map state to entry status and update if needed
+      if (existing.entry_id) {
+        const entryStatus = mapWiseStateToEntryStatus(currentState);
+
+        if (entryStatus === null) {
+          // Cancelled/Failed/Refunded - flag for review
+          await pool.query(
+            `UPDATE entries
+             SET needs_review = true,
+                 detail = COALESCE(detail, '') || ' [TRANSFER ${upper($1)}]'
+             WHERE id = $2`,
+            [currentState, existing.entry_id]
+          );
+          console.log(`[Webhook] ⚠️ Entry ${existing.entry_id} flagged for review (state: ${currentState})`);
+        } else {
+          // Update entry status
+          await pool.query(
+            `UPDATE entries SET status = $1 WHERE id = $2`,
+            [entryStatus, existing.entry_id]
+          );
+          console.log(`[Webhook] Entry ${existing.entry_id} status updated to: ${entryStatus}`);
+        }
+      }
+
+      // Create audit log for state change
+      await WiseTransactionModel.createAuditLog({
+        wiseTransactionId: existing.wise_transaction_id,
+        entryId: existing.entry_id,
+        action: 'state_change_webhook',
+        notes: `Transfer state changed from ${existing.state} to ${currentState}`,
+        oldValues: { state: existing.state },
+        newValues: {
+          state: currentState,
+          recipient: recipientDetails.name,
+          fee: transferFee,
+          rate: exchangeRate
+        }
+      });
 
       console.log('[Webhook] Transfer state change processed:', {
         transfer_id: transferId,
         previous_state: existing.state,
         current_state: currentState,
-        action: result.action
+        action: 'state_updated'
       });
 
       return {
         transferId,
-        action: result.action,
+        action: 'state_updated',
         message: `Transfer state updated to ${currentState}`,
         previousState: existing.state,
         currentState,
-        entryCreated: result.entryCreated,
-        entryId: result.entryId
+        entryUpdated: true,
+        entryId: existing.entry_id
       };
     } else {
       console.log('[Webhook] Transfer not found in database - fetching immediately from Wise API...');
@@ -1413,13 +1523,16 @@ async function processTransferStateChange(data) {
         const transactionId = transferDetails.customerTransactionId || `TRANSFER-${transferDetails.id}`;
         const transactionDate = transferDetails.created;
 
-        // Extract merchant/counterparty name
-        const merchantName = txnType === 'DEBIT'
-          ? (transferDetails.details?.recipient?.name || transferDetails.targetName || '')
-          : (transferDetails.details?.sender?.name || transferDetails.sourceName || '');
+        // Extract complete recipient details
+        const recipientDetails = extractRecipientDetails(transferDetails, txnType);
+        const transferFee = parseFloat(transferDetails.fee || 0);
+        const exchangeRate = transferDetails.rate ? parseFloat(transferDetails.rate) : null;
 
         console.log(`[Webhook] Creating new transaction: ${txnType} ${amount} ${currency}`);
-        console.log(`[Webhook] Merchant/Counterparty: ${merchantName}`);
+        console.log(`[Webhook] Recipient: ${recipientDetails.name}`);
+        console.log(`[Webhook] Account: ${recipientDetails.accountNumber}`);
+        if (transferFee > 0) console.log(`[Webhook] Fee: ${transferFee}`);
+        if (exchangeRate) console.log(`[Webhook] Exchange rate: ${exchangeRate}`);
 
         // Check for duplicates by customerTransactionId
         const duplicateCheck = await WiseTransactionModel.exists(transactionId);
@@ -1433,7 +1546,7 @@ async function processTransferStateChange(data) {
           };
         }
 
-        // Store in wise_transactions table
+        // Store in wise_transactions table with enhanced details
         await WiseTransactionModel.create({
           wiseTransactionId: transactionId,
           wiseResourceId: transferId.toString(),
@@ -1444,7 +1557,7 @@ async function processTransferStateChange(data) {
           amount,
           currency,
           description,
-          merchantName: merchantName || '',
+          merchantName: recipientDetails.name,
           referenceNumber: transferDetails.reference || transactionId,
           transactionDate,
           valueDate: transactionDate,
@@ -1453,7 +1566,10 @@ async function processTransferStateChange(data) {
           matchedEmployeeId: null,
           confidenceScore: null,
           needsReview: false,
-          rawPayload: transferDetails
+          rawPayload: transferDetails,
+          transferFee: transferFee,
+          transferExchangeRate: exchangeRate,
+          recipientDetails: recipientDetails
         });
 
         console.log('[Webhook] Transaction stored in database');

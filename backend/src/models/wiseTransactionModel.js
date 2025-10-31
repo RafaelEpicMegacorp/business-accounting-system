@@ -26,7 +26,11 @@ const WiseTransactionModel = {
       matchedEmployeeId,
       confidenceScore,
       needsReview = false,
-      rawPayload
+      rawPayload,
+      // NEW FIELDS:
+      transferFee,
+      transferExchangeRate,
+      recipientDetails
     } = transaction;
 
     const result = await pool.query(
@@ -36,9 +40,10 @@ const WiseTransactionModel = {
         description, merchant_name, reference_number,
         transaction_date, value_date,
         sync_status, classified_category, matched_employee_id,
-        confidence_score, needs_review, raw_payload
+        confidence_score, needs_review, raw_payload,
+        transfer_fee, transfer_exchange_rate, recipient_details
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
       RETURNING *`,
       [
         wiseTransactionId, wiseResourceId, profileId, accountId,
@@ -46,7 +51,10 @@ const WiseTransactionModel = {
         description, merchantName, referenceNumber,
         transactionDate, valueDate,
         syncStatus, classifiedCategory, matchedEmployeeId,
-        confidenceScore, needsReview, rawPayload ? JSON.stringify(rawPayload) : null
+        confidenceScore, needsReview, rawPayload ? JSON.stringify(rawPayload) : null,
+        transferFee || null,
+        transferExchangeRate || null,
+        recipientDetails ? JSON.stringify(recipientDetails) : null
       ]
     );
 
