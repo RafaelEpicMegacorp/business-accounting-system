@@ -1360,8 +1360,8 @@ async function processTransferStateChange(data) {
       profile_id: profileId
     });
 
-    // Check if we have this transaction
-    const existing = await WiseTransactionModel.getByWiseId(transferId);
+    // Check if we have this transaction (look up by resource ID from webhook)
+    const existing = await WiseTransactionModel.getByResourceId(transferId);
 
     if (existing) {
       // Transaction exists - fetch full details from Wise API and reprocess
@@ -1658,8 +1658,8 @@ async function processTransferIssue(data) {
     console.log(`Transfer ${transferId} has issue: ${issueType}`);
     console.log(`Issue details: ${JSON.stringify(issueDetails)}`);
 
-    // Check if we have this transaction
-    const existing = await WiseTransactionModel.getByWiseId(transferId);
+    // Check if we have this transaction (look up by resource ID)
+    const existing = await WiseTransactionModel.getByResourceId(transferId);
 
     if (existing) {
       // Update transaction with issue details

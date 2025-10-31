@@ -75,6 +75,19 @@ const WiseTransactionModel = {
   },
 
   /**
+   * Get transaction by Wise resource ID (transfer ID)
+   * @param {string} wiseResourceId - Wise resource/transfer ID
+   * @returns {Promise<Object|null>} Transaction record or null
+   */
+  async getByResourceId(wiseResourceId) {
+    const result = await pool.query(
+      'SELECT * FROM wise_transactions WHERE wise_resource_id = $1',
+      [wiseResourceId.toString()]
+    );
+    return result.rows[0] || null;
+  },
+
+  /**
    * Get transaction by internal ID
    * @param {number} id - Internal transaction ID
    * @returns {Promise<Object|null>} Transaction record or null
