@@ -325,9 +325,10 @@ export default function SalaryCalendar({ entries, onEdit, onDelete }) {
                       </div>
                       <div className="flex items-center gap-2 ml-4">
                         <button
-                          onClick={() => {
-                            setSelectedDay(null);
+                          onClick={(e) => {
+                            e.stopPropagation();
                             onEdit(entry);
+                            setSelectedDay(null);
                           }}
                           className="p-2 text-blue-600 hover:bg-blue-50 rounded"
                           title="Edit"
@@ -335,11 +336,9 @@ export default function SalaryCalendar({ entries, onEdit, onDelete }) {
                           <Edit2 size={16} />
                         </button>
                         <button
-                          onClick={() => {
-                            if (window.confirm('Are you sure you want to delete this payment?')) {
-                              onDelete(entry.id);
-                              setSelectedDay(null);
-                            }
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDelete(entry.id);
                           }}
                           className="p-2 text-red-600 hover:bg-red-50 rounded"
                           title="Delete"
