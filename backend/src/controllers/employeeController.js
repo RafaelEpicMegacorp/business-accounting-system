@@ -8,7 +8,7 @@ const EmployeeController = {
     try {
       const { active } = req.query;
       const isActive = active === 'true' ? true : active === 'false' ? false : null;
-      const employees = await EmployeeModel.getAllWithStats(isActive);
+      const employees = await EmployeeModel.getAllWithProjects(isActive);
       res.json(employees);
     } catch (error) {
       next(error);

@@ -526,6 +526,7 @@ export default function EmployeeList({ onEmployeeSelect, onEdit }) {
               </th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Name</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Position</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Project</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Pay Type</th>
               <th className="px-4 py-3 text-center text-xs font-medium text-gray-700 uppercase">Tenure</th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-700 uppercase">Pay Rate</th>
@@ -551,6 +552,19 @@ export default function EmployeeList({ onEmployeeSelect, onEdit }) {
                 <td className="px-4 py-3 font-medium text-gray-900">{employee.name}</td>
                 <td className="px-4 py-3 text-gray-600">
                   {employee.position || <span className="text-gray-400 italic">Not set</span>}
+                </td>
+                <td className="px-4 py-3">
+                  {employee.primary_project_name ? (
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="w-3 h-3 rounded"
+                        style={{ backgroundColor: employee.primary_project_color || '#3B82F6' }}
+                      />
+                      <span className="text-sm text-gray-700">{employee.primary_project_name}</span>
+                    </div>
+                  ) : (
+                    <span className="text-gray-400 italic text-sm">No project</span>
+                  )}
                 </td>
                 <td className="px-4 py-3 text-gray-700">
                   <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">

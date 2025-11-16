@@ -298,6 +298,59 @@ const EmployeeModel = {
     }
 
     return { affected, failed };
+  },
+
+  // Get all employees with their primary project
+  async getAllWithProjects(isActive = null) {
+    let query = `
+      SELECT
+        e.*,
+        COUNT(en.id) as total_entries,
+        SUM(CASE WHEN en.status = 'completed' THEN en.total ELSE 0 END) as total_paid,
+        MAX(en.entry_date) as last_payment_date,
+        p.id as primary_project_id,
+        p.name as primary_project_name,
+        p.color as primary_project_color
+      FROM employees e
+      LEFT JOIN entries en ON e.id = en.employee_id
+      LEFT JOIN employee_projects ep ON e.id = ep.employee_id AND ep.is_primary = true AND ep.removed_date IS NULL
+      LEFT JOIN projects p ON ep.project_id = p.id
+    `;
+
+    const params = [];
+    if (isActive !== null) {
+      query += ' WHERE e.is_active = $1';
+      params.push(isActive);
+    }
+
+    query += ' GROUP BY e.id, p.id, p.name, p.color ORDER BY e.is_active DESC, e.name ASC';
+
+    const result = await pool.query(query, params);
+    return result.rows;
+  },
+
+  // Get employee with all their projects
+  async getWithProjects(id) {
+    const employee = await this.getById(id);
+    if (!employee) return null;
+
+    const projects = await pool.query(
+      `SELECT
+        p.id, p.name, p.description, p.status, p.color,
+        ep.assigned_date as "assignedDate", ep.removed_date as "removedDate",
+        ep.is_primary as "isPrimary", ep.role,
+        ep.allocation_percentage as "allocationPercentage"
+       FROM projects p
+       INNER JOIN employee_projects ep ON p.id = ep.project_id
+       WHERE ep.employee_id = $1 AND ep.removed_date IS NULL
+       ORDER BY ep.is_primary DESC, p.name ASC`,
+      [id]
+    );
+
+    return {
+      ...employee,
+      projects: projects.rows
+    };
   }
 };
 

@@ -8,6 +8,7 @@ import EmployeeList from './EmployeeList';
 import EmployeeForm from './EmployeeForm';
 import ContractList from './ContractList';
 import ContractForm from './ContractForm';
+import ProjectList from './ProjectList';
 import DashboardView from './DashboardView';
 import ForecastView from './ForecastView';
 import SalaryCalendar from './SalaryCalendar';
@@ -19,7 +20,7 @@ import { formatCurrency } from '../utils/currencyFormatter';
 
 export default function AccountingApp() {
   const { user, logout } = useAuth();
-  const [currentView, setCurrentView] = useState('dashboard'); // 'dashboard', 'forecast', 'income', 'expenses', 'salaries', 'employees', 'contracts', 'transaction-review'
+  const [currentView, setCurrentView] = useState('dashboard'); // 'dashboard', 'forecast', 'income', 'expenses', 'salaries', 'employees', 'contracts', 'projects', 'transaction-review'
   const [entries, setEntries] = useState([]);
   const [totals, setTotals] = useState({
     total_income: '0',
@@ -502,6 +503,16 @@ export default function AccountingApp() {
               Employees
             </button>
             <button
+              onClick={() => setCurrentView('projects')}
+              className={`px-4 py-2 font-medium transition ${
+                currentView === 'projects'
+                  ? 'text-blue-600 border-b-2 border-blue-600'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Projects
+            </button>
+            <button
               onClick={() => setCurrentView('transaction-review')}
               className={`px-4 py-2 font-medium transition ${
                 currentView === 'transaction-review'
@@ -800,6 +811,11 @@ export default function AccountingApp() {
             onEdit={handleContractEdit}
             onDelete={handleContractDelete}
           />
+        )}
+
+        {/* Projects View */}
+        {currentView === 'projects' && (
+          <ProjectList />
         )}
 
         {/* Employee Form Modal */}

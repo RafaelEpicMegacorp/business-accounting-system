@@ -1,10 +1,10 @@
-# Session Status - Webhook Verification COMPLETE
+# Session Status - Contract & Employee Creation Fixed
 
 > **👋 STARTING FRESH? [CLICK HERE - Jump to "When Computer Restarts"](#-immediate-when-computer-restarts-start-here)**
 
-**Date**: October 30, 2025
+**Date**: November 16, 2025
 **Branch**: `live` (auto-deploys to production)
-**Status**: ✅ **COMPLETE - WISE INTEGRATION VERIFIED & DOCUMENTED**
+**Status**: ✅ **COMPLETE - CONTRACT & EMPLOYEE CREATION FIXED AND DEPLOYED**
 
 ---
 
@@ -13,12 +13,12 @@
 **TL;DR - What you need to do:**
 1. ✅ Read this file (you're here)
 2. ⚠️ **ALWAYS use task-orchestrator** for all work (per updated CLAUDE.md)
-3. 🎉 **WEBHOOKS VERIFIED AND OPERATIONAL** - 17 webhook events captured!
-4. 📊 **287 transactions in database** - Including accountant payment captured today
-5. ⏰ **Cron job running** - Automated syncs every 6 hours
-6. 🔔 **Accountant payment verified** - Transaction + Entry created successfully
+3. ✅ **CONTRACT & EMPLOYEE CREATION FIXED** - Field name validation mismatch resolved
+4. 🎉 **WEBHOOKS VERIFIED AND OPERATIONAL** - 17 webhook events captured!
+5. 📊 **287 transactions in database** - Including accountant payment captured
+6. ⏰ **Cron job running** - Automated syncs every 6 hours
 
-**Last Thing We Did**: Completed all documentation updates - CLAUDE.md and DOCS/API/INTERNAL_API.md now include complete Wise integration documentation
+**Last Thing We Did**: Fixed validation field name mismatches for both contracts and employees
 
 **Verification Report**: See `/Users/rafael/Windsurf/accounting/WEBHOOK_VERIFICATION_REPORT.md`
 
@@ -26,7 +26,119 @@
 
 ## 🎯 Current State
 
-### Currency Display Fix - COMPLETE ✅ (Latest)
+### Employee Creation Validation Fix - COMPLETE ✅ (Latest)
+
+**Status**: ✅ FIXED AND DEPLOYED (commit b2245a6)
+**Date**: November 16, 2025
+**Severity**: Critical - Users unable to add employees
+
+**Problem**:
+- Frontend sends camelCase field names: `payType`, `payRate`, `payMultiplier`, `startDate`, `terminationDate`
+- Backend validation was checking for snake_case: `pay_type`, `pay_rate`, `pay_multiplier`, `start_date`, `termination_date`
+- All employee creation attempts failed with "Pay type is required" error
+
+**Solution**:
+- Updated `backend/src/utils/employeeValidation.js` to check for camelCase field names
+- Changed 9 field references from snake_case to camelCase
+- Aligned validation with model's expected data format
+
+**Files Changed**:
+- `backend/src/utils/employeeValidation.js` - Fixed all field name checks
+
+**Testing**:
+- Fix deployed to production via Railway auto-deploy
+- Users can now add employees successfully
+
+**Deployed**: 2025-11-16, commit b2245a6
+
+---
+
+### Contract Creation Validation Fix - COMPLETE ✅
+
+**Status**: ✅ FIXED AND DEPLOYED (commit d9be381)
+**Date**: November 16, 2025
+**Severity**: Critical - Users unable to create contracts
+
+**Problem**:
+- Frontend sends camelCase field names: `clientName`, `contractType`, `startDate`, etc.
+- Backend validation was checking for snake_case: `client_name`, `contract_type`, `start_date`
+- All contract creation attempts failed with "Client name is required" error
+
+**Solution**:
+- Updated `backend/src/utils/contractValidation.js` to check for camelCase field names
+- Changed 12 field references from snake_case to camelCase
+- Aligned validation with model's expected data format
+
+**Files Changed**:
+- `backend/src/utils/contractValidation.js` - Fixed all field name checks
+
+**Testing**:
+- Fix deployed to production via Railway auto-deploy
+- Users can now create contracts successfully
+
+**Deployed**: 2025-11-16, commit d9be381
+
+---
+
+### Enhanced Transaction Tracking & Webhook State Sync - COMPLETE ✅
+
+**Status**: ✅ FIXED AND DEPLOYED (commits 50daf4e, 6aab57b, f29e273)
+**Date**: October 31, 2025
+**Severity**: Critical - Cancelled transfers weren't being flagged for review
+
+**What Was Implemented**:
+1. **Enhanced Tracking** (Migration 014):
+   - Added `transfer_fee` column - Track Wise fees for each transfer
+   - Added `transfer_exchange_rate` column - Capture conversion rates
+   - Added `recipient_details` JSONB column - Store complete recipient information
+   - Added GIN index on recipient_details for fast queries
+
+2. **State Synchronization**:
+   - Created `mapWiseStateToEntryStatus()` helper to map Wise states to entry statuses
+   - Created `extractRecipientDetails()` helper to capture sender/recipient info
+   - Webhook handlers now update transfer states in real-time
+   - Cancelled/failed transfers automatically flagged with `needs_review=true`
+
+3. **Critical Bug Fixes**:
+   - **SQL Syntax Error** (line 1434): Fixed `${upper($1)}` → `' [TRANSFER ' || UPPER($1) || ']'`
+   - **Webhook Lookup Bug** (line 1364): Fixed `getByWiseId()` → `getByResourceId()`
+
+4. **Manual Data Cleanup**:
+   - Updated 2 transfers to correct state (funds_refunded)
+   - Flagged 10 existing failed transfers for manual review
+   - 5 funds_refunded transfers ($4,134.42 total)
+   - 4 bounced_back transfers (80 PLN total)
+   - 1 cancelled transfer (30,000 PLN)
+
+**Root Cause**:
+Webhooks provide numeric `resource.id` (e.g., 1796224786) but code was searching by `wise_transaction_id` (UUID format). All webhook state updates failed silently, causing cancelled transfers to appear as "completed".
+
+**Files Changed**:
+- `backend/migrations/014_wise_enhanced_tracking.sql` (NEW)
+- `backend/src/models/wiseTransactionModel.js` - Added `getByResourceId()` method
+- `backend/src/routes/wiseImport.js` - Fixed webhook handlers and added state mapping
+- `backend/src/routes/wiseSync_new.js` - Enhanced sync with recipient details
+
+**Verification**:
+```sql
+-- All 10 failed transfers now flagged for review
+SELECT state, COUNT(*), SUM(amount), array_agg(DISTINCT currency)
+FROM wise_transactions
+WHERE state IN ('cancelled', 'funds_refunded', 'bounced_back')
+GROUP BY state;
+
+     state      | count | sum      | array_agg
+----------------+-------+----------+-----------
+ funds_refunded |     5 |  4134.42 | {PLN,USD}
+ bounced_back   |     4 |    80.00 | {PLN}
+ cancelled      |     1 | 30000.00 | {PLN}
+```
+
+**Deployed**: 2025-10-31, commits f29e273, 6aab57b, 50daf4e
+
+---
+
+### Currency Display Fix - COMPLETE ✅
 
 **Bug Fixed**: Currency display showing hardcoded `$` symbol for all amounts
 **Status**: ✅ FIXED AND DEPLOYED (commit b8dd730)
@@ -96,6 +208,8 @@
 4. ✅ **Entry Creation** - CONFIRMED (Entry ID: 1010)
 5. ✅ **Automated Sync** - Cron job running every 6 hours, 2+ syncs completed
 6. ✅ **Currency Display Fix** - All currencies show correct symbols (commit b8dd730)
+7. ✅ **Enhanced Transaction Tracking** - Fees, exchange rates, recipient details (migration 014)
+8. ✅ **Webhook State Sync Fix** - Critical bug fixed, 10 failed transfers flagged (commit f29e273)
 
 ### Documentation Tasks ✅
 1. ✅ **CLAUDE.md Updated** - Complete Wise integration section with 3 methods
@@ -169,19 +283,23 @@ SELECT * FROM wise_sync_metadata WHERE key = 'last_sync_stats';
 ## 🚀 IMMEDIATE: When Computer Restarts (START HERE)
 
 **Last Code State**:
-- ✅ All code committed and pushed to `live` branch (commit b8dd730)
-- ✅ Complete Wise Integration deployed and verified
-- ✅ Currency display fix deployed (all currencies show correct symbols)
-- ✅ 287 transactions in production database
+- ✅ All code committed and pushed to `live` branch (commit f29e273)
+- ✅ Enhanced Wise transaction tracking with fees, rates, and recipient details
+- ✅ Critical webhook state sync bug fixed (10 failed transfers now flagged)
+- ✅ Migration 014 deployed (transfer_fee, transfer_exchange_rate, recipient_details)
+- ✅ Production database healthy and operational
 - ✅ Cron job running every 6 hours
-- ✅ Webhooks endpoint active
+- ✅ Webhooks actively updating transfer states
 
 **What Just Happened**:
-1. Fixed currency display bug - hardcoded `$` symbols replaced with correct currency symbols
-2. Created `currencyFormatter.js` utility for consistent formatting
-3. Updated entry display in AccountingApp.jsx
-4. Verified PLN entries show "zł" symbol correctly
-5. Deployed to production (commit b8dd730)
+1. Implemented enhanced transaction tracking (migration 014)
+   - Added transfer fee tracking
+   - Added exchange rate capture
+   - Added recipient details (JSONB)
+2. Fixed critical SQL syntax error in webhook handler
+3. Fixed webhook lookup bug (getByWiseId → getByResourceId)
+4. Manually cleaned up 10 failed transfers and flagged for review
+5. Deployed all fixes to production (commits 50daf4e, 6aab57b, f29e273)
 
 **FIRST THING TO DO**:
 
@@ -400,9 +518,12 @@ curl -X POST https://business-accounting-system-production.up.railway.app/api/wi
 
 ---
 
-**Last Updated**: October 30, 2025 10:30 UTC
+**Last Updated**: October 31, 2025 13:00 UTC
 **Session Owner**: Rafael
-**Next Action**: All Wise integration tasks complete. System ready for normal use.
+**Next Action**: All enhanced tracking and webhook state sync tasks complete. System ready for normal use.
 
 **Recent Fixes**:
-- Currency display now shows correct symbols for all currencies (PLN: zł, EUR: €, GBP: £, USD: $)
+- Enhanced transaction tracking with fees, exchange rates, and recipient details (migration 014)
+- Critical webhook state sync bug fixed - 10 failed transfers now properly flagged for review
+- Webhook handlers now correctly update transfer states in real-time
+- Currency display shows correct symbols for all currencies (PLN: zł, EUR: €, GBP: £, USD: $)
