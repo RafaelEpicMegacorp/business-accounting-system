@@ -978,6 +978,7 @@ export default function AccountingApp() {
             entries={entries}
             onEdit={handleEdit}
             onDelete={handleDelete}
+            onRefresh={loadEntries}
           />
         ) : (
           <>

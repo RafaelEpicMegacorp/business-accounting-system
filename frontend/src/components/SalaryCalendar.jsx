@@ -1,9 +1,18 @@
 import React, { useState, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, Calendar, DollarSign, Edit2, Trash2, X } from 'lucide-react';
 
-export default function SalaryCalendar({ entries, onEdit, onDelete }) {
+export default function SalaryCalendar({ entries, onEdit, onDelete, onRefresh }) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState(null);
+  const [editingEntry, setEditingEntry] = useState(null);
+  const [editFormData, setEditFormData] = useState({
+    description: '',
+    detail: '',
+    baseAmount: '',
+    total: '',
+    entryDate: '',
+    status: 'completed'
+  });
 
   // Helper function to get days in month
   const getDaysInMonth = (date) => {
@@ -137,6 +146,65 @@ export default function SalaryCalendar({ entries, onEdit, onDelete }) {
       totalPayments
     };
   }, [calendarDays]);
+
+  // Edit modal handlers
+  const handleEditClick = (entry) => {
+    setEditingEntry(entry);
+    setEditFormData({
+      description: entry.description || entry.employee_name || '',
+      detail: entry.detail || '',
+      baseAmount: entry.base_amount.toString(),
+      total: entry.total.toString(),
+      entryDate: entry.entry_date.split('T')[0],
+      status: entry.status || 'completed'
+    });
+  };
+
+  const handleEditSave = async () => {
+    // Validation
+    if (!editFormData.description || !editFormData.baseAmount || !editFormData.total) {
+      alert('Please fill in all required fields');
+      return;
+    }
+
+    try {
+      // Import API service
+      const { default: entryService } = await import('../services/entryService');
+
+      // Update entry
+      await entryService.update(editingEntry.id, {
+        type: editingEntry.type,
+        category: editingEntry.category,
+        description: editFormData.description,
+        detail: editFormData.detail,
+        baseAmount: parseFloat(editFormData.baseAmount),
+        total: parseFloat(editFormData.total),
+        entryDate: editFormData.entryDate,
+        status: editFormData.status
+      });
+
+      // Close modal and refresh
+      setEditingEntry(null);
+      if (onRefresh) {
+        await onRefresh();
+      }
+    } catch (error) {
+      console.error('Error updating entry:', error);
+      alert('Failed to update entry. Please try again.');
+    }
+  };
+
+  const handleEditCancel = () => {
+    setEditingEntry(null);
+    setEditFormData({
+      description: '',
+      detail: '',
+      baseAmount: '',
+      total: '',
+      entryDate: '',
+      status: 'completed'
+    });
+  };
 
   return (
     <div className="bg-white rounded-lg shadow-sm p-6">
@@ -327,8 +395,7 @@ export default function SalaryCalendar({ entries, onEdit, onDelete }) {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            onEdit(entry);
-                            setSelectedDay(null);
+                            handleEditClick(entry);
                           }}
                           className="p-2 text-blue-600 hover:bg-blue-50 rounded"
                           title="Edit"
@@ -350,6 +417,160 @@ export default function SalaryCalendar({ entries, onEdit, onDelete }) {
                   </div>
                 ))}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Entry Modal */}
+      {editingEntry && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-60">
+          <div className="bg-white rounded-lg shadow-xl max-w-xl w-full mx-4 max-h-[85vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <div>
+                <h3 className="text-xl font-bold text-gray-900">
+                  Edit Payment
+                </h3>
+                <p className="text-sm text-gray-500 mt-1">
+                  {editingEntry.employee_name || editingEntry.description}
+                </p>
+              </div>
+              <button
+                onClick={handleEditCancel}
+                className="p-2 hover:bg-gray-100 rounded-lg"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6">
+              <div className="space-y-4">
+                {/* Employee Info Display */}
+                <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+                  <div className="flex items-center gap-2">
+                    {editingEntry.pay_type && (
+                      <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded">
+                        {editingEntry.pay_type}
+                      </span>
+                    )}
+                    <span className="px-2 py-1 bg-gray-200 text-gray-700 text-xs font-medium rounded">
+                      {editingEntry.category}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Description */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Description *
+                  </label>
+                  <input
+                    type="text"
+                    value={editFormData.description}
+                    onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Payment description"
+                  />
+                </div>
+
+                {/* Detail */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Additional Details
+                  </label>
+                  <textarea
+                    value={editFormData.detail}
+                    onChange={(e) => setEditFormData({ ...editFormData, detail: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    rows="3"
+                    placeholder="Optional additional details"
+                  />
+                </div>
+
+                {/* Base Amount and Total */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Base Amount *
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-2 text-gray-500 font-medium text-lg">$</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={editFormData.baseAmount}
+                        onChange={(e) => setEditFormData({ ...editFormData, baseAmount: e.target.value })}
+                        className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-lg font-semibold"
+                        placeholder="0.00"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Total Amount *
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-2 text-gray-500 font-medium text-lg">$</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={editFormData.total}
+                        onChange={(e) => setEditFormData({ ...editFormData, total: e.target.value })}
+                        className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-lg font-semibold"
+                        placeholder="0.00"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Date and Status */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Payment Date *
+                    </label>
+                    <input
+                      type="date"
+                      value={editFormData.entryDate}
+                      onChange={(e) => setEditFormData({ ...editFormData, entryDate: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Status *
+                    </label>
+                    <select
+                      value={editFormData.status}
+                      onChange={(e) => setEditFormData({ ...editFormData, status: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="completed">Completed</option>
+                      <option value="pending">Pending</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200 bg-gray-50">
+              <button
+                onClick={handleEditCancel}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleEditSave}
+                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+              >
+                Save Changes
+              </button>
             </div>
           </div>
         </div>
