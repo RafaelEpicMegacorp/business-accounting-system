@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Plus, Trash2, Edit2, DollarSign, TrendingUp, TrendingDown, CheckSquare, Square, Download, X, Filter, LogOut } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import entryService from '../services/entryService';
@@ -56,6 +56,9 @@ export default function AccountingApp() {
 
   // Bulk selection state
   const [selectedEntries, setSelectedEntries] = useState([]);
+
+  // Ref for scrolling to edit form
+  const formRef = useRef(null);
 
   // Search and filter state
   const [searchQuery, setSearchQuery] = useState('');
@@ -187,6 +190,14 @@ export default function AccountingApp() {
     });
     setEditingId(entry.id);
     setShowForm(true);
+
+    // Scroll to form after state updates
+    setTimeout(() => {
+      formRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start'
+      });
+    }, 100);
   };
 
   const handleDelete = async (id) => {
@@ -843,7 +854,7 @@ export default function AccountingApp() {
           <>
             {/* Entry Form with Date Picker */}
         {showForm && (
-          <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+          <div ref={formRef} className="bg-white rounded-lg shadow-sm p-6 mb-6">
             <h2 className="text-xl font-bold text-gray-900 mb-4">
               {editingId ? 'Edit Entry' : 'Add New Entry'}
             </h2>
