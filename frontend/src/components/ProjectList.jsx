@@ -140,20 +140,20 @@ export default function ProjectList() {
   };
 
   const calculateEmployeeMonthlyCost = (employee) => {
-    const { pay_type, pay_rate, pay_multiplier, allocation_percentage } = employee;
-    const allocation = (allocation_percentage || 100) / 100;
-    const multiplier = pay_multiplier || 1;
+    const { payType, payRate, payMultiplier, allocationPercentage } = employee;
+    const allocation = (allocationPercentage || 100) / 100;
+    const multiplier = payMultiplier || 1;
 
     let baseMonthlyCost = 0;
-    switch(pay_type) {
+    switch(payType) {
       case 'monthly':
-        baseMonthlyCost = pay_rate;
+        baseMonthlyCost = payRate;
         break;
       case 'weekly':
-        baseMonthlyCost = pay_rate * 4;  // 4 weeks per month
+        baseMonthlyCost = payRate * 4;  // 4 weeks per month
         break;
       case 'hourly':
-        baseMonthlyCost = pay_rate * 160;  // 160 hours per month
+        baseMonthlyCost = payRate * 160;  // 160 hours per month
         break;
       default:
         baseMonthlyCost = 0;
@@ -273,19 +273,19 @@ export default function ProjectList() {
                     <div className="space-y-3">
                       {activeEmployees.map(employee => {
                         const monthlyCost = calculateEmployeeMonthlyCost(employee);
-                        const allocation = employee.allocation_percentage || 100;
+                        const allocation = employee.allocationPercentage || 100;
 
                         return (
                           <div
                             key={employee.id}
                             className={`border rounded-lg p-4 ${
-                              employee.is_primary ? 'border-blue-400 bg-blue-50' : 'bg-white'
+                              employee.isPrimary ? 'border-blue-400 bg-blue-50' : 'bg-white'
                             }`}
                           >
                             <div className="flex items-start justify-between mb-2">
                               <div className="flex items-center gap-2">
                                 <h4 className="font-semibold text-gray-900">{employee.name}</h4>
-                                {employee.is_primary && (
+                                {employee.isPrimary && (
                                   <span className="px-2 py-0.5 text-xs font-medium bg-blue-600 text-white rounded">
                                     Primary
                                   </span>
@@ -312,22 +312,22 @@ export default function ProjectList() {
                               <div>
                                 <span className="text-gray-500">Pay Rate:</span>
                                 <span className="ml-1 text-gray-900">
-                                  {formatCurrency(employee.pay_rate)}/{employee.pay_type}
+                                  {formatCurrency(employee.payRate)}/{employee.payType}
                                 </span>
                               </div>
                               <div>
                                 <span className="text-gray-500">Allocation:</span>
                                 <span className="ml-1 text-gray-900">{allocation}%</span>
                               </div>
-                              {employee.pay_multiplier && employee.pay_multiplier !== 1 && (
+                              {employee.payMultiplier && employee.payMultiplier !== 1 && (
                                 <div>
                                   <span className="text-gray-500">Multiplier:</span>
-                                  <span className="ml-1 text-gray-900">{employee.pay_multiplier}x</span>
+                                  <span className="ml-1 text-gray-900">{employee.payMultiplier}x</span>
                                 </div>
                               )}
                               <div>
                                 <span className="text-gray-500">Assigned:</span>
-                                <span className="ml-1 text-gray-900">{formatDate(employee.assigned_date)}</span>
+                                <span className="ml-1 text-gray-900">{formatDate(employee.assignedDate)}</span>
                               </div>
                             </div>
 

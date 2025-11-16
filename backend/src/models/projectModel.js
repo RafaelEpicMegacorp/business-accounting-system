@@ -53,7 +53,8 @@ const projectModel = {
     const employees = await pool.query(
       `SELECT
         e.id, e.name, e.email, e.position, e.pay_type as "payType",
-        e.pay_rate as "payRate", e.is_active as "isActive",
+        e.pay_rate as "payRate", e.pay_multiplier as "payMultiplier",
+        e.is_active as "isActive",
         ep.assigned_date as "assignedDate", ep.removed_date as "removedDate",
         ep.is_primary as "isPrimary", ep.role,
         ep.allocation_percentage as "allocationPercentage"
