@@ -19,6 +19,11 @@ export default function ProjectList() {
     budget: ''
   });
 
+  // Modal state for project details
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [projectDetails, setProjectDetails] = useState(null);
+  const [loadingDetails, setLoadingDetails] = useState(false);
+
   useEffect(() => {
     loadProjects();
   }, [filter]);
@@ -114,6 +119,290 @@ export default function ProjectList() {
       <span className={`px-2 py-1 text-xs rounded-full ${styles[status]}`}>
         {status.replace('_', ' ').toUpperCase()}
       </span>
+    );
+  };
+
+  // Helper functions for cost calculations
+  const formatCurrency = (amount) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD'
+    }).format(amount);
+  };
+
+  const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+  };
+
+  const calculateEmployeeMonthlyCost = (employee) => {
+    const { pay_type, pay_rate, pay_multiplier, allocation_percentage } = employee;
+    const allocation = (allocation_percentage || 100) / 100;
+    const multiplier = pay_multiplier || 1;
+
+    let baseMonthlyCost = 0;
+    switch(pay_type) {
+      case 'monthly':
+        baseMonthlyCost = pay_rate;
+        break;
+      case 'weekly':
+        baseMonthlyCost = pay_rate * 4;  // 4 weeks per month
+        break;
+      case 'hourly':
+        baseMonthlyCost = pay_rate * 160;  // 160 hours per month
+        break;
+      default:
+        baseMonthlyCost = 0;
+    }
+
+    return baseMonthlyCost * multiplier * allocation;
+  };
+
+  const calculateTotalMonthlyCost = (employees) => {
+    if (!employees || employees.length === 0) return 0;
+    return employees
+      .filter(emp => emp.removed_date === null)  // Only active assignments
+      .reduce((sum, emp) => sum + calculateEmployeeMonthlyCost(emp), 0);
+  };
+
+  // Handle project card click to show details
+  const handleProjectClick = async (projectId, e) => {
+    // Don't trigger if clicking on action buttons
+    if (e.target.closest('button')) {
+      return;
+    }
+
+    try {
+      setLoadingDetails(true);
+      setShowDetailModal(true);
+      const details = await projectService.getWithEmployees(projectId);
+      setProjectDetails(details);
+    } catch (error) {
+      console.error('Failed to load project details:', error);
+      alert('Failed to load project details');
+      setShowDetailModal(false);
+    } finally {
+      setLoadingDetails(false);
+    }
+  };
+
+  // Project Detail Modal Component
+  const ProjectDetailModal = () => {
+    if (!showDetailModal) return null;
+
+    const activeEmployees = projectDetails?.employees?.filter(emp => emp.removed_date === null) || [];
+    const removedEmployees = projectDetails?.employees?.filter(emp => emp.removed_date !== null) || [];
+    const totalCost = calculateTotalMonthlyCost(projectDetails?.employees || []);
+    const budgetRemaining = projectDetails?.budget ? parseFloat(projectDetails.budget) - totalCost : null;
+    const budgetUsedPercent = projectDetails?.budget ? (totalCost / parseFloat(projectDetails.budget)) * 100 : null;
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+          {/* Header */}
+          <div className="border-b px-6 py-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div
+                className="w-4 h-4 rounded"
+                style={{ backgroundColor: projectDetails?.color || '#3B82F6' }}
+              />
+              <h2 className="text-2xl font-bold text-gray-900">
+                {loadingDetails ? 'Loading...' : projectDetails?.name}
+              </h2>
+              {projectDetails && getStatusBadge(projectDetails.status)}
+            </div>
+            <button
+              onClick={() => setShowDetailModal(false)}
+              className="text-gray-500 hover:text-gray-700"
+            >
+              <X size={24} />
+            </button>
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto p-6">
+            {loadingDetails ? (
+              <div className="text-center py-12 text-gray-500">Loading project details...</div>
+            ) : projectDetails ? (
+              <>
+                {/* Description */}
+                {projectDetails.description && (
+                  <div className="mb-6">
+                    <h3 className="text-sm font-semibold text-gray-700 mb-2">DESCRIPTION</h3>
+                    <p className="text-gray-600">{projectDetails.description}</p>
+                  </div>
+                )}
+
+                {/* Project Info */}
+                <div className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4 bg-gray-50 p-4 rounded-lg">
+                  {projectDetails.client_name && (
+                    <div>
+                      <p className="text-xs text-gray-500">Client</p>
+                      <p className="text-sm font-medium text-gray-900">{projectDetails.client_name}</p>
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-xs text-gray-500">Start Date</p>
+                    <p className="text-sm font-medium text-gray-900">{formatDate(projectDetails.start_date)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">End Date</p>
+                    <p className="text-sm font-medium text-gray-900">{formatDate(projectDetails.end_date)}</p>
+                  </div>
+                  {projectDetails.budget && (
+                    <div>
+                      <p className="text-xs text-gray-500">Budget</p>
+                      <p className="text-sm font-medium text-gray-900">{formatCurrency(parseFloat(projectDetails.budget))}</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Team Members */}
+                <div className="mb-6">
+                  <h3 className="text-sm font-semibold text-gray-700 mb-3">
+                    TEAM MEMBERS ({activeEmployees.length} active)
+                  </h3>
+
+                  {activeEmployees.length === 0 ? (
+                    <p className="text-gray-500 text-sm italic">No active employees assigned to this project</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {activeEmployees.map(employee => {
+                        const monthlyCost = calculateEmployeeMonthlyCost(employee);
+                        const allocation = employee.allocation_percentage || 100;
+
+                        return (
+                          <div
+                            key={employee.id}
+                            className={`border rounded-lg p-4 ${
+                              employee.is_primary ? 'border-blue-400 bg-blue-50' : 'bg-white'
+                            }`}
+                          >
+                            <div className="flex items-start justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                <h4 className="font-semibold text-gray-900">{employee.name}</h4>
+                                {employee.is_primary && (
+                                  <span className="px-2 py-0.5 text-xs font-medium bg-blue-600 text-white rounded">
+                                    Primary
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-lg font-bold text-gray-900">
+                                {formatCurrency(monthlyCost)}
+                              </span>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2 text-sm">
+                              {employee.position && (
+                                <div>
+                                  <span className="text-gray-500">Position:</span>
+                                  <span className="ml-1 text-gray-900">{employee.position}</span>
+                                </div>
+                              )}
+                              {employee.role && (
+                                <div>
+                                  <span className="text-gray-500">Role:</span>
+                                  <span className="ml-1 text-gray-900">{employee.role}</span>
+                                </div>
+                              )}
+                              <div>
+                                <span className="text-gray-500">Pay Rate:</span>
+                                <span className="ml-1 text-gray-900">
+                                  {formatCurrency(employee.pay_rate)}/{employee.pay_type}
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-gray-500">Allocation:</span>
+                                <span className="ml-1 text-gray-900">{allocation}%</span>
+                              </div>
+                              {employee.pay_multiplier && employee.pay_multiplier !== 1 && (
+                                <div>
+                                  <span className="text-gray-500">Multiplier:</span>
+                                  <span className="ml-1 text-gray-900">{employee.pay_multiplier}x</span>
+                                </div>
+                              )}
+                              <div>
+                                <span className="text-gray-500">Assigned:</span>
+                                <span className="ml-1 text-gray-900">{formatDate(employee.assigned_date)}</span>
+                              </div>
+                            </div>
+
+                            <div className="mt-2 pt-2 border-t">
+                              <span className="text-xs text-gray-600">
+                                Monthly Cost for this Project: <span className="font-semibold text-gray-900">{formatCurrency(monthlyCost)}</span>
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Removed Employees */}
+                  {removedEmployees.length > 0 && (
+                    <div className="mt-6">
+                      <h4 className="text-xs font-semibold text-gray-500 mb-2">REMOVED EMPLOYEES</h4>
+                      <div className="space-y-2">
+                        {removedEmployees.map(employee => (
+                          <div key={employee.id} className="bg-gray-100 rounded-lg p-3 text-sm">
+                            <div className="flex items-center justify-between">
+                              <span className="font-medium text-gray-700">{employee.name}</span>
+                              <span className="text-xs text-gray-500">
+                                Removed: {formatDate(employee.removed_date)}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Cost Summary */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <h3 className="text-sm font-semibold text-gray-700 mb-3">COST SUMMARY</h3>
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Active Employees:</span>
+                      <span className="font-medium text-gray-900">{activeEmployees.length}</span>
+                    </div>
+                    <div className="flex justify-between text-lg font-bold border-t pt-2">
+                      <span className="text-gray-700">Total Monthly Cost:</span>
+                      <span className="text-gray-900">{formatCurrency(totalCost)}</span>
+                    </div>
+                    {budgetRemaining !== null && (
+                      <>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Budget:</span>
+                          <span className="font-medium text-gray-900">{formatCurrency(parseFloat(projectDetails.budget))}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Remaining:</span>
+                          <span className={`font-medium ${budgetRemaining >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {formatCurrency(budgetRemaining)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Budget Used:</span>
+                          <span className={`font-medium ${budgetUsedPercent <= 100 ? 'text-gray-900' : 'text-red-600'}`}>
+                            {budgetUsedPercent.toFixed(1)}%
+                          </span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="text-center py-12 text-gray-500">No project details available</div>
+            )}
+          </div>
+        </div>
+      </div>
     );
   };
 
@@ -301,7 +590,11 @@ export default function ProjectList() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {projects.map(project => (
-            <div key={project.id} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
+            <div
+              key={project.id}
+              className="border rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer"
+              onClick={(e) => handleProjectClick(project.id, e)}
+            >
               <div className="flex items-start justify-between mb-2">
                 <div className="flex items-center gap-2">
                   <div
@@ -351,6 +644,9 @@ export default function ProjectList() {
           ))}
         </div>
       )}
+
+      {/* Project Detail Modal */}
+      <ProjectDetailModal />
     </div>
   );
 }
