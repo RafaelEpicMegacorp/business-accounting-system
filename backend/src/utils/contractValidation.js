@@ -11,24 +11,24 @@ const validateContractData = (data, isUpdate = false) => {
 
   // Required fields for create operation
   if (!isUpdate) {
-    if (!data.client_name) {
-      errors.push({ field: 'client_name', message: 'Client name is required' });
+    if (!data.clientName) {
+      errors.push({ field: 'clientName', message: 'Client name is required' });
     }
     if (data.amount === undefined || data.amount === null) {
       errors.push({ field: 'amount', message: 'Amount is required' });
     }
-    if (!data.contract_type) {
-      errors.push({ field: 'contract_type', message: 'Contract type is required' });
+    if (!data.contractType) {
+      errors.push({ field: 'contractType', message: 'Contract type is required' });
     }
-    if (!data.start_date) {
-      errors.push({ field: 'start_date', message: 'Start date is required' });
+    if (!data.startDate) {
+      errors.push({ field: 'startDate', message: 'Start date is required' });
     }
   }
 
-  // Validate client_name length
-  if (data.client_name && data.client_name.length > 255) {
+  // Validate clientName length
+  if (data.clientName && data.clientName.length > 255) {
     errors.push({
-      field: 'client_name',
+      field: 'clientName',
       message: 'Client name must be 255 characters or less'
     });
   }
@@ -44,52 +44,52 @@ const validateContractData = (data, isUpdate = false) => {
     }
   }
 
-  // Validate contract_type
-  if (data.contract_type && !['monthly', 'yearly', 'one-time'].includes(data.contract_type)) {
+  // Validate contractType
+  if (data.contractType && !['monthly', 'yearly', 'one-time'].includes(data.contractType)) {
     errors.push({
-      field: 'contract_type',
+      field: 'contractType',
       message: 'Contract type must be one of: monthly, yearly, one-time'
     });
   }
 
-  // Validate payment_day if provided
-  if (data.payment_day !== undefined && data.payment_day !== null) {
-    const day = parseInt(data.payment_day);
+  // Validate paymentDay if provided
+  if (data.paymentDay !== undefined && data.paymentDay !== null) {
+    const day = parseInt(data.paymentDay);
     if (isNaN(day) || day < 1 || day > 31) {
       errors.push({
-        field: 'payment_day',
+        field: 'paymentDay',
         message: 'Payment day must be between 1 and 31'
       });
     }
   }
 
-  // Validate start_date
-  if (data.start_date) {
-    const startDate = new Date(data.start_date);
+  // Validate startDate
+  if (data.startDate) {
+    const startDate = new Date(data.startDate);
     if (isNaN(startDate.getTime())) {
       errors.push({
-        field: 'start_date',
+        field: 'startDate',
         message: 'Invalid start date format'
       });
     }
   }
 
-  // Validate end_date if provided
-  if (data.end_date) {
-    const endDate = new Date(data.end_date);
+  // Validate endDate if provided
+  if (data.endDate) {
+    const endDate = new Date(data.endDate);
     if (isNaN(endDate.getTime())) {
       errors.push({
-        field: 'end_date',
+        field: 'endDate',
         message: 'Invalid end date format'
       });
     }
 
     // Check that end date is after start date
-    if (data.start_date) {
-      const startDate = new Date(data.start_date);
+    if (data.startDate) {
+      const startDate = new Date(data.startDate);
       if (endDate <= startDate) {
         errors.push({
-          field: 'end_date',
+          field: 'endDate',
           message: 'End date must be after start date'
         });
       }
