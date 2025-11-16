@@ -165,7 +165,7 @@ export default function ProjectList() {
   const calculateTotalMonthlyCost = (employees) => {
     if (!employees || employees.length === 0) return 0;
     return employees
-      .filter(emp => emp.removed_date === null)  // Only active assignments
+      .filter(emp => emp.removedDate === null)  // Only active assignments
       .reduce((sum, emp) => sum + calculateEmployeeMonthlyCost(emp), 0);
   };
 
@@ -194,8 +194,8 @@ export default function ProjectList() {
   const ProjectDetailModal = () => {
     if (!showDetailModal) return null;
 
-    const activeEmployees = projectDetails?.employees?.filter(emp => emp.removed_date === null) || [];
-    const removedEmployees = projectDetails?.employees?.filter(emp => emp.removed_date !== null) || [];
+    const activeEmployees = projectDetails?.employees?.filter(emp => emp.removedDate === null) || [];
+    const removedEmployees = projectDetails?.employees?.filter(emp => emp.removedDate !== null) || [];
     const totalCost = calculateTotalMonthlyCost(projectDetails?.employees || []);
     const budgetRemaining = projectDetails?.budget ? parseFloat(projectDetails.budget) - totalCost : null;
     const budgetUsedPercent = projectDetails?.budget ? (totalCost / parseFloat(projectDetails.budget)) * 100 : null;
@@ -352,7 +352,7 @@ export default function ProjectList() {
                             <div className="flex items-center justify-between">
                               <span className="font-medium text-gray-700">{employee.name}</span>
                               <span className="text-xs text-gray-500">
-                                Removed: {formatDate(employee.removed_date)}
+                                Removed: {formatDate(employee.removedDate)}
                               </span>
                             </div>
                           </div>
