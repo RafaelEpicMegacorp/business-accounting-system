@@ -16,14 +16,14 @@ const validateEmployeeData = async (data, isUpdate = false, employeeId = null) =
     if (!data.name) {
       errors.push({ field: 'name', message: 'Employee name is required' });
     }
-    if (!data.pay_type) {
-      errors.push({ field: 'pay_type', message: 'Pay type is required' });
+    if (!data.payType) {
+      errors.push({ field: 'payType', message: 'Pay type is required' });
     }
-    if (data.pay_rate === undefined || data.pay_rate === null) {
-      errors.push({ field: 'pay_rate', message: 'Pay rate is required' });
+    if (data.payRate === undefined || data.payRate === null) {
+      errors.push({ field: 'payRate', message: 'Pay rate is required' });
     }
-    if (!data.start_date) {
-      errors.push({ field: 'start_date', message: 'Start date is required' });
+    if (!data.startDate) {
+      errors.push({ field: 'startDate', message: 'Start date is required' });
     }
   }
 
@@ -68,63 +68,63 @@ const validateEmployeeData = async (data, isUpdate = false, employeeId = null) =
     });
   }
 
-  // Validate pay_type
-  if (data.pay_type && !['monthly', 'weekly', 'hourly'].includes(data.pay_type)) {
+  // Validate payType
+  if (data.payType && !['monthly', 'weekly', 'hourly'].includes(data.payType)) {
     errors.push({
-      field: 'pay_type',
+      field: 'payType',
       message: 'Pay type must be one of: monthly, weekly, hourly'
     });
   }
 
-  // Validate pay_rate
-  if (data.pay_rate !== undefined && data.pay_rate !== null) {
-    const rate = parseFloat(data.pay_rate);
+  // Validate payRate
+  if (data.payRate !== undefined && data.payRate !== null) {
+    const rate = parseFloat(data.payRate);
     if (isNaN(rate) || rate <= 0) {
       errors.push({
-        field: 'pay_rate',
+        field: 'payRate',
         message: 'Pay rate must be greater than 0'
       });
     }
   }
 
-  // Validate pay_multiplier if provided
-  if (data.pay_multiplier !== undefined && data.pay_multiplier !== null) {
-    const multiplier = parseFloat(data.pay_multiplier);
+  // Validate payMultiplier if provided
+  if (data.payMultiplier !== undefined && data.payMultiplier !== null) {
+    const multiplier = parseFloat(data.payMultiplier);
     if (isNaN(multiplier) || multiplier < 0) {
       errors.push({
-        field: 'pay_multiplier',
+        field: 'payMultiplier',
         message: 'Pay multiplier must be a positive number'
       });
     }
   }
 
-  // Validate start_date
-  if (data.start_date) {
-    const date = new Date(data.start_date);
+  // Validate startDate
+  if (data.startDate) {
+    const date = new Date(data.startDate);
     if (isNaN(date.getTime())) {
       errors.push({
-        field: 'start_date',
+        field: 'startDate',
         message: 'Invalid start date format'
       });
     }
   }
 
-  // Validate termination_date if provided
-  if (data.termination_date) {
-    const termDate = new Date(data.termination_date);
+  // Validate terminationDate if provided
+  if (data.terminationDate) {
+    const termDate = new Date(data.terminationDate);
     if (isNaN(termDate.getTime())) {
       errors.push({
-        field: 'termination_date',
+        field: 'terminationDate',
         message: 'Invalid termination date format'
       });
     }
 
     // Check that termination date is after start date
-    if (data.start_date) {
-      const startDate = new Date(data.start_date);
+    if (data.startDate) {
+      const startDate = new Date(data.startDate);
       if (termDate < startDate) {
         errors.push({
-          field: 'termination_date',
+          field: 'terminationDate',
           message: 'Termination date must be after start date'
         });
       }
