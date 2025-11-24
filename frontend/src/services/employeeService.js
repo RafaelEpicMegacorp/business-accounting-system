@@ -48,6 +48,15 @@ const employeeService = {
     return response.data;
   },
 
+  // Calculate severance pay with preview (doesn't save to DB)
+  async calculateSeverancePreview(id, terminationDate, overrides = {}) {
+    const response = await api.post(`/employees/${id}/calculate-severance-preview`, {
+      terminationDate: terminationDate || new Date().toISOString().split('T')[0],
+      ...overrides
+    });
+    return response.data;
+  },
+
   // Terminate employee with optional entry creation
   async terminate(id, terminationDate, createEntry = false) {
     const response = await api.post(`/employees/${id}/terminate`, {

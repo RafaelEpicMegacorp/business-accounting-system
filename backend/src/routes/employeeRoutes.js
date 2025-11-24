@@ -32,6 +32,9 @@ router.put('/:id', EmployeeController.update);
 // Calculate severance pay
 router.post('/:id/calculate-severance', EmployeeController.calculateSeverance);
 
+// Calculate severance pay with preview (doesn't save to DB)
+router.post('/:id/calculate-severance-preview', EmployeeController.calculateSeverancePreview);
+
 // Terminate employee
 router.post('/:id/terminate', EmployeeController.terminate);
 
