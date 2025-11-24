@@ -162,7 +162,17 @@ const EmployeeModel = {
 
       // Calculate partial month for termination month
       const daysInTermMonth = new Date(endYear, endMonth + 1, 0).getDate();
-      const dayWorkedInTermMonth = endDate.getDate();
+
+      // Fix: Check if employee started in same month as termination
+      let dayWorkedInTermMonth;
+      if (startYear === endYear && startMonth === endMonth) {
+        // Started in same month: calculate actual days worked
+        dayWorkedInTermMonth = endDate.getDate() - startDate.getDate() + 1;
+      } else {
+        // Started in previous month(s): count from day 1 to termination day
+        dayWorkedInTermMonth = endDate.getDate();
+      }
+
       const partialMonthRatio = dayWorkedInTermMonth / daysInTermMonth;
       baseSeverance += payRate * partialMonthRatio;
 
@@ -241,7 +251,17 @@ const EmployeeModel = {
 
       // Calculate partial month for termination month
       const daysInTermMonth = new Date(endYear, endMonth + 1, 0).getDate();
-      const dayWorkedInTermMonth = endDate.getDate();
+
+      // Fix: Check if employee started in same month as termination
+      let dayWorkedInTermMonth;
+      if (startYear === endYear && startMonth === endMonth) {
+        // Started in same month: calculate actual days worked
+        dayWorkedInTermMonth = endDate.getDate() - startDate.getDate() + 1;
+      } else {
+        // Started in previous month(s): count from day 1 to termination day
+        dayWorkedInTermMonth = endDate.getDate();
+      }
+
       const partialMonthRatio = dayWorkedInTermMonth / daysInTermMonth;
       baseSeverance += payRate * partialMonthRatio;
 
