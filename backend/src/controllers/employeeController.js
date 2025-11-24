@@ -74,6 +74,26 @@ const EmployeeController = {
     }
   },
 
+  // Calculate severance pay with preview overrides (doesn't save to DB)
+  async calculateSeverancePreview(req, res) {
+    try {
+      const { terminationDate, payType, payRate, payMultiplier, startDate } = req.body;
+      if (!terminationDate) {
+        return res.status(400).json({ error: 'Termination date is required' });
+      }
+      const overrides = { payType, payRate, payMultiplier, startDate };
+      const severance = await EmployeeModel.calculateSeveranceWithOverrides(
+        req.params.id,
+        terminationDate,
+        overrides
+      );
+      res.json(severance);
+    } catch (error) {
+      console.error('Calculate severance preview error:', error);
+      res.status(500).json({ error: error.message || 'Failed to calculate severance preview' });
+    }
+  },
+
   // Terminate employee with optional severance entry creation
   async terminate(req, res) {
     try {

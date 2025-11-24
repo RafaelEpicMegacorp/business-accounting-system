@@ -10,16 +10,31 @@ export default function EmployeeTerminationModal({ employee, onClose, onSuccess 
   const [calculating, setCalculating] = useState(false);
   const [error, setError] = useState(null);
 
-  // Calculate severance when date changes
+  // Editable employee fields
+  const [payType, setPayType] = useState(employee.pay_type);
+  const [payRate, setPayRate] = useState(employee.pay_rate);
+  const [startDate, setStartDate] = useState(employee.start_date.split('T')[0]);
+  const [payMultiplier, setPayMultiplier] = useState(employee.pay_multiplier);
+
+  // Calculate severance when any field changes
   useEffect(() => {
     calculateSeverance();
-  }, [terminationDate]);
+  }, [terminationDate, payType, payRate, startDate, payMultiplier]);
 
   const calculateSeverance = async () => {
     try {
       setCalculating(true);
       setError(null);
-      const data = await employeeService.calculateSeverance(employee.id, terminationDate);
+      const data = await employeeService.calculateSeverancePreview(
+        employee.id,
+        terminationDate,
+        {
+          payType,
+          payRate: parseFloat(payRate),
+          startDate,
+          payMultiplier: parseFloat(payMultiplier)
+        }
+      );
       setSeverance(data);
     } catch (err) {
       setError('Failed to calculate severance');
@@ -37,6 +52,27 @@ export default function EmployeeTerminationModal({ employee, onClose, onSuccess 
     try {
       setLoading(true);
       setError(null);
+
+      // Check if employee fields were modified
+      const fieldsChanged =
+        payType !== employee.pay_type ||
+        parseFloat(payRate) !== parseFloat(employee.pay_rate) ||
+        startDate !== employee.start_date.split('T')[0] ||
+        parseFloat(payMultiplier) !== parseFloat(employee.pay_multiplier);
+
+      // Update employee if fields changed
+      if (fieldsChanged) {
+        await employeeService.update(employee.id, {
+          name: employee.name,
+          email: employee.email,
+          payType,
+          payRate: parseFloat(payRate),
+          startDate,
+          payMultiplier: parseFloat(payMultiplier)
+        });
+      }
+
+      // Terminate employee
       await employeeService.terminate(employee.id, terminationDate, createEntry);
       onSuccess();
       onClose();
@@ -98,24 +134,53 @@ export default function EmployeeTerminationModal({ employee, onClose, onSuccess 
             </div>
           )}
 
-          {/* Employee Info */}
+          {/* Employee Info - Editable */}
           <div className="bg-gray-50 rounded-lg p-4 mb-6">
-            <div className="grid grid-cols-2 gap-4 text-sm">
+            <h3 className="text-sm font-medium text-gray-700 mb-4">Employee Details (editable)</h3>
+            <div className="grid grid-cols-2 gap-4">
               <div>
-                <span className="text-gray-600">Pay Type:</span>
-                <span className="ml-2 font-medium">{getPayTypeLabel(employee.pay_type)}</span>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Pay Type</label>
+                <select
+                  value={payType}
+                  onChange={(e) => setPayType(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="monthly">Monthly</option>
+                  <option value="weekly">Weekly</option>
+                  <option value="hourly">Hourly</option>
+                </select>
               </div>
               <div>
-                <span className="text-gray-600">Start Date:</span>
-                <span className="ml-2 font-medium">{formatDate(employee.start_date)}</span>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Start Date</label>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  max={new Date().toISOString().split('T')[0]}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
               </div>
               <div>
-                <span className="text-gray-600">Base Rate:</span>
-                <span className="ml-2 font-medium">${formatCurrency(employee.pay_rate)}</span>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Base Rate ($)</label>
+                <input
+                  type="number"
+                  value={payRate}
+                  onChange={(e) => setPayRate(e.target.value)}
+                  step="0.01"
+                  min="0"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
               </div>
               <div>
-                <span className="text-gray-600">Multiplier:</span>
-                <span className="ml-2 font-medium">{(parseFloat(employee.pay_multiplier) * 100).toFixed(2)}%</span>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Multiplier (%)</label>
+                <input
+                  type="number"
+                  value={parseFloat(payMultiplier) * 100}
+                  onChange={(e) => setPayMultiplier(parseFloat(e.target.value) / 100)}
+                  step="0.01"
+                  min="0"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
               </div>
             </div>
           </div>
@@ -130,7 +195,7 @@ export default function EmployeeTerminationModal({ employee, onClose, onSuccess 
               type="date"
               value={terminationDate}
               onChange={(e) => setTerminationDate(e.target.value)}
-              min={employee.start_date.split('T')[0]}
+              min={startDate}
               max={new Date().toISOString().split('T')[0]}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
@@ -167,11 +232,6 @@ export default function EmployeeTerminationModal({ employee, onClose, onSuccess 
                 <div className="flex justify-between text-sm">
                   <span className="text-blue-700">Base Rate:</span>
                   <span className="font-medium text-blue-900">${formatCurrency(severance.pay_rate)}</span>
-                </div>
-
-                <div className="flex justify-between text-sm">
-                  <span className="text-blue-700">Base Severance:</span>
-                  <span className="font-medium text-blue-900">${formatCurrency(severance.base_severance)}</span>
                 </div>
 
                 <div className="flex justify-between text-sm">
