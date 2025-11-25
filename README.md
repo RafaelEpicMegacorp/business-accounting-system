@@ -279,6 +279,7 @@ VITE_API_URL=http://localhost:3001/api
 ## Documentation
 
 - **SETUP_INSTRUCTIONS.md** - Complete setup guide with troubleshooting
+- **BALANCE_RECONCILIATION_GUIDE.md** - Understanding and fixing discrepancies between Wise bank balance and accounting records
 - **TASKS/001-implement-date-tracking.md** - Date tracking implementation details
 - **accounting-roadmap (1).md** - Future features roadmap
 - **claude-code-instructions (1).md** - Development guidelines
