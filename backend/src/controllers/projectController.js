@@ -80,18 +80,20 @@ const projectController = {
    */
   async delete(req, res, next) {
     try {
-      const project = await projectModel.delete(req.params.id);
-      if (!project) {
+      // Check if project has active employee assignments
+      const projectWithEmployees = await projectModel.getById(req.params.id);
+      if (!projectWithEmployees) {
         throw ApiError.notFound('Project not found');
       }
+
+      if (parseInt(projectWithEmployees.active_employees) > 0) {
+        throw ApiError.badRequest('Cannot delete project with assigned employees. Remove employees or archive the project instead.');
+      }
+
+      const project = await projectModel.delete(req.params.id);
       res.json({ message: 'Project deleted successfully', project });
     } catch (error) {
-      // Handle foreign key constraint error
-      if (error.code === '23503') {
-        next(ApiError.badRequest('Cannot delete project with employee assignments. Archive it instead.'));
-      } else {
-        next(error);
-      }
+      next(error);
     }
   },
 

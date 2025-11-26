@@ -23,6 +23,9 @@ router.get('/active', (req, res, next) => {
 // Get single employee by ID
 router.get('/:id', EmployeeController.getById);
 
+// Get employee with their projects
+router.get('/:id/projects', EmployeeController.getWithProjects);
+
 // Create new employee
 router.post('/', EmployeeController.create);
 

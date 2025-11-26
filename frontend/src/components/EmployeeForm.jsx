@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { X, DollarSign, Calendar, Mail, User, TrendingUp, Briefcase } from 'lucide-react';
+import { X, DollarSign, Calendar, Mail, User, TrendingUp, Briefcase, FolderKanban } from 'lucide-react';
 import employeeService from '../services/employeeService';
+import projectService from '../services/projectService';
 
 export default function EmployeeForm({ employee, onClose, onSuccess }) {
   const [employeeId, setEmployeeId] = useState(null); // Store employee ID separately
@@ -15,6 +16,46 @@ export default function EmployeeForm({ employee, onClose, onSuccess }) {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  // Project selection state
+  const [projects, setProjects] = useState([]);
+  const [selectedProjectIds, setSelectedProjectIds] = useState([]);
+  const [originalProjectIds, setOriginalProjectIds] = useState([]);
+  const [loadingProjects, setLoadingProjects] = useState(true);
+
+  // Fetch all active projects on mount
+  useEffect(() => {
+    const fetchProjects = async () => {
+      try {
+        const allProjects = await projectService.getAll('active');
+        setProjects(allProjects);
+      } catch (err) {
+        console.error('Failed to fetch projects:', err);
+      } finally {
+        setLoadingProjects(false);
+      }
+    };
+    fetchProjects();
+  }, []);
+
+  // Fetch employee's projects when editing
+  useEffect(() => {
+    const fetchEmployeeProjects = async () => {
+      if (employee?.id) {
+        try {
+          const employeeWithProjects = await employeeService.getWithProjects(employee.id);
+          if (employeeWithProjects.projects) {
+            const projectIds = employeeWithProjects.projects.map(p => p.id);
+            setSelectedProjectIds(projectIds);
+            setOriginalProjectIds(projectIds);
+          }
+        } catch (err) {
+          console.error('Failed to fetch employee projects:', err);
+        }
+      }
+    };
+    fetchEmployeeProjects();
+  }, [employee?.id]);
 
   useEffect(() => {
     console.log('EmployeeForm received employee:', employee);
@@ -45,6 +86,14 @@ export default function EmployeeForm({ employee, onClose, onSuccess }) {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
+  const handleProjectToggle = (projectId) => {
+    setSelectedProjectIds(prev =>
+      prev.includes(projectId)
+        ? prev.filter(id => id !== projectId)
+        : [...prev, projectId]
+    );
+  };
+
   const calculateTotal = () => {
     const rate = parseFloat(formData.payRate) || 0;
     const multiplier = parseFloat(formData.payMultiplier) || 1.0;
@@ -63,6 +112,8 @@ export default function EmployeeForm({ employee, onClose, onSuccess }) {
       setLoading(true);
       setError(null);
 
+      let savedEmployeeId = employeeId;
+
       if (employeeId) {
         // Updating existing employee using stored employeeId
         console.log('Updating employee with ID:', employeeId);
@@ -70,7 +121,26 @@ export default function EmployeeForm({ employee, onClose, onSuccess }) {
       } else {
         // Creating new employee
         console.log('Creating new employee');
-        await employeeService.create(formData);
+        const newEmployee = await employeeService.create(formData);
+        savedEmployeeId = newEmployee.id;
+      }
+
+      // Manage project assignments
+      if (savedEmployeeId) {
+        // Find projects to add (in selected but not in original)
+        const projectsToAdd = selectedProjectIds.filter(id => !originalProjectIds.includes(id));
+        // Find projects to remove (in original but not in selected)
+        const projectsToRemove = originalProjectIds.filter(id => !selectedProjectIds.includes(id));
+
+        // Add new project assignments
+        for (const projectId of projectsToAdd) {
+          await projectService.assignEmployee(projectId, savedEmployeeId);
+        }
+
+        // Remove old project assignments
+        for (const projectId of projectsToRemove) {
+          await projectService.removeEmployee(projectId, savedEmployeeId);
+        }
       }
 
       onSuccess();
@@ -255,6 +325,43 @@ export default function EmployeeForm({ employee, onClose, onSuccess }) {
                 {employeeId
                   ? '⚠️ Editing start date will affect severance calculations'
                   : 'When did this employee start working?'}
+              </p>
+            </div>
+
+            {/* Projects */}
+            <div>
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
+                <FolderKanban size={16} />
+                Projects
+              </label>
+              {loadingProjects ? (
+                <p className="text-sm text-gray-500">Loading projects...</p>
+              ) : projects.length === 0 ? (
+                <p className="text-sm text-gray-500">No active projects available</p>
+              ) : (
+                <div className="space-y-2 max-h-40 overflow-y-auto border border-gray-200 rounded-lg p-3">
+                  {projects.map((project) => (
+                    <label
+                      key={project.id}
+                      className="flex items-center gap-3 cursor-pointer hover:bg-gray-50 p-1 rounded"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedProjectIds.includes(project.id)}
+                        onChange={() => handleProjectToggle(project.id)}
+                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                      />
+                      <span
+                        className="w-3 h-3 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: project.color || '#3B82F6' }}
+                      />
+                      <span className="text-sm text-gray-700">{project.name}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+              <p className="mt-1 text-xs text-gray-500">
+                Select one or more projects this employee will work on
               </p>
             </div>
           </div>

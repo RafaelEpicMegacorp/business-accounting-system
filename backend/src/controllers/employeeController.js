@@ -28,6 +28,19 @@ const EmployeeController = {
     }
   },
 
+  // Get employee with their projects
+  async getWithProjects(req, res, next) {
+    try {
+      const employee = await EmployeeModel.getWithProjects(req.params.id);
+      if (!employee) {
+        throw ApiError.notFound('Employee not found');
+      }
+      res.json(employee);
+    } catch (error) {
+      next(error);
+    }
+  },
+
   // Create employee
   async create(req, res, next) {
     try {

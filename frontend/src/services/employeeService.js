@@ -14,6 +14,12 @@ const employeeService = {
     return response.data;
   },
 
+  // Get employee with their projects
+  async getWithProjects(id) {
+    const response = await api.get(`/employees/${id}/projects`);
+    return response.data;
+  },
+
   // Create employee
   async create(employee) {
     const response = await api.post('/employees', {
