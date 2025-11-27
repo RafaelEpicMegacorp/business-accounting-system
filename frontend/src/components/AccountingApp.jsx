@@ -78,6 +78,7 @@ export default function AccountingApp() {
   // Employee management state
   const [showEmployeeForm, setShowEmployeeForm] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState(null);
+  const [employeeListKey, setEmployeeListKey] = useState(0); // Used to force EmployeeList refresh
 
   // Contract management state
   const [contracts, setContracts] = useState([]);
@@ -308,6 +309,12 @@ export default function AccountingApp() {
   const handleEmployeeFormClose = () => {
     setShowEmployeeForm(false);
     setEditingEmployee(null);
+  };
+
+  const handleEmployeeFormSuccess = () => {
+    loadEntries();
+    // Increment key to force EmployeeList to remount and reload
+    setEmployeeListKey(prev => prev + 1);
   };
 
   // Contract handlers
@@ -816,6 +823,7 @@ export default function AccountingApp() {
         {/* Employee View */}
         {currentView === 'employees' && (
           <EmployeeList
+            key={employeeListKey}
             onEmployeeSelect={null}
             onEdit={handleEmployeeEdit}
           />
@@ -850,7 +858,7 @@ export default function AccountingApp() {
           <EmployeeForm
             employee={editingEmployee}
             onClose={handleEmployeeFormClose}
-            onSuccess={loadEntries}
+            onSuccess={handleEmployeeFormSuccess}
           />
         )}
 
