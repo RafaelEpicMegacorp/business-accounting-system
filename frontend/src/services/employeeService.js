@@ -25,6 +25,7 @@ const employeeService = {
     const response = await api.post('/employees', {
       name: employee.name,
       email: employee.email || null,
+      position: employee.position || null,
       payType: employee.payType,
       payRate: parseFloat(employee.payRate),
       payMultiplier: parseFloat(employee.payMultiplier || 1.0),
@@ -38,6 +39,7 @@ const employeeService = {
     const response = await api.put(`/employees/${id}`, {
       name: employee.name,
       email: employee.email || null,
+      position: employee.position || null,
       payType: employee.payType,
       payRate: parseFloat(employee.payRate),
       payMultiplier: parseFloat(employee.payMultiplier || 1.0),
