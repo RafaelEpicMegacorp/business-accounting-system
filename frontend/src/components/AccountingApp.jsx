@@ -15,6 +15,7 @@ import SalaryCalendar from './SalaryCalendar';
 import SearchBar from './SearchBar';
 import FilterPanel from './FilterPanel';
 import TransactionReview from './TransactionReview';
+import PayrollDashboard from './PayrollDashboard';
 import { exportEntriesToCSV, exportEmployeesToCSV, exportContractsToCSV } from '../utils/csvExport';
 import { formatCurrency } from '../utils/currencyFormatter';
 
@@ -494,6 +495,16 @@ export default function AccountingApp() {
               Salaries
             </button>
             <button
+              onClick={() => setCurrentView('payroll')}
+              className={`px-4 py-2 font-medium transition ${
+                currentView === 'payroll'
+                  ? 'text-blue-600 border-b-2 border-blue-600'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Payroll
+            </button>
+            <button
               onClick={() => setCurrentView('contracts')}
               className={`px-4 py-2 font-medium transition ${
                 currentView === 'contracts'
@@ -827,6 +838,11 @@ export default function AccountingApp() {
         {/* Projects View */}
         {currentView === 'projects' && (
           <ProjectList />
+        )}
+
+        {/* Payroll View */}
+        {currentView === 'payroll' && (
+          <PayrollDashboard />
         )}
 
         {/* Employee Form Modal */}

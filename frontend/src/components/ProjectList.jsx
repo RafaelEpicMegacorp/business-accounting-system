@@ -165,7 +165,7 @@ export default function ProjectList() {
   const calculateTotalMonthlyCost = (employees) => {
     if (!employees || employees.length === 0) return 0;
     return employees
-      .filter(emp => emp.removedDate === null)  // Only active assignments
+      .filter(emp => emp.removedDate === null && emp.isActive !== false)  // Only active employees with active assignments
       .reduce((sum, emp) => sum + calculateEmployeeMonthlyCost(emp), 0);
   };
 
@@ -194,8 +194,12 @@ export default function ProjectList() {
   const ProjectDetailModal = () => {
     if (!showDetailModal) return null;
 
-    const activeEmployees = projectDetails?.employees?.filter(emp => emp.removedDate === null) || [];
+    // Active = not removed AND employee is still active
+    const activeEmployees = projectDetails?.employees?.filter(emp => emp.removedDate === null && emp.isActive !== false) || [];
+    // Removed = explicitly removed from project
     const removedEmployees = projectDetails?.employees?.filter(emp => emp.removedDate !== null) || [];
+    // Terminated = employee was terminated but still assigned (not explicitly removed)
+    const terminatedEmployees = projectDetails?.employees?.filter(emp => emp.removedDate === null && emp.isActive === false) || [];
     const totalCost = calculateTotalMonthlyCost(projectDetails?.employees || []);
     const budgetRemaining = projectDetails?.budget ? parseFloat(projectDetails.budget) - totalCost : null;
     const budgetUsedPercent = projectDetails?.budget ? (totalCost / parseFloat(projectDetails.budget)) * 100 : null;
@@ -353,6 +357,25 @@ export default function ProjectList() {
                               <span className="font-medium text-gray-700">{employee.name}</span>
                               <span className="text-xs text-gray-500">
                                 Removed: {formatDate(employee.removedDate)}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Terminated Employees (still assigned but no longer active) */}
+                  {terminatedEmployees.length > 0 && (
+                    <div className="mt-6">
+                      <h4 className="text-xs font-semibold text-red-500 mb-2">TERMINATED EMPLOYEES</h4>
+                      <div className="space-y-2">
+                        {terminatedEmployees.map(employee => (
+                          <div key={employee.id} className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm">
+                            <div className="flex items-center justify-between">
+                              <span className="font-medium text-red-700">{employee.name}</span>
+                              <span className="text-xs text-red-500">
+                                Was assigned on: {formatDate(employee.assignedDate)}
                               </span>
                             </div>
                           </div>

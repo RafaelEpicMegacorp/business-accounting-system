@@ -8,10 +8,11 @@ const projectModel = {
     let query = `
       SELECT
         p.*,
-        COUNT(DISTINCT ep.employee_id) FILTER (WHERE ep.removed_date IS NULL) as active_employees,
+        COUNT(DISTINCT ep.employee_id) FILTER (WHERE ep.removed_date IS NULL AND e.is_active = true) as active_employees,
         COUNT(DISTINCT ep.employee_id) as total_employees
       FROM projects p
       LEFT JOIN employee_projects ep ON p.id = ep.project_id
+      LEFT JOIN employees e ON ep.employee_id = e.id
     `;
 
     const params = [];
@@ -33,9 +34,10 @@ const projectModel = {
     const result = await pool.query(
       `SELECT
         p.*,
-        COUNT(DISTINCT ep.employee_id) FILTER (WHERE ep.removed_date IS NULL) as active_employees
+        COUNT(DISTINCT ep.employee_id) FILTER (WHERE ep.removed_date IS NULL AND e.is_active = true) as active_employees
        FROM projects p
        LEFT JOIN employee_projects ep ON p.id = ep.project_id
+       LEFT JOIN employees e ON ep.employee_id = e.id
        WHERE p.id = $1
        GROUP BY p.id`,
       [id]
