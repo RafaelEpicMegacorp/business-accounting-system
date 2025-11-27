@@ -8,7 +8,8 @@ const HARDCODED_USER = {
   username: 'rafael',
   passwordHash: '$2b$10$6eYFtMerCtzPOb4FqLt8eefriabMu/CGC28tD2z0mGOow6ZDwgKoe', // asdflkj@3!
   id: 1,
-  name: 'Rafael'
+  name: 'Rafael',
+  role: 'admin'
 };
 
 class AuthController {
@@ -39,7 +40,8 @@ class AuthController {
         {
           id: HARDCODED_USER.id,
           username: HARDCODED_USER.username,
-          name: HARDCODED_USER.name
+          name: HARDCODED_USER.name,
+          role: HARDCODED_USER.role
         },
         process.env.JWT_SECRET,
         { expiresIn: '24h' }
@@ -51,7 +53,8 @@ class AuthController {
         user: {
           id: HARDCODED_USER.id,
           username: HARDCODED_USER.username,
-          name: HARDCODED_USER.name
+          name: HARDCODED_USER.name,
+          role: HARDCODED_USER.role
         }
       });
     } catch (error) {
@@ -68,7 +71,8 @@ class AuthController {
         user: {
           id: req.user.id,
           username: req.user.username,
-          name: req.user.name
+          name: req.user.name,
+          role: req.user.role
         }
       });
     } catch (error) {
