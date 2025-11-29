@@ -257,10 +257,10 @@ function DashboardView({ onNavigateToForecast }) {
           </div>
         </div>
 
-        {/* This Month Profit */}
+        {/* This Month Cash Flow */}
         <div className={`${currentMonthProfit >= 0 ? 'bg-gradient-to-br from-emerald-500 to-emerald-600' : 'bg-gradient-to-br from-orange-500 to-orange-600'} text-white rounded-lg shadow-lg p-6`}>
           <div className="flex items-center justify-between mb-2">
-            <h3 className="text-lg font-medium opacity-90">{thisMonthName} Profit</h3>
+            <h3 className="text-lg font-medium opacity-90">{thisMonthName} Cash Flow</h3>
             <TrendingUp size={24} className="opacity-80" />
           </div>
           <p className="text-3xl font-bold">
@@ -269,12 +269,20 @@ function DashboardView({ onNavigateToForecast }) {
           <div className="mt-3 pt-3 border-t border-white border-opacity-30 opacity-90">
             <div className="flex justify-between text-sm">
               <span>Income:</span>
-              <span className="text-green-200">${currentMonthIncome.toLocaleString()}</span>
+              <span className={currentMonthIncome === 0 ? 'text-yellow-200' : 'text-green-200'}>
+                ${currentMonthIncome.toLocaleString()}
+                {currentMonthIncome === 0 && currentMonthExpenses > 0 && ' (!!)'}
+              </span>
             </div>
             <div className="flex justify-between text-sm mt-1">
               <span>Expenses:</span>
               <span className="text-red-200">-${currentMonthExpenses.toLocaleString()}</span>
             </div>
+            {currentMonthIncome === 0 && currentMonthExpenses > 0 && (
+              <div className="text-xs text-yellow-200 mt-2 text-center">
+                No income recorded - Sync Wise
+              </div>
+            )}
             <div className="flex justify-between text-sm mt-2 opacity-70">
               <span>{lastMonthName}:</span>
               <span className={lastMonthProfit >= 0 ? 'text-green-200' : 'text-red-200'}>
@@ -452,20 +460,27 @@ function DashboardView({ onNavigateToForecast }) {
 
         {/* Period Summary */}
         {periodStats && (
-          <div className="grid grid-cols-3 gap-4 mb-6">
-            <div className="p-4 bg-green-50 rounded border border-green-200">
-              <p className="text-sm font-medium text-green-700">Income</p>
-              <p className="text-2xl font-bold text-green-800">${periodStats.income.toLocaleString()}</p>
-            </div>
-            <div className="p-4 bg-red-50 rounded border border-red-200">
-              <p className="text-sm font-medium text-red-700">Expenses</p>
-              <p className="text-2xl font-bold text-red-800">${periodStats.expenses.toLocaleString()}</p>
-            </div>
-            <div className={`p-4 rounded border ${periodStats.profit >= 0 ? 'bg-blue-50 border-blue-200' : 'bg-orange-50 border-orange-200'}`}>
-              <p className={`text-sm font-medium ${periodStats.profit >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>Profit</p>
-              <p className={`text-2xl font-bold ${periodStats.profit >= 0 ? 'text-blue-800' : 'text-orange-800'}`}>
-                {periodStats.profit < 0 && '-'}${Math.abs(periodStats.profit).toLocaleString()}
-              </p>
+          <div className="space-y-4 mb-6">
+            {periodStats.income === 0 && periodStats.expenses > 0 && (
+              <div className="p-3 bg-yellow-50 border border-yellow-300 rounded-lg text-yellow-800 text-sm">
+                No income recorded for this period. Click "Sync Wise History" above to import transactions.
+              </div>
+            )}
+            <div className="grid grid-cols-3 gap-4">
+              <div className={`p-4 rounded border ${periodStats.income === 0 ? 'bg-yellow-50 border-yellow-300' : 'bg-green-50 border-green-200'}`}>
+                <p className={`text-sm font-medium ${periodStats.income === 0 ? 'text-yellow-700' : 'text-green-700'}`}>Income</p>
+                <p className={`text-2xl font-bold ${periodStats.income === 0 ? 'text-yellow-800' : 'text-green-800'}`}>${periodStats.income.toLocaleString()}</p>
+              </div>
+              <div className="p-4 bg-red-50 rounded border border-red-200">
+                <p className="text-sm font-medium text-red-700">Expenses</p>
+                <p className="text-2xl font-bold text-red-800">${periodStats.expenses.toLocaleString()}</p>
+              </div>
+              <div className={`p-4 rounded border ${periodStats.profit >= 0 ? 'bg-blue-50 border-blue-200' : 'bg-orange-50 border-orange-200'}`}>
+                <p className={`text-sm font-medium ${periodStats.profit >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>Cash Flow</p>
+                <p className={`text-2xl font-bold ${periodStats.profit >= 0 ? 'text-blue-800' : 'text-orange-800'}`}>
+                  {periodStats.profit < 0 && '-'}${Math.abs(periodStats.profit).toLocaleString()}
+                </p>
+              </div>
             </div>
           </div>
         )}
