@@ -1,11 +1,12 @@
-// Complete historical sync implementation using Activities API + Transfer API
-// This avoids SCA requirements and fetches complete transaction history
+// Complete historical sync implementation using Balance Statement API
+// This captures both incoming (CREDIT) and outgoing (DEBIT) transactions
 
 const express = require('express');
 const router = express.Router();
 const pool = require('../config/database');
 const WiseTransactionModel = require('../models/wiseTransactionModel');
 const authMiddleware = require('../middleware/auth');
+const wiseTransactionProcessor = require('../services/wiseTransactionProcessor');
 
 /**
  * Get metadata value from wise_sync_metadata table
@@ -61,6 +62,280 @@ function extractRecipientDetails(transferDetails, txnType) {
     email: party.email || '',
     legalType: party.legalType || 'PERSON' // PERSON or BUSINESS
   };
+}
+
+/**
+ * Get all balance accounts for the profile
+ * @param {object} config - API configuration
+ * @returns {Array} Array of balance objects with id, currency, amount
+ */
+async function getProfileBalances(config) {
+  const { WISE_API_TOKEN, WISE_API_URL, WISE_PROFILE_ID } = config;
+
+  console.log('   Fetching profile balances...');
+
+  const response = await fetch(
+    `${WISE_API_URL}/v4/profiles/${WISE_PROFILE_ID}/balances?types=STANDARD`,
+    {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${WISE_API_TOKEN}`,
+        'Content-Type': 'application/json'
+      }
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Wise API error fetching balances: ${response.status} ${errorText}`);
+  }
+
+  const balances = await response.json();
+  console.log(`   ✓ Found ${balances.length} balance accounts`);
+
+  return balances.map(b => ({
+    id: b.id,
+    currency: b.currency,
+    amount: b.amount.value
+  }));
+}
+
+/**
+ * Fetch balance statement for a specific balance account
+ * @param {number} balanceId - Balance account ID
+ * @param {string} currency - Currency code
+ * @param {string} startDate - ISO date string
+ * @param {string} endDate - ISO date string
+ * @param {object} config - API configuration
+ * @returns {Array} Array of transactions
+ */
+async function fetchBalanceStatement(balanceId, currency, startDate, endDate, config) {
+  const { WISE_API_TOKEN, WISE_API_URL, WISE_PROFILE_ID } = config;
+
+  const url = `${WISE_API_URL}/v1/profiles/${WISE_PROFILE_ID}/balance-statements/${balanceId}/statement.json`;
+  const params = new URLSearchParams({
+    currency: currency,
+    intervalStart: startDate,
+    intervalEnd: endDate,
+    type: 'COMPACT'
+  });
+
+  console.log(`      Fetching ${currency} statement (${startDate.split('T')[0]} to ${endDate.split('T')[0]})...`);
+
+  const response = await fetch(`${url}?${params}`, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${WISE_API_TOKEN}`,
+      'Content-Type': 'application/json'
+    }
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    // Check for SCA requirement
+    if (response.status === 403) {
+      console.log(`      ⚠️  ${currency}: SCA required or access denied`);
+      return [];
+    }
+    throw new Error(`Balance Statement API error: ${response.status} ${errorText}`);
+  }
+
+  const statement = await response.json();
+  const transactions = statement.transactions || [];
+  console.log(`      ✓ ${currency}: ${transactions.length} transactions`);
+
+  return transactions;
+}
+
+/**
+ * Process a transaction from Balance Statement API
+ * @param {object} txn - Transaction from statement
+ * @param {string} currency - Currency code
+ * @param {object} config - API configuration
+ * @param {object} stats - Stats object to update
+ */
+async function processStatementTransaction(txn, currency, config, stats) {
+  const { WISE_PROFILE_ID } = config;
+
+  // Extract transaction details
+  const transactionId = txn.referenceNumber;
+  const txnType = txn.type; // CREDIT or DEBIT
+  const amount = Math.abs(parseFloat(txn.amount?.value || 0));
+  const description = txn.details?.description || '';
+  const senderName = txn.details?.senderName || '';
+  const recipientName = txn.details?.recipientName || '';
+  const transactionDate = txn.date;
+
+  // Determine entry type based on transaction type
+  const entryType = txnType === 'CREDIT' ? 'income' : 'expense';
+
+  // Check for duplicates
+  const existing = await WiseTransactionModel.exists(transactionId);
+  if (existing) {
+    stats.duplicatesSkipped++;
+    return { action: 'duplicate', transactionId };
+  }
+
+  stats.transactionsFound++;
+
+  // Determine category based on transaction type and description
+  let category;
+  if (txnType === 'CREDIT') {
+    // Income categories
+    if (description.toLowerCase().includes('interest')) {
+      category = 'Interest';
+    } else if (description.toLowerCase().includes('refund')) {
+      category = 'Refund';
+    } else {
+      category = 'Client Payment'; // Default for incoming money
+    }
+  } else {
+    // Expense - check if it's a transfer between accounts
+    if (description.toLowerCase().includes('transfer to') ||
+        description.toLowerCase().includes('transferred to') ||
+        description.toLowerCase().includes('conversion') ||
+        description.toLowerCase().includes('balance conversion')) {
+      category = 'Transfers';
+    } else {
+      category = 'Other'; // Will be classified by processor
+    }
+  }
+
+  // Store in wise_transactions table
+  await WiseTransactionModel.create({
+    wiseTransactionId: transactionId,
+    wiseResourceId: transactionId,
+    profileId: WISE_PROFILE_ID,
+    accountId: null,
+    type: txnType,
+    state: 'completed',
+    amount,
+    currency,
+    description,
+    merchantName: txnType === 'CREDIT' ? senderName : recipientName,
+    referenceNumber: transactionId,
+    transactionDate,
+    valueDate: transactionDate,
+    syncStatus: 'processed',
+    classifiedCategory: category,
+    matchedEmployeeId: null,
+    confidenceScore: 80,
+    needsReview: false,
+    rawPayload: txn
+  });
+
+  stats.newTransactions++;
+
+  // Create entry in entries table
+  const entryResult = await pool.query(
+    `INSERT INTO entries (type, category, description, detail, base_amount, total, entry_date, status, currency, amount_original, wise_transaction_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+     RETURNING id`,
+    [
+      entryType,
+      category,
+      description || (txnType === 'CREDIT' ? `Payment from ${senderName}` : `Payment to ${recipientName}`),
+      `Imported from Wise Balance Statement (Ref: ${transactionId})`,
+      amount,
+      amount,
+      transactionDate.split('T')[0],
+      'completed',
+      currency,
+      amount,
+      transactionId
+    ]
+  );
+
+  // Link entry to transaction
+  await WiseTransactionModel.updateStatus(transactionId, {
+    entryId: entryResult.rows[0].id,
+    syncStatus: 'processed'
+  });
+
+  stats.entriesCreated++;
+
+  const icon = txnType === 'CREDIT' ? '💵' : '💸';
+  console.log(`         ${icon} ${txnType}: ${amount} ${currency} - ${description.substring(0, 40)}${description.length > 40 ? '...' : ''} [${category}]`);
+
+  return { action: 'imported', transactionId, entryId: entryResult.rows[0].id };
+}
+
+/**
+ * Sync from Balance Statement API - captures both CREDIT and DEBIT transactions
+ * @param {string} startDate - ISO date string
+ * @param {string} endDate - ISO date string
+ * @param {object} config - API configuration
+ * @returns {object} Stats object
+ */
+async function syncFromBalanceStatements(startDate, endDate, config) {
+  console.log('\n📋 Syncing from Balance Statement API (captures CREDIT + DEBIT)...');
+  console.log(`   Date range: ${startDate.split('T')[0]} to ${endDate.split('T')[0]}`);
+
+  const stats = {
+    balancesProcessed: 0,
+    transactionsFound: 0,
+    newTransactions: 0,
+    duplicatesSkipped: 0,
+    entriesCreated: 0,
+    creditCount: 0,
+    debitCount: 0,
+    errors: 0
+  };
+
+  try {
+    // Get all balance accounts
+    const balances = await getProfileBalances(config);
+
+    // Process each balance account
+    for (const balance of balances) {
+      console.log(`\n   💰 Processing ${balance.currency} balance (ID: ${balance.id})...`);
+      stats.balancesProcessed++;
+
+      try {
+        // Fetch statement for this balance
+        const transactions = await fetchBalanceStatement(
+          balance.id,
+          balance.currency,
+          startDate,
+          endDate,
+          config
+        );
+
+        // Process each transaction
+        for (const txn of transactions) {
+          try {
+            const result = await processStatementTransaction(txn, balance.currency, config, stats);
+
+            if (result.action === 'imported') {
+              if (txn.type === 'CREDIT') stats.creditCount++;
+              if (txn.type === 'DEBIT') stats.debitCount++;
+            }
+          } catch (txnError) {
+            stats.errors++;
+            console.error(`         ❌ Error: ${txnError.message}`);
+          }
+        }
+
+      } catch (balanceError) {
+        stats.errors++;
+        console.error(`      ❌ Error fetching ${balance.currency} statement: ${balanceError.message}`);
+      }
+    }
+
+    console.log('\n   📊 Balance Statement Sync Summary:');
+    console.log(`      Balances processed: ${stats.balancesProcessed}`);
+    console.log(`      Transactions found: ${stats.transactionsFound}`);
+    console.log(`      New transactions: ${stats.newTransactions} (${stats.creditCount} CREDIT, ${stats.debitCount} DEBIT)`);
+    console.log(`      Duplicates skipped: ${stats.duplicatesSkipped}`);
+    console.log(`      Entries created: ${stats.entriesCreated}`);
+    console.log(`      Errors: ${stats.errors}`);
+
+  } catch (error) {
+    console.error('   ❌ Balance Statement sync failed:', error.message);
+    throw error;
+  }
+
+  return stats;
 }
 
 /**
@@ -217,20 +492,16 @@ async function syncTransfersFromAPI(startDate, endDate, config) {
 
 /**
  * POST /api/wise/sync
- * Complete historical sync using Activities API + Transfer API
- * Fetches ALL transactions without requiring SCA approval
+ * Complete historical sync using Balance Statement API
+ * Fetches ALL transactions (both CREDIT and DEBIT) from all currency balances
  *
- * Query Parameters:
- *   - mode: "recent" (Activities API only), "transfers" (Transfer API only), "all" (both APIs)
- *
- * API Flow:
- *   1. GET /v1/profiles/{profileId}/activities - Get list of activities (with pagination)
- *   2. For each TRANSFER activity:
- *      GET /v1/transfers/{transferId} - Get full transfer details
- *   3. Classify and import transaction
+ * This approach captures:
+ * - Incoming payments (CREDIT) → type = 'income'
+ * - Outgoing payments (DEBIT) → type = 'expense'
+ * - Inter-account transfers → category = 'Transfers'
  */
 async function syncCompleteHistory(req, res) {
-  console.log('🔄 Complete Wise Historical Sync Started (Activities API + Transfer API)');
+  console.log('🔄 Complete Wise Historical Sync Started (Balance Statement API)');
 
   const WISE_API_TOKEN = process.env.WISE_API_TOKEN;
   const WISE_API_URL = process.env.WISE_API_URL || 'https://api.wise.com';
@@ -243,318 +514,20 @@ async function syncCompleteHistory(req, res) {
     });
   }
 
-  const stats = {
-    activitiesProcessed: 0,
-    transfersFetched: 0,
-    cardPaymentsFetched: 0,
-    transactionsFound: 0,
-    newTransactions: 0,
-    duplicatesSkipped: 0,
-    entriesCreated: 0,
-    errors: 0,
-    errorDetails: [],
-    paginationPages: 0
-  };
+  const config = { WISE_API_TOKEN, WISE_API_URL, WISE_PROFILE_ID };
 
   try {
-    // STEP 1: Fetch all activities with pagination
-    console.log('\n📋 STEP 1: Fetching activities from Wise Activities API...');
-
-    // Calculate 1 year ago as start date
+    // Calculate date range - 1 year of history
     const oneYearAgo = new Date();
     oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-    const since = oneYearAgo.toISOString();
+    const startDate = oneYearAgo.toISOString();
+    const endDate = new Date().toISOString();
 
-    console.log(`   Date Range: ${since} to ${new Date().toISOString()}`);
+    // STEP 1: Sync from Balance Statement API (captures both CREDIT and DEBIT)
+    const balanceStats = await syncFromBalanceStatements(startDate, endDate, config);
 
-    const allActivities = [];
-    let cursor = null;
-    let pageCount = 0;
-
-    do {
-      pageCount++;
-      const url = cursor
-        ? `${WISE_API_URL}/v1/profiles/${WISE_PROFILE_ID}/activities?cursor=${cursor}&size=100`
-        : `${WISE_API_URL}/v1/profiles/${WISE_PROFILE_ID}/activities?since=${since}&size=100`;
-
-      console.log(`   Fetching page ${pageCount}${cursor ? ' (cursor: ' + cursor.substring(0, 20) + '...)' : ''}...`);
-
-      const activitiesResponse = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${WISE_API_TOKEN}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (!activitiesResponse.ok) {
-        const errorText = await activitiesResponse.text();
-        throw new Error(`Wise API error fetching activities: ${activitiesResponse.status} ${errorText}`);
-      }
-
-      const data = await activitiesResponse.json();
-      const activities = data.activities || [];
-
-      allActivities.push(...activities);
-      console.log(`   ✓ Fetched ${activities.length} activities (Total: ${allActivities.length})`);
-
-      cursor = data.nextCursor;
-      stats.paginationPages = pageCount;
-
-    } while (cursor);
-
-    console.log(`\n✓ Total activities fetched: ${allActivities.length} across ${pageCount} pages`);
-    stats.activitiesProcessed = allActivities.length;
-
-    // STEP 2: Process each activity
-    console.log('\n📋 STEP 2: Processing activities and fetching transfer details...');
-
-    for (const activity of allActivities) {
-      try {
-        // Process TRANSFER activities
-        if (activity.type === 'TRANSFER' && activity.resource?.id) {
-          const transferId = activity.resource.id;
-          console.log(`\n   📝 Processing TRANSFER: ${transferId}`);
-          console.log(`      Title: ${activity.title || 'N/A'}`);
-          console.log(`      Amount: ${activity.primaryAmount || 'N/A'}`);
-
-          // STEP 3: Fetch full transfer details
-          console.log(`      Fetching transfer details...`);
-
-          const transferResponse = await fetch(
-            `${WISE_API_URL}/v1/transfers/${transferId}`,
-            {
-              method: 'GET',
-              headers: {
-                'Authorization': `Bearer ${WISE_API_TOKEN}`,
-                'Content-Type': 'application/json'
-              }
-            }
-          );
-
-          if (!transferResponse.ok) {
-            const errorText = await transferResponse.text();
-            throw new Error(`Transfer API error for ${transferId}: ${transferResponse.status} ${errorText}`);
-          }
-
-          const transfer = await transferResponse.json();
-          stats.transfersFetched++;
-
-          // STEP 4: Determine transaction type (CREDIT vs DEBIT)
-          // If sourceValue is present, it's outgoing (DEBIT/expense)
-          // If only targetValue is present, it's incoming (CREDIT/income)
-          const txnType = transfer.sourceValue ? 'DEBIT' : 'CREDIT';
-          const amount = Math.abs(parseFloat(transfer.sourceValue || transfer.targetValue));
-          const currency = transfer.sourceCurrency || transfer.targetCurrency;
-          const description = transfer.details?.reference || '';
-          const referenceNumber = transfer.customerTransactionId || `TRANSFER-${transfer.id}`;
-          const transactionDate = transfer.created;
-          const transactionId = transfer.customerTransactionId || `TRANSFER-${transfer.id}`;
-
-          // Extract complete recipient details, fees, and rates
-          const recipientDetails = extractRecipientDetails(transfer, txnType);
-          const transferFee = parseFloat(transfer.fee || 0);
-          const exchangeRate = transfer.rate ? parseFloat(transfer.rate) : null;
-
-          console.log(`      Type: ${txnType} (${txnType === 'CREDIT' ? 'income' : 'expense'})`);
-          console.log(`      Amount: ${amount} ${currency}`);
-          console.log(`      Description: ${description.substring(0, 50)}${description.length > 50 ? '...' : ''}`);
-          console.log(`      Recipient: ${recipientDetails.name.substring(0, 40)}${recipientDetails.name.length > 40 ? '...' : ''}`);
-          if (recipientDetails.accountNumber) console.log(`      Account: ${recipientDetails.accountNumber}`);
-          if (transferFee > 0) console.log(`      Fee: ${transferFee}`);
-          if (exchangeRate) console.log(`      Rate: ${exchangeRate}`);
-
-          // Check for duplicates
-          const existing = await WiseTransactionModel.exists(transactionId);
-          if (existing) {
-            stats.duplicatesSkipped++;
-            console.log(`      ⏭️  Skipping duplicate: ${transactionId}`);
-            continue;
-          }
-
-          stats.transactionsFound++;
-
-          // STEP 5: Store transaction in database with enhanced details
-          await WiseTransactionModel.create({
-            wiseTransactionId: transactionId,
-            wiseResourceId: transfer.id.toString(),
-            profileId: WISE_PROFILE_ID,
-            accountId: transfer.sourceAccount || transfer.targetAccount,
-            type: txnType,
-            state: transfer.status || 'completed',
-            amount,
-            currency,
-            description,
-            merchantName: recipientDetails.name,
-            referenceNumber,
-            transactionDate,
-            valueDate: transactionDate,
-            syncStatus: 'processed',
-            classifiedCategory: null,
-            matchedEmployeeId: null,
-            confidenceScore: null,
-            needsReview: false,
-            rawPayload: transfer,
-            transferFee: transferFee,
-            transferExchangeRate: exchangeRate,
-            recipientDetails: recipientDetails
-          });
-
-          stats.newTransactions++;
-          console.log(`      ✅ Transaction stored in database`);
-
-          // STEP 6: Create entry immediately
-          const entryType = txnType === 'CREDIT' ? 'income' : 'expense';
-          const category = entryType === 'income' ? 'other_income' : 'other_expenses';
-
-          const entryResult = await pool.query(
-            `INSERT INTO entries (type, category, description, detail, base_amount, total, entry_date, status, currency, amount_original, wise_transaction_id)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-             RETURNING id`,
-            [
-              entryType,
-              category,
-              description || 'Wise transaction',
-              `Imported from Wise (Ref: ${referenceNumber})`,
-              amount,
-              amount,
-              transactionDate.split('T')[0],
-              'completed',
-              currency,
-              amount,
-              transactionId
-            ]
-          );
-
-          // Link entry to transaction
-          await WiseTransactionModel.updateStatus(transactionId, {
-            entryId: entryResult.rows[0].id,
-            syncStatus: 'processed'
-          });
-
-          stats.entriesCreated++;
-          console.log(`      ✅ Entry created (ID: ${entryResult.rows[0].id})`);
-
-        } else if (activity.type === 'CARD_PAYMENT' && activity.resource?.id) {
-          // Process CARD_PAYMENT activities
-          stats.cardPaymentsFetched++;
-
-          const cardTransactionId = activity.resource.id;
-          console.log(`\n   💳 Processing CARD_PAYMENT: ${cardTransactionId}`);
-          console.log(`      Title: ${activity.title || 'N/A'}`);
-          console.log(`      Amount: ${activity.primaryAmount || 'N/A'}`);
-
-          // Parse primaryAmount (format: "29.99 USD" or "1,939.19 USD")
-          const primaryAmount = activity.primaryAmount || '';
-          // Remove commas from amount before parsing
-          const amountMatch = primaryAmount.match(/^(-?[\d,]+\.?\d*)\s+([A-Z]{3})$/);
-
-          if (!amountMatch) {
-            console.warn(`      ⚠️  Cannot parse primaryAmount: ${primaryAmount}`);
-            continue;
-          }
-
-          // Remove commas and parse as float
-          const amount = Math.abs(parseFloat(amountMatch[1].replace(/,/g, '')));
-          const currency = amountMatch[2];
-
-          // Card payments are always DEBIT (expenses)
-          const txnType = 'DEBIT';
-          const entryType = 'expense';
-
-          // Clean HTML tags from title
-          const description = (activity.title || 'Card payment').replace(/<[^>]*>/g, '').trim();
-
-          // Transaction details
-          const transactionDate = activity.createdOn;
-          const transactionId = `CARD_PAYMENT-${cardTransactionId}`;
-
-          console.log(`      Type: ${txnType} (expense)`);
-          console.log(`      Amount: ${amount} ${currency}`);
-          console.log(`      Description: ${description.substring(0, 50)}${description.length > 50 ? '...' : ''}`);
-
-          // Check for duplicate
-          const existing = await WiseTransactionModel.exists(transactionId);
-          if (existing) {
-            stats.duplicatesSkipped++;
-            console.log(`      ⏭️  Skipping duplicate: ${transactionId}`);
-            continue;
-          }
-
-          stats.transactionsFound++;
-
-          // Store in wise_transactions table
-          await WiseTransactionModel.create({
-            wiseTransactionId: transactionId,
-            wiseResourceId: cardTransactionId.toString(),
-            profileId: WISE_PROFILE_ID,
-            accountId: null,
-            type: txnType,
-            state: 'completed',
-            amount,
-            currency,
-            description,
-            merchantName: '',
-            referenceNumber: transactionId,
-            transactionDate,
-            valueDate: transactionDate,
-            syncStatus: 'processed',
-            classifiedCategory: 'other_expenses',
-            matchedEmployeeId: null,
-            confidenceScore: 100,
-            needsReview: false,
-            rawPayload: activity
-          });
-
-          stats.newTransactions++;
-          console.log(`      ✅ Transaction stored in database`);
-
-          // Create entry in entries table
-          const entryResult = await pool.query(
-            `INSERT INTO entries (type, category, description, detail, base_amount, total, entry_date, status, currency, amount_original, wise_transaction_id)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-             RETURNING id`,
-            [
-              entryType,
-              'other_expenses',
-              description,
-              `Imported from Wise (Card Payment)`,
-              amount,
-              amount,
-              transactionDate.split('T')[0],
-              'completed',
-              currency,
-              amount,
-              transactionId
-            ]
-          );
-
-          // Link entry to transaction
-          await WiseTransactionModel.updateStatus(transactionId, {
-            entryId: entryResult.rows[0].id,
-            syncStatus: 'processed'
-          });
-
-          stats.entriesCreated++;
-          console.log(`      ✅ Entry created (ID: ${entryResult.rows[0].id})`);
-
-        } else {
-          console.log(`   ⏭️  Skipping activity type: ${activity.type}`);
-        }
-
-      } catch (error) {
-        stats.errors++;
-        stats.errorDetails.push({
-          activity: activity.type,
-          resourceId: activity.resource?.id,
-          error: error.message
-        });
-        console.error(`   ❌ Error processing activity:`, error.message);
-      }
-    }
-
-    // STEP 3: Fetch and update currency balances
-    console.log('\n📋 STEP 3: Updating currency balances...');
+    // STEP 2: Update currency balances from Wise API
+    console.log('\n📋 STEP 2: Updating currency balances...');
 
     const balancesResponse = await fetch(
       `${WISE_API_URL}/v4/profiles/${WISE_PROFILE_ID}/balances?types=STANDARD`,
@@ -567,49 +540,63 @@ async function syncCompleteHistory(req, res) {
       }
     );
 
-    if (!balancesResponse.ok) {
-      const errorText = await balancesResponse.text();
-      throw new Error(`Wise API error fetching balances: ${balancesResponse.status} ${errorText}`);
+    if (balancesResponse.ok) {
+      const balances = await balancesResponse.json();
+
+      for (const balance of balances) {
+        await pool.query(`
+          INSERT INTO currency_balances (currency, balance, last_updated)
+          VALUES ($1, $2, CURRENT_TIMESTAMP)
+          ON CONFLICT (currency)
+          DO UPDATE SET balance = $2, last_updated = CURRENT_TIMESTAMP
+        `, [balance.currency, balance.amount.value]);
+
+        console.log(`   ✓ ${balance.currency}: ${balance.amount.value}`);
+      }
     }
 
-    const balances = await balancesResponse.json();
-
-    for (const balance of balances) {
-      await pool.query(`
-        INSERT INTO currency_balances (currency, balance, last_updated)
-        VALUES ($1, $2, CURRENT_TIMESTAMP)
-        ON CONFLICT (currency)
-        DO UPDATE SET balance = $2, last_updated = CURRENT_TIMESTAMP
-      `, [balance.currency, balance.amount.value]);
-
-      console.log(`   ✓ ${balance.currency}: ${balance.amount.value}`);
+    // Build currency breakdown for response
+    const currencyBreakdown = {};
+    try {
+      const balanceResult = await pool.query(`
+        SELECT currency, balance FROM currency_balances ORDER BY currency
+      `);
+      for (const row of balanceResult.rows) {
+        currencyBreakdown[row.currency] = {
+          currentBalance: parseFloat(row.balance),
+          newTransactions: 0 // We don't track per-currency in balance statement sync
+        };
+      }
+    } catch (e) {
+      // Ignore errors getting breakdown
     }
 
     // Final summary
     console.log('\n📊 SYNC COMPLETE - SUMMARY:');
-    console.log(`   Activities Processed: ${stats.activitiesProcessed}`);
-    console.log(`   Pagination Pages: ${stats.paginationPages}`);
-    console.log(`   Transfers Fetched: ${stats.transfersFetched}`);
-    console.log(`   Card Payments Fetched: ${stats.cardPaymentsFetched}`);
-    console.log(`   Total Transactions Found: ${stats.transactionsFound}`);
-    console.log(`   New Transactions: ${stats.newTransactions}`);
-    console.log(`   Duplicates Skipped: ${stats.duplicatesSkipped}`);
-    console.log(`   Entries Created: ${stats.entriesCreated}`);
-    console.log(`   Errors: ${stats.errors}`);
+    console.log(`   Balances Processed: ${balanceStats.balancesProcessed}`);
+    console.log(`   Transactions Found: ${balanceStats.transactionsFound}`);
+    console.log(`   New Transactions: ${balanceStats.newTransactions}`);
+    console.log(`   - CREDIT (Income): ${balanceStats.creditCount}`);
+    console.log(`   - DEBIT (Expense): ${balanceStats.debitCount}`);
+    console.log(`   Duplicates Skipped: ${balanceStats.duplicatesSkipped}`);
+    console.log(`   Entries Created: ${balanceStats.entriesCreated}`);
+    console.log(`   Errors: ${balanceStats.errors}`);
 
     res.json({
       success: true,
       message: `✅ Wise sync completed successfully`,
       stats: {
-        ...stats,
+        newTransactions: balanceStats.newTransactions,
+        duplicatesSkipped: balanceStats.duplicatesSkipped,
+        entriesCreated: balanceStats.entriesCreated,
+        creditCount: balanceStats.creditCount,
+        debitCount: balanceStats.debitCount,
+        errors: balanceStats.errors,
         dateRange: {
-          since: since,
-          until: new Date().toISOString()
+          since: startDate,
+          until: endDate
         },
-        breakdown: {
-          transfers: stats.transfersFetched,
-          cardPayments: stats.cardPaymentsFetched
-        }
+        currencyBreakdown
       }
     });
 
@@ -619,8 +606,7 @@ async function syncCompleteHistory(req, res) {
 
     res.status(500).json({
       success: false,
-      error: error.message,
-      stats
+      error: error.message
     });
   }
 }
