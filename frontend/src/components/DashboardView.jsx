@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { TrendingUp, TrendingDown, DollarSign, Users, FileText, Calendar, Briefcase, Upload, RefreshCw } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, Users, FileText, Calendar, Briefcase, Upload, RefreshCw, ArrowUp, ArrowDown } from 'lucide-react';
 import dashboardService from '../services/dashboardService';
 import entryService from '../services/entryService';
 import currencyService from '../services/currencyService';
@@ -7,6 +7,9 @@ import wiseService from '../services/wiseService';
 import IncomeVsExpenseChart from './IncomeVsExpenseChart';
 import CategoryBreakdownChart from './CategoryBreakdownChart';
 import WiseImport from './WiseImport';
+import CategoryDetailModal from './CategoryDetailModal';
+import TopExpensesList from './TopExpensesList';
+import VendorBreakdown from './VendorBreakdown';
 
 function DashboardView({ onNavigateToForecast }) {
   const [stats, setStats] = useState(null);
@@ -18,6 +21,7 @@ function DashboardView({ onNavigateToForecast }) {
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState(null);
   const [chartRefreshTrigger, setChartRefreshTrigger] = useState(0);
+  const [selectedCategory, setSelectedCategory] = useState(null);
 
   // Period selector state
   const [selectedPeriod, setSelectedPeriod] = useState('thisMonth'); // 'thisMonth', 'lastMonth', 'last3Months'
@@ -205,6 +209,20 @@ function DashboardView({ onNavigateToForecast }) {
     return thisMonthStats; // default
   };
   const periodStats = getSelectedPeriodStats();
+
+  // Get year/month for the selected period (for detail components)
+  const getSelectedYearMonth = () => {
+    const thisYear = now.getFullYear();
+    const thisMonth = now.getMonth() + 1;
+    if (selectedPeriod === 'lastMonth') {
+      return {
+        year: thisMonth === 1 ? thisYear - 1 : thisYear,
+        month: thisMonth === 1 ? 12 : thisMonth - 1
+      };
+    }
+    return { year: thisYear, month: thisMonth };
+  };
+  const { year: selectedYear, month: selectedMonth } = getSelectedYearMonth();
 
   return (
     <div className="space-y-6">
@@ -489,11 +507,16 @@ function DashboardView({ onNavigateToForecast }) {
         {periodStats?.expenses_by_category && periodStats.expenses_by_category.length > 0 ? (
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             {periodStats.expenses_by_category.map((expense, index) => (
-              <div key={index} className="p-3 bg-gray-50 rounded border border-gray-200">
+              <div
+                key={index}
+                onClick={() => setSelectedCategory(expense.category)}
+                className="p-3 bg-gray-50 rounded border border-gray-200 cursor-pointer hover:bg-gray-100 hover:border-blue-300 transition"
+              >
                 <p className="text-xs font-medium text-gray-600 truncate">{expense.category}</p>
                 <p className="text-lg font-bold text-gray-900 mt-1">
                   ${parseFloat(expense.total).toLocaleString()}
                 </p>
+                <p className="text-xs text-blue-500 mt-1">Click for details</p>
               </div>
             ))}
           </div>
@@ -533,6 +556,22 @@ function DashboardView({ onNavigateToForecast }) {
         <IncomeVsExpenseChart months={12} refreshTrigger={chartRefreshTrigger} />
         <CategoryBreakdownChart refreshTrigger={chartRefreshTrigger} />
       </div>
+
+      {/* Expense Details Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <TopExpensesList year={selectedYear} month={selectedMonth} />
+        <VendorBreakdown year={selectedYear} month={selectedMonth} />
+      </div>
+
+      {/* Category Detail Modal */}
+      {selectedCategory && (
+        <CategoryDetailModal
+          category={selectedCategory}
+          year={selectedYear}
+          month={selectedMonth}
+          onClose={() => setSelectedCategory(null)}
+        />
+      )}
 
       {/* Import Modal */}
       {showImportModal && (

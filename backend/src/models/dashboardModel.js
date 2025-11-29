@@ -124,23 +124,24 @@ const DashboardModel = {
     const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
     const endDate = new Date(year, month, 0).toISOString().split('T')[0]; // Last day of month
 
-    // Get income and expenses for the month
+    // Get income and expenses for the month (excluding Transfers from expenses)
     const totalsResult = await pool.query(`
       SELECT
         SUM(CASE WHEN type = 'income' THEN total ELSE 0 END) as income,
-        SUM(CASE WHEN type = 'expense' THEN total ELSE 0 END) as expenses
+        SUM(CASE WHEN type = 'expense' AND category != 'Transfers' THEN total ELSE 0 END) as expenses
       FROM entries
       WHERE entry_date >= $1 AND entry_date <= $2
         AND (status = 'completed' OR (status = 'pending' AND entry_date < CURRENT_DATE))
     `, [startDate, endDate]);
 
-    // Get expenses by category for the month
+    // Get expenses by category for the month (excluding Transfers)
     const categoryResult = await pool.query(`
       SELECT
         category,
         SUM(total) as total
       FROM entries
       WHERE type = 'expense'
+        AND category != 'Transfers'
         AND entry_date >= $1 AND entry_date <= $2
         AND (status = 'completed' OR (status = 'pending' AND entry_date < CURRENT_DATE))
       GROUP BY category
@@ -164,7 +165,7 @@ const DashboardModel = {
     };
   },
 
-  // Get category breakdown for pie chart
+  // Get category breakdown for pie chart (excluding Transfers)
   async getCategoryBreakdown(startDate = null, endDate = null) {
     let query = `
       SELECT
@@ -172,6 +173,7 @@ const DashboardModel = {
         SUM(total) as total
       FROM entries
       WHERE type = 'expense'
+        AND category != 'Transfers'
         AND (status = 'completed' OR (status = 'pending' AND entry_date < CURRENT_DATE))
     `;
 
@@ -200,6 +202,137 @@ const DashboardModel = {
       value: parseFloat(row.total),
       percentage: total > 0 ? ((parseFloat(row.total) / total) * 100).toFixed(1) : 0
     }));
+  },
+
+  // Get all expenses for a specific category in a month
+  async getExpensesByCategory(year, month, category) {
+    const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+    const endDate = new Date(year, month, 0).toISOString().split('T')[0];
+
+    const result = await pool.query(`
+      SELECT id, description, total, entry_date, status
+      FROM entries
+      WHERE type = 'expense'
+        AND category = $3
+        AND entry_date >= $1 AND entry_date <= $2
+        AND (status = 'completed' OR (status = 'pending' AND entry_date < CURRENT_DATE))
+      ORDER BY total DESC
+    `, [startDate, endDate, category]);
+
+    return result.rows.map(row => ({
+      id: row.id,
+      description: row.description,
+      amount: parseFloat(row.total),
+      date: row.entry_date,
+      status: row.status
+    }));
+  },
+
+  // Get top N expenses for a month (excluding Transfers)
+  async getTopExpenses(year, month, limit = 10) {
+    const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+    const endDate = new Date(year, month, 0).toISOString().split('T')[0];
+
+    const result = await pool.query(`
+      SELECT id, description, category, total, entry_date
+      FROM entries
+      WHERE type = 'expense'
+        AND category != 'Transfers'
+        AND entry_date >= $1 AND entry_date <= $2
+        AND (status = 'completed' OR (status = 'pending' AND entry_date < CURRENT_DATE))
+      ORDER BY total DESC
+      LIMIT $3
+    `, [startDate, endDate, limit]);
+
+    return result.rows.map(row => ({
+      id: row.id,
+      description: row.description,
+      category: row.category,
+      amount: parseFloat(row.total),
+      date: row.entry_date
+    }));
+  },
+
+  // Get expenses grouped by vendor/description (excluding Transfers)
+  async getVendorBreakdown(year, month) {
+    const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+    const endDate = new Date(year, month, 0).toISOString().split('T')[0];
+
+    const result = await pool.query(`
+      SELECT
+        description as vendor,
+        COUNT(*) as transaction_count,
+        SUM(total) as total
+      FROM entries
+      WHERE type = 'expense'
+        AND category != 'Transfers'
+        AND entry_date >= $1 AND entry_date <= $2
+        AND (status = 'completed' OR (status = 'pending' AND entry_date < CURRENT_DATE))
+      GROUP BY description
+      ORDER BY total DESC
+    `, [startDate, endDate]);
+
+    return result.rows.map(row => ({
+      vendor: row.vendor,
+      transactionCount: parseInt(row.transaction_count),
+      total: parseFloat(row.total)
+    }));
+  },
+
+  // Get category comparison between this month and last month
+  async getCategoryComparison(year, month) {
+    const thisMonthStart = `${year}-${String(month).padStart(2, '0')}-01`;
+    const thisMonthEnd = new Date(year, month, 0).toISOString().split('T')[0];
+
+    const lastMonth = month === 1 ? 12 : month - 1;
+    const lastMonthYear = month === 1 ? year - 1 : year;
+    const lastMonthStart = `${lastMonthYear}-${String(lastMonth).padStart(2, '0')}-01`;
+    const lastMonthEnd = new Date(lastMonthYear, lastMonth, 0).toISOString().split('T')[0];
+
+    // Get this month's expenses by category
+    const thisMonthResult = await pool.query(`
+      SELECT category, SUM(total) as total
+      FROM entries
+      WHERE type = 'expense'
+        AND category != 'Transfers'
+        AND entry_date >= $1 AND entry_date <= $2
+        AND (status = 'completed' OR (status = 'pending' AND entry_date < CURRENT_DATE))
+      GROUP BY category
+    `, [thisMonthStart, thisMonthEnd]);
+
+    // Get last month's expenses by category
+    const lastMonthResult = await pool.query(`
+      SELECT category, SUM(total) as total
+      FROM entries
+      WHERE type = 'expense'
+        AND category != 'Transfers'
+        AND entry_date >= $1 AND entry_date <= $2
+        AND (status = 'completed' OR (status = 'pending' AND entry_date < CURRENT_DATE))
+      GROUP BY category
+    `, [lastMonthStart, lastMonthEnd]);
+
+    // Create lookup for last month
+    const lastMonthMap = {};
+    lastMonthResult.rows.forEach(row => {
+      lastMonthMap[row.category] = parseFloat(row.total);
+    });
+
+    // Compare and calculate changes
+    return thisMonthResult.rows.map(row => {
+      const thisMonthTotal = parseFloat(row.total);
+      const lastMonthTotal = lastMonthMap[row.category] || 0;
+      const change = lastMonthTotal > 0
+        ? ((thisMonthTotal - lastMonthTotal) / lastMonthTotal * 100).toFixed(1)
+        : null;
+
+      return {
+        category: row.category,
+        thisMonth: thisMonthTotal,
+        lastMonth: lastMonthTotal,
+        change: change ? parseFloat(change) : null,
+        isNew: lastMonthTotal === 0
+      };
+    }).sort((a, b) => b.thisMonth - a.thisMonth);
   }
 };
 
