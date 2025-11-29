@@ -25,14 +25,13 @@ const DashboardModel = {
       WHERE type = 'expense' AND category = 'Employee'
     `);
 
-    // Get non-salary expenses breakdown
+    // Get ALL expenses breakdown by category
     const expensesResult = await pool.query(`
       SELECT
         category,
         SUM(total) as total
       FROM entries
       WHERE type = 'expense'
-        AND category != 'Employee'
         AND (status = 'completed' OR (status = 'pending' AND entry_date < CURRENT_DATE))
       GROUP BY category
       ORDER BY total DESC

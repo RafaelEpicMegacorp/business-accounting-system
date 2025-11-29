@@ -85,7 +85,7 @@ export default function AccountingApp() {
   const [showContractForm, setShowContractForm] = useState(false);
   const [editingContract, setEditingContract] = useState(null);
 
-  const categories = ['Employee', 'Administration', 'Software', 'Marketing', 'Equipment', 'Other'];
+  const categories = ['Employee', 'Contractors', 'Software', 'Business Expenses', 'Transportation', 'Equipment', 'Recruitment', 'Administration', 'Transfers', 'Other'];
 
   // Load entries on mount and when view, search, or filters change
   useEffect(() => {
