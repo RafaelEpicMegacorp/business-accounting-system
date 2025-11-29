@@ -64,6 +64,47 @@ function extractRecipientDetails(transferDetails, txnType) {
   };
 }
 
+// Cache for exchange rates to avoid repeated API calls
+const exchangeRateCache = new Map();
+
+/**
+ * Get exchange rate to USD for a given currency
+ * Uses exchangerate-api.com with caching to avoid repeated calls
+ * @param {string} currency - Source currency code
+ * @returns {object} { rate: number, amountUsd: number } for converting to USD
+ */
+async function getExchangeRateToUSD(currency, amount) {
+  // USD is already USD
+  if (currency === 'USD') {
+    return { rate: 1, amountUsd: amount };
+  }
+
+  // Check cache (valid for 1 hour)
+  const cacheKey = currency;
+  const cached = exchangeRateCache.get(cacheKey);
+  if (cached && cached.timestamp > Date.now() - 3600000) {
+    return { rate: cached.rate, amountUsd: amount * cached.rate };
+  }
+
+  try {
+    const response = await fetch(`https://api.exchangerate-api.com/v4/latest/${currency}`);
+    if (!response.ok) {
+      console.warn(`Failed to get exchange rate for ${currency}, using 1:1`);
+      return { rate: 1, amountUsd: amount };
+    }
+    const data = await response.json();
+    const rate = data.rates.USD || 1;
+
+    // Cache the rate
+    exchangeRateCache.set(cacheKey, { rate, timestamp: Date.now() });
+
+    return { rate, amountUsd: amount * rate };
+  } catch (error) {
+    console.warn(`Exchange rate API error for ${currency}:`, error.message);
+    return { rate: 1, amountUsd: amount };
+  }
+}
+
 /**
  * Get all balance accounts for the profile
  * @param {object} config - API configuration
@@ -201,6 +242,9 @@ async function processStatementTransaction(txn, currency, config, stats) {
     }
   }
 
+  // Get exchange rate to USD for proper comparison
+  const { rate: exchangeRate, amountUsd } = await getExchangeRateToUSD(currency, amount);
+
   // Store in wise_transactions table
   await WiseTransactionModel.create({
     wiseTransactionId: transactionId,
@@ -226,10 +270,10 @@ async function processStatementTransaction(txn, currency, config, stats) {
 
   stats.newTransactions++;
 
-  // Create entry in entries table
+  // Create entry in entries table with USD equivalent for comparison
   const entryResult = await pool.query(
-    `INSERT INTO entries (type, category, description, detail, base_amount, total, entry_date, status, currency, amount_original, wise_transaction_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    `INSERT INTO entries (type, category, description, detail, base_amount, total, entry_date, status, currency, amount_original, amount_usd, exchange_rate, wise_transaction_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
      RETURNING id`,
     [
       entryType,
@@ -242,6 +286,8 @@ async function processStatementTransaction(txn, currency, config, stats) {
       'completed',
       currency,
       amount,
+      amountUsd,
+      exchangeRate,
       transactionId
     ]
   );
@@ -446,10 +492,13 @@ async function syncTransfersFromAPI(startDate, endDate, config) {
           rawPayload: transfer
         });
 
-        // Create entry in entries table
+        // Get exchange rate to USD for proper comparison
+        const { rate: transferExchangeRate, amountUsd: transferAmountUsd } = await getExchangeRateToUSD(currency, amount);
+
+        // Create entry in entries table with USD equivalent
         const entryResult = await pool.query(
-          `INSERT INTO entries (type, category, description, detail, base_amount, total, entry_date, status, currency, amount_original, wise_transaction_id)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+          `INSERT INTO entries (type, category, description, detail, base_amount, total, entry_date, status, currency, amount_original, amount_usd, exchange_rate, wise_transaction_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
            RETURNING id`,
           [
             entryType,
@@ -462,6 +511,8 @@ async function syncTransfersFromAPI(startDate, endDate, config) {
             'completed',
             currency,
             amount,
+            transferAmountUsd,
+            transferExchangeRate,
             transactionId
           ]
         );
@@ -780,9 +831,12 @@ async function runIncrementalSync(lookbackHours = 12) {
           const entryType = txnType === 'CREDIT' ? 'income' : 'expense';
           const category = entryType === 'income' ? 'other_income' : 'other_expenses';
 
+          // Get exchange rate to USD for proper comparison
+          const { rate: usdExchangeRate, amountUsd: usdAmount } = await getExchangeRateToUSD(currency, amount);
+
           const entryResult = await pool.query(
-            `INSERT INTO entries (type, category, description, detail, base_amount, total, entry_date, status, currency, amount_original, wise_transaction_id)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            `INSERT INTO entries (type, category, description, detail, base_amount, total, entry_date, status, currency, amount_original, amount_usd, exchange_rate, wise_transaction_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
              RETURNING id`,
             [
               entryType,
@@ -795,6 +849,8 @@ async function runIncrementalSync(lookbackHours = 12) {
               'completed',
               currency,
               amount,
+              usdAmount,
+              usdExchangeRate,
               transactionId
             ]
           );
@@ -859,10 +915,13 @@ async function runIncrementalSync(lookbackHours = 12) {
 
           stats.newTransactions++;
 
-          // Create entry in entries table
+          // Get exchange rate to USD for proper comparison
+          const { rate: cardExchangeRate, amountUsd: cardAmountUsd } = await getExchangeRateToUSD(currency, amount);
+
+          // Create entry in entries table with USD equivalent
           const entryResult = await pool.query(
-            `INSERT INTO entries (type, category, description, detail, base_amount, total, entry_date, status, currency, amount_original, wise_transaction_id)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            `INSERT INTO entries (type, category, description, detail, base_amount, total, entry_date, status, currency, amount_original, amount_usd, exchange_rate, wise_transaction_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
              RETURNING id`,
             [
               'expense',
@@ -875,6 +934,8 @@ async function runIncrementalSync(lookbackHours = 12) {
               'completed',
               currency,
               amount,
+              cardAmountUsd,
+              cardExchangeRate,
               transactionId
             ]
           );
@@ -988,6 +1049,73 @@ router.post('/sync/manual', authMiddleware, async (req, res) => {
  * POST /api/wise/sync - Complete historical sync (existing endpoint)
  */
 router.post('/sync', authMiddleware, syncCompleteHistory);
+
+/**
+ * POST /api/wise/backfill-amount-usd - Backfill amount_usd for existing entries
+ * Run once to update entries that don't have amount_usd set
+ */
+router.post('/backfill-amount-usd', authMiddleware, async (req, res) => {
+  try {
+    console.log('Starting backfill of amount_usd for existing entries...');
+
+    // Get all entries without amount_usd
+    const result = await pool.query(`
+      SELECT id, total, currency
+      FROM entries
+      WHERE amount_usd IS NULL
+      ORDER BY id
+    `);
+
+    console.log(`Found ${result.rows.length} entries without amount_usd`);
+
+    if (result.rows.length === 0) {
+      return res.json({
+        success: true,
+        message: 'All entries already have amount_usd set. Nothing to do.',
+        updated: 0
+      });
+    }
+
+    let updated = 0;
+    let errors = 0;
+
+    for (const entry of result.rows) {
+      try {
+        const currency = entry.currency || 'USD';
+        const amount = parseFloat(entry.total);
+        const { rate, amountUsd } = await getExchangeRateToUSD(currency, amount);
+
+        await pool.query(`
+          UPDATE entries
+          SET amount_usd = $1, exchange_rate = $2
+          WHERE id = $3
+        `, [amountUsd, rate, entry.id]);
+
+        updated++;
+      } catch (error) {
+        errors++;
+        console.error(`Error updating entry ${entry.id}:`, error.message);
+      }
+    }
+
+    console.log(`Backfill complete! Updated: ${updated}, Errors: ${errors}`);
+
+    res.json({
+      success: true,
+      message: 'Backfill complete',
+      total: result.rows.length,
+      updated,
+      errors
+    });
+  } catch (error) {
+    console.error('Backfill error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'backfill_failed',
+      message: error.message
+    });
+  }
+});
 
 /**
  * Export sync function for cron job use

@@ -61,9 +61,16 @@ function TopExpensesList({ year, month }) {
                   </p>
                 </div>
               </div>
-              <p className="text-lg font-bold text-red-600">
-                ${expense.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-              </p>
+              <div className="text-right">
+                <p className="text-lg font-bold text-red-600">
+                  ${expense.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </p>
+                {expense.currency && expense.currency !== 'USD' && (
+                  <p className="text-xs text-gray-500">
+                    {expense.originalAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })} {expense.currency}
+                  </p>
+                )}
+              </div>
             </div>
           ))}
         </div>

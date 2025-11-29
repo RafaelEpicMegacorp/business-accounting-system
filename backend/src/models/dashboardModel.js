@@ -125,27 +125,29 @@ const DashboardModel = {
     const endDate = new Date(year, month, 0).toISOString().split('T')[0]; // Last day of month
 
     // Get income and expenses for the month (excluding Transfers from expenses)
+    // Use COALESCE(amount_usd, total) to handle multi-currency correctly
     const totalsResult = await pool.query(`
       SELECT
-        SUM(CASE WHEN type = 'income' THEN total ELSE 0 END) as income,
-        SUM(CASE WHEN type = 'expense' AND category != 'Transfers' THEN total ELSE 0 END) as expenses
+        SUM(CASE WHEN type = 'income' THEN COALESCE(amount_usd, total) ELSE 0 END) as income,
+        SUM(CASE WHEN type = 'expense' AND category != 'Transfers' THEN COALESCE(amount_usd, total) ELSE 0 END) as expenses
       FROM entries
       WHERE entry_date >= $1 AND entry_date <= $2
         AND (status = 'completed' OR (status = 'pending' AND entry_date < CURRENT_DATE))
     `, [startDate, endDate]);
 
     // Get expenses by category for the month (excluding Transfers)
+    // Use COALESCE(amount_usd, total) for proper currency conversion
     const categoryResult = await pool.query(`
       SELECT
         category,
-        SUM(total) as total
+        SUM(COALESCE(amount_usd, total)) as total
       FROM entries
       WHERE type = 'expense'
         AND category != 'Transfers'
         AND entry_date >= $1 AND entry_date <= $2
         AND (status = 'completed' OR (status = 'pending' AND entry_date < CURRENT_DATE))
       GROUP BY category
-      ORDER BY total DESC
+      ORDER BY SUM(COALESCE(amount_usd, total)) DESC
     `, [startDate, endDate]);
 
     const totals = totalsResult.rows[0];
@@ -166,11 +168,12 @@ const DashboardModel = {
   },
 
   // Get category breakdown for pie chart (excluding Transfers)
+  // Use amount_usd for proper multi-currency comparison
   async getCategoryBreakdown(startDate = null, endDate = null) {
     let query = `
       SELECT
         category,
-        SUM(total) as total
+        SUM(COALESCE(amount_usd, total)) as total
       FROM entries
       WHERE type = 'expense'
         AND category != 'Transfers'
@@ -189,7 +192,7 @@ const DashboardModel = {
 
     query += `
       GROUP BY category
-      ORDER BY total DESC
+      ORDER BY SUM(COALESCE(amount_usd, total)) DESC
     `;
 
     const result = await pool.query(query, params);
@@ -205,42 +208,48 @@ const DashboardModel = {
   },
 
   // Get all expenses for a specific category in a month
+  // Use amount_usd for proper multi-currency comparison and sorting
   async getExpensesByCategory(year, month, category) {
     const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
     const endDate = new Date(year, month, 0).toISOString().split('T')[0];
 
     const result = await pool.query(`
-      SELECT id, description, total, entry_date, status
+      SELECT id, description, total, entry_date, status, currency,
+             COALESCE(amount_usd, total) as amount_usd
       FROM entries
       WHERE type = 'expense'
         AND category = $3
         AND entry_date >= $1 AND entry_date <= $2
         AND (status = 'completed' OR (status = 'pending' AND entry_date < CURRENT_DATE))
-      ORDER BY total DESC
+      ORDER BY COALESCE(amount_usd, total) DESC
     `, [startDate, endDate, category]);
 
     return result.rows.map(row => ({
       id: row.id,
       description: row.description,
-      amount: parseFloat(row.total),
+      amount: parseFloat(row.amount_usd),
+      originalAmount: parseFloat(row.total),
+      currency: row.currency || 'USD',
       date: row.entry_date,
       status: row.status
     }));
   },
 
   // Get top N expenses for a month (excluding Transfers)
+  // Sort by USD equivalent for proper multi-currency comparison
   async getTopExpenses(year, month, limit = 10) {
     const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
     const endDate = new Date(year, month, 0).toISOString().split('T')[0];
 
     const result = await pool.query(`
-      SELECT id, description, category, total, entry_date
+      SELECT id, description, category, total, entry_date, currency,
+             COALESCE(amount_usd, total) as amount_usd
       FROM entries
       WHERE type = 'expense'
         AND category != 'Transfers'
         AND entry_date >= $1 AND entry_date <= $2
         AND (status = 'completed' OR (status = 'pending' AND entry_date < CURRENT_DATE))
-      ORDER BY total DESC
+      ORDER BY COALESCE(amount_usd, total) DESC
       LIMIT $3
     `, [startDate, endDate, limit]);
 
@@ -248,12 +257,15 @@ const DashboardModel = {
       id: row.id,
       description: row.description,
       category: row.category,
-      amount: parseFloat(row.total),
+      amount: parseFloat(row.amount_usd),
+      originalAmount: parseFloat(row.total),
+      currency: row.currency || 'USD',
       date: row.entry_date
     }));
   },
 
   // Get expenses grouped by vendor/description (excluding Transfers)
+  // Use amount_usd for proper multi-currency comparison
   async getVendorBreakdown(year, month) {
     const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
     const endDate = new Date(year, month, 0).toISOString().split('T')[0];
@@ -262,14 +274,14 @@ const DashboardModel = {
       SELECT
         description as vendor,
         COUNT(*) as transaction_count,
-        SUM(total) as total
+        SUM(COALESCE(amount_usd, total)) as total
       FROM entries
       WHERE type = 'expense'
         AND category != 'Transfers'
         AND entry_date >= $1 AND entry_date <= $2
         AND (status = 'completed' OR (status = 'pending' AND entry_date < CURRENT_DATE))
       GROUP BY description
-      ORDER BY total DESC
+      ORDER BY SUM(COALESCE(amount_usd, total)) DESC
     `, [startDate, endDate]);
 
     return result.rows.map(row => ({
@@ -280,6 +292,7 @@ const DashboardModel = {
   },
 
   // Get category comparison between this month and last month
+  // Use amount_usd for proper multi-currency comparison
   async getCategoryComparison(year, month) {
     const thisMonthStart = `${year}-${String(month).padStart(2, '0')}-01`;
     const thisMonthEnd = new Date(year, month, 0).toISOString().split('T')[0];
@@ -291,7 +304,7 @@ const DashboardModel = {
 
     // Get this month's expenses by category
     const thisMonthResult = await pool.query(`
-      SELECT category, SUM(total) as total
+      SELECT category, SUM(COALESCE(amount_usd, total)) as total
       FROM entries
       WHERE type = 'expense'
         AND category != 'Transfers'
@@ -302,7 +315,7 @@ const DashboardModel = {
 
     // Get last month's expenses by category
     const lastMonthResult = await pool.query(`
-      SELECT category, SUM(total) as total
+      SELECT category, SUM(COALESCE(amount_usd, total)) as total
       FROM entries
       WHERE type = 'expense'
         AND category != 'Transfers'
