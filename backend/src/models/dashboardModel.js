@@ -4,14 +4,15 @@ const DashboardModel = {
   // Get comprehensive dashboard statistics
   async getStats() {
     // Get basic totals (completed + past pending entries)
+    // IMPORTANT: Exclude 'Transfers' from expenses - they are internal account movements, not real business expenses
     const totalsResult = await pool.query(`
       SELECT
         SUM(CASE WHEN type = 'income' AND (status = 'completed' OR (status = 'pending' AND entry_date < CURRENT_DATE)) THEN total ELSE 0 END) as total_income,
-        SUM(CASE WHEN type = 'expense' AND (status = 'completed' OR (status = 'pending' AND entry_date < CURRENT_DATE)) THEN total ELSE 0 END) as total_expenses,
+        SUM(CASE WHEN type = 'expense' AND category != 'Transfers' AND (status = 'completed' OR (status = 'pending' AND entry_date < CURRENT_DATE)) THEN total ELSE 0 END) as total_expenses,
         SUM(CASE WHEN type = 'income' AND (status = 'completed' OR (status = 'pending' AND entry_date < CURRENT_DATE)) THEN total ELSE 0 END) -
-        SUM(CASE WHEN type = 'expense' AND (status = 'completed' OR (status = 'pending' AND entry_date < CURRENT_DATE)) THEN total ELSE 0 END) as current_balance,
+        SUM(CASE WHEN type = 'expense' AND category != 'Transfers' AND (status = 'completed' OR (status = 'pending' AND entry_date < CURRENT_DATE)) THEN total ELSE 0 END) as current_balance,
         SUM(CASE WHEN type = 'income' AND status = 'pending' AND entry_date >= CURRENT_DATE THEN total ELSE 0 END) as pending_income,
-        SUM(CASE WHEN type = 'expense' AND status = 'pending' AND entry_date >= CURRENT_DATE THEN total ELSE 0 END) as pending_expenses
+        SUM(CASE WHEN type = 'expense' AND category != 'Transfers' AND status = 'pending' AND entry_date >= CURRENT_DATE THEN total ELSE 0 END) as pending_expenses
       FROM entries
     `);
 
@@ -25,13 +26,14 @@ const DashboardModel = {
       WHERE type = 'expense' AND category = 'Employee'
     `);
 
-    // Get ALL expenses breakdown by category
+    // Get ALL expenses breakdown by category (excluding internal Transfers)
     const expensesResult = await pool.query(`
       SELECT
         category,
         SUM(total) as total
       FROM entries
       WHERE type = 'expense'
+        AND category != 'Transfers'
         AND (status = 'completed' OR (status = 'pending' AND entry_date < CURRENT_DATE))
       GROUP BY category
       ORDER BY total DESC
