@@ -31,6 +31,18 @@ const DashboardController = {
     } catch (error) {
       next(error);
     }
+  },
+
+  // GET /api/dashboard/monthly-stats?year=2025&month=11
+  async getMonthlyStats(req, res, next) {
+    try {
+      const year = parseInt(req.query.year) || new Date().getFullYear();
+      const month = parseInt(req.query.month) || new Date().getMonth() + 1;
+      const data = await DashboardModel.getMonthlyStats(year, month);
+      res.json(data);
+    } catch (error) {
+      next(error);
+    }
   }
 };
 

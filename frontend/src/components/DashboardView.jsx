@@ -19,28 +19,54 @@ function DashboardView({ onNavigateToForecast }) {
   const [syncMessage, setSyncMessage] = useState(null);
   const [chartRefreshTrigger, setChartRefreshTrigger] = useState(0);
 
+  // Period selector state
+  const [selectedPeriod, setSelectedPeriod] = useState('thisMonth'); // 'thisMonth', 'lastMonth', 'last3Months'
+  const [thisMonthStats, setThisMonthStats] = useState(null);
+  const [lastMonthStats, setLastMonthStats] = useState(null);
+
   useEffect(() => {
     loadDashboardData();
   }, []);
 
+  useEffect(() => {
+    loadMonthlyStats();
+  }, [selectedPeriod]);
+
   const loadDashboardData = async () => {
     try {
       setLoading(true);
-      const [statsData, forecastData, currencyData, totalUSDData] = await Promise.all([
+
+      // Get current and last month dates
+      const now = new Date();
+      const thisYear = now.getFullYear();
+      const thisMonth = now.getMonth() + 1;
+      const lastMonth = thisMonth === 1 ? 12 : thisMonth - 1;
+      const lastMonthYear = thisMonth === 1 ? thisYear - 1 : thisYear;
+
+      const [statsData, forecastData, currencyData, totalUSDData, thisMonthData, lastMonthData] = await Promise.all([
         dashboardService.getStats(),
         entryService.getForecast(),
         currencyService.getCurrencyBalances(),
-        currencyService.getTotalBalanceInUSD()
+        currencyService.getTotalBalanceInUSD(),
+        dashboardService.getMonthlyStats(thisYear, thisMonth),
+        dashboardService.getMonthlyStats(lastMonthYear, lastMonth)
       ]);
       setStats(statsData);
       setForecast(forecastData);
       setCurrencyBalances(currencyData);
       setTotalUSD(totalUSDData);
+      setThisMonthStats(thisMonthData);
+      setLastMonthStats(lastMonthData);
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadMonthlyStats = async () => {
+    // Additional loading for period selector if needed
+    // Currently handled in loadDashboardData
   };
 
   const handleImportSuccess = () => {
@@ -151,13 +177,34 @@ function DashboardView({ onNavigateToForecast }) {
   // Use total USD balance from Wise accounts
   const currentBalance = totalUSD ? parseFloat(totalUSD.total_usd) : 0;
 
-  const contractIncome = parseFloat(forecast.contract_income || 0);
-  const weeklyPayments = parseFloat(forecast.weekly_payments);
-  const monthlyPayments = parseFloat(forecast.monthly_payments);
+  const weeklyPayments = parseFloat(forecast.weekly_payments || 0);
+  const monthlyPayments = parseFloat(forecast.monthly_payments || 0);
   const totalExpenses = weeklyPayments + monthlyPayments;
 
-  // Calculate forecast on frontend using correct balance from totalUSD (same as ForecastView)
-  const forecastBalance = currentBalance + contractIncome - totalExpenses;
+  // Calculate forecast using ONLY Wise balance (no contract income)
+  const forecastBalance = currentBalance - totalExpenses;
+
+  // Monthly stats for display
+  const currentMonthIncome = thisMonthStats?.income || 0;
+  const currentMonthExpenses = thisMonthStats?.expenses || 0;
+  const currentMonthProfit = thisMonthStats?.profit || 0;
+  const lastMonthIncome = lastMonthStats?.income || 0;
+  const lastMonthExpenses = lastMonthStats?.expenses || 0;
+  const lastMonthProfit = lastMonthStats?.profit || 0;
+
+  // Get month names for display
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const now = new Date();
+  const thisMonthName = monthNames[now.getMonth()];
+  const lastMonthName = monthNames[now.getMonth() === 0 ? 11 : now.getMonth() - 1];
+
+  // Get selected period stats
+  const getSelectedPeriodStats = () => {
+    if (selectedPeriod === 'thisMonth') return thisMonthStats;
+    if (selectedPeriod === 'lastMonth') return lastMonthStats;
+    return thisMonthStats; // default
+  };
+  const periodStats = getSelectedPeriodStats();
 
   return (
     <div className="space-y-6">
@@ -192,17 +239,17 @@ function DashboardView({ onNavigateToForecast }) {
             <Calendar size={24} className="opacity-80" />
           </div>
           <p className="text-3xl font-bold">
-            ${Math.abs(forecastBalance).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+            {forecastBalance < 0 && '-'}${Math.abs(forecastBalance).toLocaleString('en-US', { minimumFractionDigits: 2 })}
           </p>
           <div className="mt-3 pt-3 border-t border-white border-opacity-30 opacity-90">
-            <div className="text-sm mb-1">{forecast.weeks_remaining} weeks remaining</div>
+            <div className="text-sm mb-1 opacity-70">Wise Balance - Remaining Expenses</div>
             <div className="flex justify-between text-sm">
-              <span>Weekly:</span>
-              <span>${weeklyPayments.toLocaleString()}</span>
+              <span>Weekly due:</span>
+              <span>-${weeklyPayments.toLocaleString()}</span>
             </div>
             <div className="flex justify-between text-sm mt-1">
-              <span>Monthly:</span>
-              <span>${monthlyPayments.toLocaleString()}</span>
+              <span>Monthly due:</span>
+              <span>-${monthlyPayments.toLocaleString()}</span>
             </div>
           </div>
           <div className="mt-2 text-xs opacity-70 text-center">
@@ -210,23 +257,29 @@ function DashboardView({ onNavigateToForecast }) {
           </div>
         </div>
 
-        {/* Monthly Recurring Revenue */}
-        <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-lg shadow-lg p-6">
+        {/* This Month Profit */}
+        <div className={`${currentMonthProfit >= 0 ? 'bg-gradient-to-br from-emerald-500 to-emerald-600' : 'bg-gradient-to-br from-orange-500 to-orange-600'} text-white rounded-lg shadow-lg p-6`}>
           <div className="flex items-center justify-between mb-2">
-            <h3 className="text-lg font-medium opacity-90">Monthly Recurring Revenue</h3>
-            <Briefcase size={24} className="opacity-80" />
+            <h3 className="text-lg font-medium opacity-90">{thisMonthName} Profit</h3>
+            <TrendingUp size={24} className="opacity-80" />
           </div>
           <p className="text-3xl font-bold">
-            ${parseFloat(stats.monthly_recurring_revenue).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+            {currentMonthProfit < 0 && '-'}${Math.abs(currentMonthProfit).toLocaleString('en-US', { minimumFractionDigits: 2 })}
           </p>
-          <div className="mt-3 pt-3 border-t border-purple-400 opacity-90">
+          <div className="mt-3 pt-3 border-t border-white border-opacity-30 opacity-90">
             <div className="flex justify-between text-sm">
-              <span>Active Contracts:</span>
-              <span>{stats.active_contracts}</span>
+              <span>Income:</span>
+              <span className="text-green-200">${currentMonthIncome.toLocaleString()}</span>
             </div>
             <div className="flex justify-between text-sm mt-1">
-              <span>Expected This Month:</span>
-              <span>${contractIncome.toLocaleString()}</span>
+              <span>Expenses:</span>
+              <span className="text-red-200">-${currentMonthExpenses.toLocaleString()}</span>
+            </div>
+            <div className="flex justify-between text-sm mt-2 opacity-70">
+              <span>{lastMonthName}:</span>
+              <span className={lastMonthProfit >= 0 ? 'text-green-200' : 'text-red-200'}>
+                {lastMonthProfit < 0 && '-'}${Math.abs(lastMonthProfit).toLocaleString()}
+              </span>
             </div>
           </div>
         </div>
@@ -366,25 +419,73 @@ function DashboardView({ onNavigateToForecast }) {
         </div>
       </div>
 
-      {/* Expenses Breakdown */}
-      {stats.expenses_by_category && stats.expenses_by_category.length > 0 && (
-        <div className="bg-white rounded-lg shadow p-6 border border-gray-200">
-          <div className="flex items-center gap-2 mb-4">
+      {/* Expenses Breakdown with Period Selector */}
+      <div className="bg-white rounded-lg shadow p-6 border border-gray-200">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
             <FileText size={20} className="text-gray-600" />
             <h3 className="text-lg font-semibold text-gray-900">Expenses by Category</h3>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {stats.expenses_by_category.map((expense, index) => (
-              <div key={index} className="p-4 bg-gray-50 rounded border border-gray-200">
-                <p className="text-sm font-medium text-gray-700">{expense.category}</p>
-                <p className="text-xl font-bold text-gray-900 mt-1">
+          <div className="flex gap-2">
+            <button
+              onClick={() => setSelectedPeriod('thisMonth')}
+              className={`px-4 py-2 text-sm rounded-lg transition ${
+                selectedPeriod === 'thisMonth'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              {thisMonthName}
+            </button>
+            <button
+              onClick={() => setSelectedPeriod('lastMonth')}
+              className={`px-4 py-2 text-sm rounded-lg transition ${
+                selectedPeriod === 'lastMonth'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              {lastMonthName}
+            </button>
+          </div>
+        </div>
+
+        {/* Period Summary */}
+        {periodStats && (
+          <div className="grid grid-cols-3 gap-4 mb-6">
+            <div className="p-4 bg-green-50 rounded border border-green-200">
+              <p className="text-sm font-medium text-green-700">Income</p>
+              <p className="text-2xl font-bold text-green-800">${periodStats.income.toLocaleString()}</p>
+            </div>
+            <div className="p-4 bg-red-50 rounded border border-red-200">
+              <p className="text-sm font-medium text-red-700">Expenses</p>
+              <p className="text-2xl font-bold text-red-800">${periodStats.expenses.toLocaleString()}</p>
+            </div>
+            <div className={`p-4 rounded border ${periodStats.profit >= 0 ? 'bg-blue-50 border-blue-200' : 'bg-orange-50 border-orange-200'}`}>
+              <p className={`text-sm font-medium ${periodStats.profit >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>Profit</p>
+              <p className={`text-2xl font-bold ${periodStats.profit >= 0 ? 'text-blue-800' : 'text-orange-800'}`}>
+                {periodStats.profit < 0 && '-'}${Math.abs(periodStats.profit).toLocaleString()}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Category Breakdown */}
+        {periodStats?.expenses_by_category && periodStats.expenses_by_category.length > 0 ? (
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            {periodStats.expenses_by_category.map((expense, index) => (
+              <div key={index} className="p-3 bg-gray-50 rounded border border-gray-200">
+                <p className="text-xs font-medium text-gray-600 truncate">{expense.category}</p>
+                <p className="text-lg font-bold text-gray-900 mt-1">
                   ${parseFloat(expense.total).toLocaleString()}
                 </p>
               </div>
             ))}
           </div>
-        </div>
-      )}
+        ) : (
+          <p className="text-gray-500 text-center py-4">No expenses for this period</p>
+        )}
+      </div>
 
       {/* Contract Details */}
       {forecast.contract_details && forecast.contract_details.length > 0 && (

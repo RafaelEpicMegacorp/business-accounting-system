@@ -119,6 +119,51 @@ const DashboardModel = {
     return Object.values(monthsMap);
   },
 
+  // Get stats for a specific month
+  async getMonthlyStats(year, month) {
+    const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+    const endDate = new Date(year, month, 0).toISOString().split('T')[0]; // Last day of month
+
+    // Get income and expenses for the month
+    const totalsResult = await pool.query(`
+      SELECT
+        SUM(CASE WHEN type = 'income' THEN total ELSE 0 END) as income,
+        SUM(CASE WHEN type = 'expense' THEN total ELSE 0 END) as expenses
+      FROM entries
+      WHERE entry_date >= $1 AND entry_date <= $2
+        AND (status = 'completed' OR (status = 'pending' AND entry_date < CURRENT_DATE))
+    `, [startDate, endDate]);
+
+    // Get expenses by category for the month
+    const categoryResult = await pool.query(`
+      SELECT
+        category,
+        SUM(total) as total
+      FROM entries
+      WHERE type = 'expense'
+        AND entry_date >= $1 AND entry_date <= $2
+        AND (status = 'completed' OR (status = 'pending' AND entry_date < CURRENT_DATE))
+      GROUP BY category
+      ORDER BY total DESC
+    `, [startDate, endDate]);
+
+    const totals = totalsResult.rows[0];
+    const income = parseFloat(totals.income || 0);
+    const expenses = parseFloat(totals.expenses || 0);
+
+    return {
+      year,
+      month,
+      income,
+      expenses,
+      profit: income - expenses,
+      expenses_by_category: categoryResult.rows.map(row => ({
+        category: row.category,
+        total: parseFloat(row.total)
+      }))
+    };
+  },
+
   // Get category breakdown for pie chart
   async getCategoryBreakdown(startDate = null, endDate = null) {
     let query = `
