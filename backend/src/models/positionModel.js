@@ -24,13 +24,12 @@ const PositionModel = {
       SELECT
         p.id,
         p.name,
-        p.color,
         COUNT(e.id) FILTER (WHERE e.is_active = true) as active_count,
         COUNT(e.id) as total_count
       FROM positions p
       LEFT JOIN employees e ON e.position_id = p.id
       WHERE p.is_active = true
-      GROUP BY p.id, p.name, p.color
+      GROUP BY p.id, p.name
       ORDER BY p.display_order ASC
     `);
     return result.rows;

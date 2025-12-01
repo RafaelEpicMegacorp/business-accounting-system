@@ -19,6 +19,7 @@ export default function EmployeeList({ onEmployeeSelect, onEdit }) {
   });
   const [positionCounts, setPositionCounts] = useState([]);
   const [showPositionCounts, setShowPositionCounts] = useState(false);
+  const [selectedPosition, setSelectedPosition] = useState(null);
 
   useEffect(() => {
     loadEmployees();
@@ -362,26 +363,53 @@ export default function EmployeeList({ onEmployeeSelect, onEdit }) {
       {/* Position Counts */}
       {showPositionCounts && positionCounts.length > 0 && (
         <div className="mb-6 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg p-4 border border-indigo-200">
-          <h3 className="text-sm font-semibold text-indigo-900 mb-3 flex items-center gap-2">
-            <Briefcase size={16} />
-            Employees by Position
-          </h3>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-indigo-900 flex items-center gap-2">
+              <Briefcase size={16} />
+              Employees by Position
+              {selectedPosition && (
+                <span className="text-xs font-normal text-indigo-600 ml-2">
+                  (click to filter)
+                </span>
+              )}
+            </h3>
+            {selectedPosition && (
+              <button
+                onClick={() => setSelectedPosition(null)}
+                className="text-sm text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+              >
+                <X size={14} />
+                Clear filter
+              </button>
+            )}
+          </div>
           <div className="flex flex-wrap gap-2">
             {positionCounts.map((pos) => (
-              <div
+              <button
                 key={pos.id}
-                className="bg-white rounded-lg px-4 py-2 shadow-sm border border-indigo-100 flex items-center gap-3"
+                onClick={() => setSelectedPosition(selectedPosition === pos.name ? null : pos.name)}
+                className={`rounded-lg px-4 py-2 shadow-sm border flex items-center gap-3 transition-all cursor-pointer ${
+                  selectedPosition === pos.name
+                    ? 'bg-indigo-600 border-indigo-600 text-white'
+                    : 'bg-white border-indigo-100 hover:border-indigo-300 hover:shadow-md'
+                }`}
               >
-                <span className="font-medium text-gray-800">{pos.name}</span>
-                <span className="bg-indigo-100 text-indigo-800 text-sm font-semibold px-2 py-0.5 rounded">
+                <span className={`font-medium ${selectedPosition === pos.name ? 'text-white' : 'text-gray-800'}`}>
+                  {pos.name}
+                </span>
+                <span className={`text-sm font-semibold px-2 py-0.5 rounded ${
+                  selectedPosition === pos.name
+                    ? 'bg-indigo-500 text-white'
+                    : 'bg-indigo-100 text-indigo-800'
+                }`}>
                   {pos.active_count}
                 </span>
                 {pos.total_count > pos.active_count && (
-                  <span className="text-xs text-gray-500">
+                  <span className={`text-xs ${selectedPosition === pos.name ? 'text-indigo-200' : 'text-gray-500'}`}>
                     ({pos.total_count} total)
                   </span>
                 )}
-              </div>
+              </button>
             ))}
           </div>
         </div>
@@ -590,7 +618,9 @@ export default function EmployeeList({ onEmployeeSelect, onEdit }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
-            {employees.map((employee) => (
+            {employees
+              .filter(employee => !selectedPosition || employee.position === selectedPosition)
+              .map((employee) => (
               <tr key={employee.id} className="hover:bg-gray-50">
                 <td className="px-4 py-3 text-center">
                   <button onClick={() => toggleEmployeeSelection(employee.id)} className="hover:text-blue-600">
