@@ -2,13 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { X, DollarSign, Calendar, Mail, User, TrendingUp, Briefcase, FolderKanban } from 'lucide-react';
 import employeeService from '../services/employeeService';
 import projectService from '../services/projectService';
+import positionService from '../services/positionService';
 
 export default function EmployeeForm({ employee, onClose, onSuccess }) {
   const [employeeId, setEmployeeId] = useState(null); // Store employee ID separately
   const [formData, setFormData] = useState({
     name: '',
     email: '',
-    position: '',
+    positionId: '',
     payType: 'monthly',
     payRate: '',
     payMultiplier: '1.12',
@@ -17,25 +18,34 @@ export default function EmployeeForm({ employee, onClose, onSuccess }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  // Position selection state
+  const [positions, setPositions] = useState([]);
+  const [loadingPositions, setLoadingPositions] = useState(true);
+
   // Project selection state
   const [projects, setProjects] = useState([]);
   const [selectedProjectIds, setSelectedProjectIds] = useState([]);
   const [originalProjectIds, setOriginalProjectIds] = useState([]);
   const [loadingProjects, setLoadingProjects] = useState(true);
 
-  // Fetch all active projects on mount
+  // Fetch all positions and projects on mount
   useEffect(() => {
-    const fetchProjects = async () => {
+    const fetchData = async () => {
       try {
-        const allProjects = await projectService.getAll('active');
+        const [allPositions, allProjects] = await Promise.all([
+          positionService.getAll(),
+          projectService.getAll('active')
+        ]);
+        setPositions(allPositions);
         setProjects(allProjects);
       } catch (err) {
-        console.error('Failed to fetch projects:', err);
+        console.error('Failed to fetch data:', err);
       } finally {
+        setLoadingPositions(false);
         setLoadingProjects(false);
       }
     };
-    fetchProjects();
+    fetchData();
   }, []);
 
   // Fetch employee's projects when editing
@@ -69,7 +79,7 @@ export default function EmployeeForm({ employee, onClose, onSuccess }) {
       setFormData({
         name: employee.name || '',
         email: employee.email || '',
-        position: employee.position || '',
+        positionId: employee.position_id || '',
         payType: employee.pay_type || 'monthly',
         payRate: employee.pay_rate || '',
         payMultiplier: employee.pay_multiplier || '1.12',
@@ -219,14 +229,23 @@ export default function EmployeeForm({ employee, onClose, onSuccess }) {
                 <Briefcase size={16} />
                 Position
               </label>
-              <input
-                type="text"
-                name="position"
-                value={formData.position}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="e.g., Software Engineer, Designer, Manager"
-              />
+              {loadingPositions ? (
+                <p className="text-sm text-gray-500 py-2">Loading positions...</p>
+              ) : (
+                <select
+                  name="positionId"
+                  value={formData.positionId}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="">Select a position...</option>
+                  {positions.map((position) => (
+                    <option key={position.id} value={position.id}>
+                      {position.name}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
 
             {/* Pay Type */}

@@ -28,25 +28,25 @@ const EmployeeModel = {
 
   // Create new employee
   async create(employee) {
-    const { name, email, payType, payRate, payMultiplier, startDate, position } = employee;
+    const { name, email, payType, payRate, payMultiplier, startDate, positionId } = employee;
     const result = await pool.query(
-      `INSERT INTO employees (name, email, pay_type, pay_rate, pay_multiplier, start_date, position, is_active)
+      `INSERT INTO employees (name, email, pay_type, pay_rate, pay_multiplier, start_date, position_id, is_active)
        VALUES ($1, $2, $3, $4, $5, $6, $7, true)
        RETURNING *`,
-      [name, email || null, payType, payRate, payMultiplier || 1.0, startDate || new Date(), position || null]
+      [name, email || null, payType, payRate, payMultiplier || 1.0, startDate || new Date(), positionId || null]
     );
     return result.rows[0];
   },
 
   // Update employee
   async update(id, employee) {
-    const { name, email, payType, payRate, payMultiplier, startDate, position } = employee;
+    const { name, email, payType, payRate, payMultiplier, startDate, positionId } = employee;
     const result = await pool.query(
       `UPDATE employees
-       SET name = $1, email = $2, pay_type = $3, pay_rate = $4, pay_multiplier = $5, start_date = $6, position = $7
+       SET name = $1, email = $2, pay_type = $3, pay_rate = $4, pay_multiplier = $5, start_date = $6, position_id = $7
        WHERE id = $8
        RETURNING *`,
-      [name, email || null, payType, payRate, payMultiplier || 1.0, startDate, position || null, id]
+      [name, email || null, payType, payRate, payMultiplier || 1.0, startDate, positionId || null, id]
     );
     return result.rows[0];
   },
@@ -404,6 +404,7 @@ const EmployeeModel = {
     let query = `
       SELECT
         e.*,
+        pos.name as position,
         COUNT(DISTINCT en.id) as total_entries,
         SUM(CASE WHEN en.status = 'completed' THEN en.total ELSE 0 END) as total_paid,
         MAX(en.entry_date) as last_payment_date,
@@ -414,6 +415,7 @@ const EmployeeModel = {
           '[]'
         ) as projects
       FROM employees e
+      LEFT JOIN positions pos ON e.position_id = pos.id
       LEFT JOIN entries en ON e.id = en.employee_id
       LEFT JOIN employee_projects ep ON e.id = ep.employee_id AND ep.removed_date IS NULL
       LEFT JOIN projects p ON ep.project_id = p.id

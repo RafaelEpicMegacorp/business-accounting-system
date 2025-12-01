@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Plus, Edit2, Ban, CheckCircle, Trash2, DollarSign, CheckSquare, Square, Info, X } from 'lucide-react';
+import { Users, Plus, Edit2, Ban, CheckCircle, Trash2, DollarSign, CheckSquare, Square, Info, X, Briefcase } from 'lucide-react';
 import employeeService from '../services/employeeService';
+import positionService from '../services/positionService';
 import EmployeeTerminationModal from './EmployeeTerminationModal';
 
 export default function EmployeeList({ onEmployeeSelect, onEdit }) {
@@ -16,10 +17,22 @@ export default function EmployeeList({ onEmployeeSelect, onEdit }) {
     example: '',
     formula: ''
   });
+  const [positionCounts, setPositionCounts] = useState([]);
+  const [showPositionCounts, setShowPositionCounts] = useState(false);
 
   useEffect(() => {
     loadEmployees();
+    loadPositionCounts();
   }, [filter]);
+
+  const loadPositionCounts = async () => {
+    try {
+      const counts = await positionService.getCounts();
+      setPositionCounts(counts);
+    } catch (error) {
+      console.error('Failed to load position counts:', error);
+    }
+  };
 
   const loadEmployees = async () => {
     try {
@@ -333,7 +346,46 @@ export default function EmployeeList({ onEmployeeSelect, onEdit }) {
         >
           All
         </button>
+        <button
+          onClick={() => setShowPositionCounts(!showPositionCounts)}
+          className={`ml-auto flex items-center gap-2 px-4 py-2 rounded-lg ${
+            showPositionCounts
+              ? 'bg-indigo-600 text-white'
+              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+          }`}
+        >
+          <Briefcase size={18} />
+          Positions
+        </button>
       </div>
+
+      {/* Position Counts */}
+      {showPositionCounts && positionCounts.length > 0 && (
+        <div className="mb-6 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg p-4 border border-indigo-200">
+          <h3 className="text-sm font-semibold text-indigo-900 mb-3 flex items-center gap-2">
+            <Briefcase size={16} />
+            Employees by Position
+          </h3>
+          <div className="flex flex-wrap gap-2">
+            {positionCounts.map((pos) => (
+              <div
+                key={pos.id}
+                className="bg-white rounded-lg px-4 py-2 shadow-sm border border-indigo-100 flex items-center gap-3"
+              >
+                <span className="font-medium text-gray-800">{pos.name}</span>
+                <span className="bg-indigo-100 text-indigo-800 text-sm font-semibold px-2 py-0.5 rounded">
+                  {pos.active_count}
+                </span>
+                {pos.total_count > pos.active_count && (
+                  <span className="text-xs text-gray-500">
+                    ({pos.total_count} total)
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Payroll Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">

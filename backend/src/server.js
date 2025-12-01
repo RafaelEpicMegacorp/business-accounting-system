@@ -6,6 +6,7 @@ const entryRoutes = require('./routes/entryRoutes');
 const employeeRoutes = require('./routes/employeeRoutes');
 const contractRoutes = require('./routes/contractRoutes');
 const projectRoutes = require('./routes/projectRoutes');
+const positionRoutes = require('./routes/positionRoutes');
 const payrollRoutes = require('./routes/payrollRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
 const wiseImportRoutes = require('./routes/wiseImport');
@@ -47,6 +48,7 @@ app.use('/api/entries', entryRoutes);
 app.use('/api/employees', employeeRoutes);
 app.use('/api/contracts', contractRoutes);
 app.use('/api/projects', projectRoutes);
+app.use('/api/positions', positionRoutes);
 app.use('/api/payroll', payrollRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/wise', wiseImportRoutes); // CSV upload only
