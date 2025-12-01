@@ -39,7 +39,7 @@ const payrollModel = {
         e.id,
         e.name,
         e.email,
-        e.position,
+        pos.name as position,
         e.pay_type,
         e.pay_rate,
         e.pay_multiplier,
@@ -64,10 +64,11 @@ const payrollModel = {
           '[]'
         ) as projects
       FROM employees e
+      LEFT JOIN positions pos ON e.position_id = pos.id
       LEFT JOIN employee_projects ep ON e.id = ep.employee_id AND ep.removed_date IS NULL
       LEFT JOIN projects p ON ep.project_id = p.id AND p.status = 'active'
       WHERE e.is_active = true
-      GROUP BY e.id
+      GROUP BY e.id, pos.id
       ORDER BY monthly_cost DESC, e.name ASC
     `);
 
@@ -76,7 +77,7 @@ const payrollModel = {
       SELECT
         e.id,
         e.name,
-        e.position,
+        pos.name as position,
         e.pay_type,
         e.pay_rate,
         e.pay_multiplier,
@@ -98,10 +99,11 @@ const payrollModel = {
           '[]'
         ) as last_projects
       FROM employees e
+      LEFT JOIN positions pos ON e.position_id = pos.id
       LEFT JOIN employee_projects ep ON e.id = ep.employee_id
       LEFT JOIN projects p ON ep.project_id = p.id
       WHERE e.is_active = false
-      GROUP BY e.id
+      GROUP BY e.id, pos.id
       ORDER BY e.termination_date DESC
     `);
 
