@@ -427,7 +427,7 @@ const EmployeeModel = {
       params.push(isActive);
     }
 
-    query += ' GROUP BY e.id ORDER BY e.is_active DESC, e.name ASC';
+    query += ' GROUP BY e.id, pos.id ORDER BY e.is_active DESC, e.name ASC';
 
     const result = await pool.query(query, params);
     return result.rows;
