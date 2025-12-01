@@ -54,7 +54,7 @@ const projectModel = {
 
     const employees = await pool.query(
       `SELECT
-        e.id, e.name, e.email, e.position, e.pay_type as "payType",
+        e.id, e.name, e.email, pos.name as position, e.pay_type as "payType",
         e.pay_rate as "payRate", e.pay_multiplier as "payMultiplier",
         e.is_active as "isActive",
         ep.assigned_date as "assignedDate", ep.removed_date as "removedDate",
@@ -62,6 +62,7 @@ const projectModel = {
         ep.allocation_percentage as "allocationPercentage"
        FROM employees e
        INNER JOIN employee_projects ep ON e.id = ep.employee_id
+       LEFT JOIN positions pos ON e.position_id = pos.id
        WHERE ep.project_id = $1
        ORDER BY ep.is_primary DESC, e.name ASC`,
       [id]
