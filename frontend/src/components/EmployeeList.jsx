@@ -554,13 +554,17 @@ export default function EmployeeList({ onEmployeeSelect, onEdit }) {
                   {employee.position || <span className="text-gray-400 italic">Not set</span>}
                 </td>
                 <td className="px-4 py-3">
-                  {employee.primary_project_name ? (
-                    <div className="flex items-center gap-2">
-                      <div
-                        className="w-3 h-3 rounded"
-                        style={{ backgroundColor: employee.primary_project_color || '#3B82F6' }}
-                      />
-                      <span className="text-sm text-gray-700">{employee.primary_project_name}</span>
+                  {employee.projects && employee.projects.length > 0 ? (
+                    <div className="flex flex-wrap gap-1">
+                      {employee.projects.map(project => (
+                        <span
+                          key={project.id}
+                          className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium text-white"
+                          style={{ backgroundColor: project.color || '#3B82F6' }}
+                        >
+                          {project.name}
+                        </span>
+                      ))}
                     </div>
                   ) : (
                     <span className="text-gray-400 italic text-sm">No project</span>
@@ -576,7 +580,7 @@ export default function EmployeeList({ onEmployeeSelect, onEdit }) {
                     {calculateTenure(employee.start_date)}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-right text-gray-700">${formatCurrency(employee.pay_rate)}</td>
+                <td className="px-4 py-3 text-right text-gray-700">${formatCurrency(parseFloat(employee.pay_rate) * parseFloat(employee.pay_multiplier))}</td>
                 <td className="px-4 py-3 text-right text-gray-700">
                   {(parseFloat(employee.pay_multiplier) * 100).toFixed(2)}%
                 </td>

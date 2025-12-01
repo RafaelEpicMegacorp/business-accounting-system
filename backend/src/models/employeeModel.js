@@ -399,20 +399,23 @@ const EmployeeModel = {
     return { affected, failed };
   },
 
-  // Get all employees with their primary project
+  // Get all employees with all their projects
   async getAllWithProjects(isActive = null) {
     let query = `
       SELECT
         e.*,
-        COUNT(en.id) as total_entries,
+        COUNT(DISTINCT en.id) as total_entries,
         SUM(CASE WHEN en.status = 'completed' THEN en.total ELSE 0 END) as total_paid,
         MAX(en.entry_date) as last_payment_date,
-        p.id as primary_project_id,
-        p.name as primary_project_name,
-        p.color as primary_project_color
+        COALESCE(
+          json_agg(
+            DISTINCT jsonb_build_object('id', p.id, 'name', p.name, 'color', p.color)
+          ) FILTER (WHERE p.id IS NOT NULL),
+          '[]'
+        ) as projects
       FROM employees e
       LEFT JOIN entries en ON e.id = en.employee_id
-      LEFT JOIN employee_projects ep ON e.id = ep.employee_id AND ep.is_primary = true AND ep.removed_date IS NULL
+      LEFT JOIN employee_projects ep ON e.id = ep.employee_id AND ep.removed_date IS NULL
       LEFT JOIN projects p ON ep.project_id = p.id
     `;
 
@@ -422,7 +425,7 @@ const EmployeeModel = {
       params.push(isActive);
     }
 
-    query += ' GROUP BY e.id, p.id, p.name, p.color ORDER BY e.is_active DESC, e.name ASC';
+    query += ' GROUP BY e.id ORDER BY e.is_active DESC, e.name ASC';
 
     const result = await pool.query(query, params);
     return result.rows;

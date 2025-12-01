@@ -185,8 +185,8 @@ function DashboardView({ onNavigateToForecast }) {
   const monthlyPayments = parseFloat(forecast.monthly_payments || 0);
   const totalExpenses = weeklyPayments + monthlyPayments;
 
-  // Calculate forecast using ONLY Wise balance (no contract income)
-  const forecastBalance = currentBalance - totalExpenses;
+  // Calculate forecast: Wise balance + pending contract income - remaining expenses
+  const forecastBalance = currentBalance + parseFloat(forecast.contract_income || 0) - totalExpenses;
 
   // Monthly stats for display
   const currentMonthIncome = thisMonthStats?.income || 0;

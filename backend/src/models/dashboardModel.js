@@ -16,6 +16,18 @@ const DashboardModel = {
       FROM entries
     `);
 
+    // Get pending contract income (contracts due this month that haven't been paid yet)
+    const pendingContractResult = await pool.query(`
+      SELECT COALESCE(SUM(amount), 0) as pending_contract_income
+      FROM contracts
+      WHERE status = 'active'
+      AND contract_type = 'monthly'
+      AND payment_day >= EXTRACT(DAY FROM CURRENT_DATE)
+      AND (end_date IS NULL OR end_date >= CURRENT_DATE)
+      AND (start_date IS NULL OR start_date <= CURRENT_DATE)
+    `);
+    const pendingContractIncome = parseFloat(pendingContractResult.rows[0]?.pending_contract_income || 0);
+
     // Get salary breakdown
     const salariesResult = await pool.query(`
       SELECT
@@ -64,8 +76,8 @@ const DashboardModel = {
       total_income: parseFloat(totals.total_income || 0),
       total_expenses: parseFloat(totals.total_expenses || 0),
 
-      // Pending
-      pending_income: parseFloat(totals.pending_income || 0),
+      // Pending (includes upcoming contract payments)
+      pending_income: parseFloat(totals.pending_income || 0) + pendingContractIncome,
       pending_expenses: parseFloat(totals.pending_expenses || 0),
 
       // Salaries
