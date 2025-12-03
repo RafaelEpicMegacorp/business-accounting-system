@@ -4,7 +4,6 @@ const SettingsModel = require('../models/settingsModel');
 const ClassificationModel = require('../models/classificationModel');
 const SuggestionModel = require('../models/suggestionModel');
 const crypto = require('crypto');
-const { v4: uuidv4 } = require('uuid');
 
 // Confidence threshold - lower to capture more suggestions
 const MIN_CONFIDENCE = 0.40;
@@ -472,7 +471,7 @@ Return ONLY valid JSON, no markdown or explanation outside the JSON.`;
    * Save suggestions to database
    */
   async saveSuggestions(patterns) {
-    const batchId = uuidv4();
+    const batchId = crypto.randomUUID();
 
     // Clear old pending suggestions
     await SuggestionModel.clearPending();
