@@ -268,7 +268,7 @@ const ForecastModel = {
 
     // Get active contracts for income projection
     const contractsResult = await pool.query(`
-      SELECT id, client_name, amount, contract_type, payment_day, currency
+      SELECT id, client_name, amount, contract_type, payment_day
       FROM contracts
       WHERE status = 'active'
     `);
