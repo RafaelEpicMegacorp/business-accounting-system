@@ -17,6 +17,7 @@ function ForecastView() {
   const [loading, setLoading] = useState(true);
   const [showTaxSettings, setShowTaxSettings] = useState(false);
   const [showRecurringDetails, setShowRecurringDetails] = useState(false);
+  const [expandedMonth, setExpandedMonth] = useState(null);
 
   useEffect(() => {
     loadForecastData();
@@ -226,6 +227,123 @@ function ForecastView() {
         </div>
       </div>
 
+      {/* Expected Monthly Cash Flows Section */}
+      <div className="bg-white rounded-lg shadow-lg p-6 border border-gray-200">
+        <div className="flex items-center gap-2 mb-4">
+          <Briefcase className="text-indigo-600" size={24} />
+          <h2 className="text-xl font-bold text-gray-900">Expected Monthly Cash Flows</h2>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Contract Income */}
+          <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+            <h3 className="text-sm font-semibold text-green-800 mb-3 flex items-center gap-2">
+              <TrendingUp size={18} /> Contract Income
+            </h3>
+            {projection.projections[0]?.incomeDetails && projection.projections[0].incomeDetails.length > 0 ? (
+              <div className="space-y-2">
+                {projection.projections[0].incomeDetails.map((inc, i) => (
+                  <div key={i} className="flex justify-between items-center">
+                    <div>
+                      <p className="text-sm font-medium text-gray-800">{inc.name}</p>
+                      <p className="text-xs text-gray-500">{inc.type}</p>
+                    </div>
+                    <span className="text-green-700 font-bold">${formatCurrency(inc.amount)}</span>
+                  </div>
+                ))}
+                <div className="border-t border-green-300 pt-2 mt-2 flex justify-between">
+                  <span className="text-sm font-semibold text-green-800">Monthly Total</span>
+                  <span className="text-green-800 font-bold">${formatCurrency(projection.projections[0]?.expectedIncome || 0)}</span>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500 italic">No active contracts</p>
+            )}
+          </div>
+
+          {/* Salary Expenses */}
+          <div className="bg-red-50 rounded-lg p-4 border border-red-200">
+            <h3 className="text-sm font-semibold text-red-800 mb-3 flex items-center gap-2">
+              <Users size={18} /> Salary Expenses
+            </h3>
+            {projection.projections[0]?.salaryDetails && projection.projections[0].salaryDetails.length > 0 ? (
+              <div className="space-y-2">
+                {projection.projections[0].salaryDetails.map((sal, i) => (
+                  <div key={i} className="flex justify-between items-center">
+                    <div>
+                      <p className="text-sm font-medium text-gray-800">{sal.name}</p>
+                      <p className="text-xs text-gray-500">{sal.type}</p>
+                    </div>
+                    <span className="text-red-700 font-bold">${formatCurrency(sal.amount)}</span>
+                  </div>
+                ))}
+                <div className="border-t border-red-300 pt-2 mt-2 flex justify-between">
+                  <span className="text-sm font-semibold text-red-800">Monthly Total</span>
+                  <span className="text-red-800 font-bold">${formatCurrency(projection.projections[0]?.salaryExpenses || 0)}</span>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500 italic">No active employees</p>
+            )}
+          </div>
+
+          {/* Recurring Expenses */}
+          <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
+            <h3 className="text-sm font-semibold text-purple-800 mb-3 flex items-center gap-2">
+              <RefreshCw size={18} /> Recurring Expenses
+            </h3>
+            {projection.recurringExpensePatterns && projection.recurringExpensePatterns.length > 0 ? (
+              <div className="space-y-2">
+                {projection.recurringExpensePatterns.slice(0, 5).map((pattern, i) => (
+                  <div key={i} className="flex justify-between items-center">
+                    <div>
+                      <p className="text-sm font-medium text-gray-800 capitalize">{pattern.description}</p>
+                      <p className="text-xs text-gray-500">{pattern.detected_frequency}</p>
+                    </div>
+                    <span className="text-purple-700 font-bold">${formatCurrency(pattern.typical_amount)}</span>
+                  </div>
+                ))}
+                {projection.recurringExpensePatterns.length > 5 && (
+                  <p className="text-xs text-purple-600">+{projection.recurringExpensePatterns.length - 5} more patterns</p>
+                )}
+                <div className="border-t border-purple-300 pt-2 mt-2 flex justify-between">
+                  <span className="text-sm font-semibold text-purple-800">Monthly Total</span>
+                  <span className="text-purple-800 font-bold">${formatCurrency(projection.projections[0]?.recurringExpenses || 0)}</span>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500 italic">No recurring patterns detected</p>
+            )}
+          </div>
+        </div>
+
+        {/* Monthly Net Summary */}
+        <div className="mt-4 p-4 bg-gray-100 rounded-lg border border-gray-300">
+          <div className="flex flex-wrap justify-between items-center gap-4">
+            <div className="flex items-center gap-6">
+              <div>
+                <span className="text-xs text-gray-500">Monthly Income</span>
+                <p className="text-lg font-bold text-green-700">+${formatCurrency(projection.projections[0]?.expectedIncome || 0)}</p>
+              </div>
+              <div>
+                <span className="text-xs text-gray-500">Monthly Expenses</span>
+                <p className="text-lg font-bold text-red-700">-${formatCurrency(projection.projections[0]?.totalExpenses || 0)}</p>
+              </div>
+              <div>
+                <span className="text-xs text-gray-500">Monthly Taxes</span>
+                <p className="text-lg font-bold text-orange-700">-${formatCurrency(projection.projections[0]?.taxes?.total || 0)}</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <span className="text-xs text-gray-500">Net Monthly Cash Flow</span>
+              <p className={`text-xl font-bold ${(projection.projections[0]?.netChange || 0) >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                {(projection.projections[0]?.netChange || 0) >= 0 ? '+' : ''}${formatCurrency(projection.projections[0]?.netChange || 0)}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Projection Chart */}
       <div className="bg-white rounded-lg shadow-lg p-6 border border-gray-200">
         <div className="flex items-center gap-2 mb-4">
@@ -282,10 +400,12 @@ function ForecastView() {
           <table className="min-w-full">
             <thead className="bg-gray-50 border-b-2 border-gray-200">
               <tr>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase"></th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Month</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-gray-700 uppercase">Start</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-green-700 uppercase">Income</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-red-700 uppercase">Expenses</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-red-700 uppercase">Salaries</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-purple-700 uppercase">Recurring</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-orange-700 uppercase">Taxes</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-gray-700 uppercase">Net</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-blue-700 uppercase">End Balance</th>
@@ -293,27 +413,87 @@ function ForecastView() {
             </thead>
             <tbody className="divide-y divide-gray-200">
               {projection.projections.map((month, index) => (
-                <tr key={index} className={`hover:bg-gray-50 ${!month.isPositive ? 'bg-red-50' : ''}`}>
-                  <td className="px-4 py-3 text-sm font-medium text-gray-900">{month.month}</td>
-                  <td className="px-4 py-3 text-sm text-gray-600 text-right">${formatCurrency(month.startingBalance)}</td>
-                  <td className="px-4 py-3 text-sm text-green-600 text-right font-medium">+${formatCurrency(month.expectedIncome)}</td>
-                  <td className="px-4 py-3 text-sm text-red-600 text-right font-medium">-${formatCurrency(month.totalExpenses)}</td>
-                  <td className="px-4 py-3 text-sm text-orange-600 text-right">-${formatCurrency(month.taxes.total)}</td>
-                  <td className={`px-4 py-3 text-sm text-right font-medium ${month.netChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {month.netChange >= 0 ? '+' : ''}${formatCurrency(month.netChange)}
-                  </td>
-                  <td className={`px-4 py-3 text-sm text-right font-bold ${month.isPositive ? 'text-blue-600' : 'text-red-600'}`}>
-                    ${formatCurrency(month.endingBalance)}
-                  </td>
-                </tr>
+                <React.Fragment key={index}>
+                  <tr
+                    className={`hover:bg-gray-50 cursor-pointer ${!month.isPositive ? 'bg-red-50' : ''}`}
+                    onClick={() => setExpandedMonth(expandedMonth === index ? null : index)}
+                  >
+                    <td className="px-4 py-3 text-sm text-gray-400">
+                      {expandedMonth === index ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                    </td>
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{month.month}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600 text-right">${formatCurrency(month.startingBalance)}</td>
+                    <td className="px-4 py-3 text-sm text-green-600 text-right font-medium">+${formatCurrency(month.expectedIncome)}</td>
+                    <td className="px-4 py-3 text-sm text-red-600 text-right font-medium">-${formatCurrency(month.salaryExpenses)}</td>
+                    <td className="px-4 py-3 text-sm text-purple-600 text-right font-medium">-${formatCurrency(month.recurringExpenses)}</td>
+                    <td className="px-4 py-3 text-sm text-orange-600 text-right">-${formatCurrency(month.taxes.total)}</td>
+                    <td className={`px-4 py-3 text-sm text-right font-medium ${month.netChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {month.netChange >= 0 ? '+' : ''}${formatCurrency(month.netChange)}
+                    </td>
+                    <td className={`px-4 py-3 text-sm text-right font-bold ${month.isPositive ? 'text-blue-600' : 'text-red-600'}`}>
+                      ${formatCurrency(month.endingBalance)}
+                    </td>
+                  </tr>
+                  {/* Expanded Row Details */}
+                  {expandedMonth === index && (
+                    <tr className="bg-gray-50">
+                      <td colSpan={9} className="px-6 py-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          {/* Income Details */}
+                          <div>
+                            <h4 className="text-sm font-semibold text-green-700 mb-2 flex items-center gap-2">
+                              <TrendingUp size={16} /> Income Sources
+                            </h4>
+                            {month.incomeDetails && month.incomeDetails.length > 0 ? (
+                              <div className="space-y-1">
+                                {month.incomeDetails.map((inc, i) => (
+                                  <div key={i} className="flex justify-between text-sm">
+                                    <span className="text-gray-600">{inc.name} <span className="text-xs text-gray-400">({inc.type})</span></span>
+                                    <span className="text-green-600 font-medium">${formatCurrency(inc.amount)}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-sm text-gray-400 italic">No contract income</p>
+                            )}
+                          </div>
+                          {/* Salary Details */}
+                          <div>
+                            <h4 className="text-sm font-semibold text-red-700 mb-2 flex items-center gap-2">
+                              <Users size={16} /> Salary Expenses
+                            </h4>
+                            {month.salaryDetails && month.salaryDetails.length > 0 ? (
+                              <div className="space-y-1">
+                                {month.salaryDetails.map((sal, i) => (
+                                  <div key={i} className="flex justify-between text-sm">
+                                    <span className="text-gray-600">{sal.name} <span className="text-xs text-gray-400">({sal.type})</span></span>
+                                    <span className="text-red-600 font-medium">${formatCurrency(sal.amount)}</span>
+                                  </div>
+                                ))}
+                                <div className="border-t pt-1 mt-2 flex justify-between text-sm font-semibold">
+                                  <span>Total Salaries</span>
+                                  <span className="text-red-700">${formatCurrency(month.salaryExpenses)}</span>
+                                </div>
+                              </div>
+                            ) : (
+                              <p className="text-sm text-gray-400 italic">No salary expenses</p>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
               ))}
             </tbody>
             <tfoot className="bg-gray-100 border-t-2 border-gray-300">
               <tr>
+                <td className="px-4 py-3"></td>
                 <td className="px-4 py-3 text-sm font-bold text-gray-900">TOTAL</td>
                 <td className="px-4 py-3 text-sm text-gray-600 text-right">${formatCurrency(projection.startingBalance)}</td>
                 <td className="px-4 py-3 text-sm text-green-700 text-right font-bold">+${formatCurrency(projection.summary.totalIncome)}</td>
-                <td className="px-4 py-3 text-sm text-red-700 text-right font-bold">-${formatCurrency(projection.summary.totalExpenses)}</td>
+                <td className="px-4 py-3 text-sm text-red-700 text-right font-bold">-${formatCurrency(projection.summary.totalSalaries)}</td>
+                <td className="px-4 py-3 text-sm text-purple-700 text-right font-bold">-${formatCurrency(projection.summary.totalRecurring)}</td>
                 <td className="px-4 py-3 text-sm text-orange-700 text-right font-bold">-${formatCurrency(projection.summary.totalTaxes)}</td>
                 <td className={`px-4 py-3 text-sm text-right font-bold ${projection.summary.netPosition >= 0 ? 'text-green-700' : 'text-red-700'}`}>
                   {projection.summary.netPosition >= 0 ? '+' : ''}${formatCurrency(projection.summary.netPosition)}
