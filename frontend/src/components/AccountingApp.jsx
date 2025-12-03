@@ -437,7 +437,10 @@ export default function AccountingApp() {
         <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
           <div className="flex justify-between items-center mb-6">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">Business Accounting</h1>
+              <h1 className="text-3xl font-bold text-gray-900">
+                Business Accounting
+                <span className="ml-2 text-xs text-gray-400 font-normal">({__COMMIT_HASH__})</span>
+              </h1>
               <p className="text-gray-600 mt-1">Track your income, expenses, and employees</p>
             </div>
             <div className="flex items-center gap-4">
