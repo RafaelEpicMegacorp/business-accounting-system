@@ -105,6 +105,12 @@ const employeeService = {
   async bulkReactivate(ids) {
     const response = await api.post('/employees/bulk/reactivate', { ids });
     return response.data;
+  },
+
+  // Bulk update position for employees
+  async bulkUpdatePosition(ids, positionId) {
+    const response = await api.post('/employees/bulk/update-position', { ids, positionId });
+    return response.data;
   }
 };
 

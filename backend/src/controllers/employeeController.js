@@ -229,6 +229,25 @@ const EmployeeController = {
     } catch (error) {
       next(error);
     }
+  },
+
+  // Bulk update position for employees
+  async bulkUpdatePosition(req, res, next) {
+    try {
+      const { ids, positionId } = req.body;
+
+      // Validate bulk operation data
+      validateBulkOperation(ids);
+
+      const result = await EmployeeModel.bulkUpdatePosition(ids, positionId);
+      res.json({
+        success: true,
+        affected: result.affected,
+        failed: result.failed
+      });
+    } catch (error) {
+      next(error);
+    }
   }
 };
 

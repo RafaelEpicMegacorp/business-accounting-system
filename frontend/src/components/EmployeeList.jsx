@@ -20,11 +20,24 @@ export default function EmployeeList({ onEmployeeSelect, onEdit }) {
   const [positionCounts, setPositionCounts] = useState([]);
   const [showPositionCounts, setShowPositionCounts] = useState(false);
   const [selectedPosition, setSelectedPosition] = useState(null);
+  const [showBulkEditModal, setShowBulkEditModal] = useState(false);
+  const [positions, setPositions] = useState([]);
+  const [bulkEditPositionId, setBulkEditPositionId] = useState('');
 
   useEffect(() => {
     loadEmployees();
     loadPositionCounts();
+    loadPositions();
   }, [filter]);
+
+  const loadPositions = async () => {
+    try {
+      const data = await positionService.getAll();
+      setPositions(data);
+    } catch (error) {
+      console.error('Failed to load positions:', error);
+    }
+  };
 
   const loadPositionCounts = async () => {
     try {
@@ -153,6 +166,29 @@ export default function EmployeeList({ onEmployeeSelect, onEdit }) {
     } catch (error) {
       alert('Failed to reactivate employees. Please try again.');
       console.error('Bulk reactivate error:', error);
+    }
+  };
+
+  const handleBulkUpdatePosition = async () => {
+    if (!bulkEditPositionId) {
+      alert('Please select a position');
+      return;
+    }
+
+    try {
+      const result = await employeeService.bulkUpdatePosition(selectedEmployees, parseInt(bulkEditPositionId, 10));
+      if (result.failed.length > 0) {
+        alert(`Updated ${result.affected} employees. Failed to update ${result.failed.length} employees:\n${result.failed.map(f => `ID ${f.id}: ${f.reason}`).join('\n')}`);
+      } else {
+        alert(`Successfully updated position for ${result.affected} employees.`);
+      }
+      setShowBulkEditModal(false);
+      setBulkEditPositionId('');
+      loadEmployees();
+      loadPositionCounts();
+    } catch (error) {
+      alert('Failed to update positions. Please try again.');
+      console.error('Bulk update position error:', error);
     }
   };
 
@@ -563,6 +599,12 @@ export default function EmployeeList({ onEmployeeSelect, onEdit }) {
           <span className="text-blue-700 font-medium">{selectedEmployees.length} employees selected</span>
           <div className="flex gap-2">
             <button
+              onClick={() => setShowBulkEditModal(true)}
+              className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 text-sm"
+            >
+              Edit Position
+            </button>
+            <button
               onClick={handleBulkTerminate}
               className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 text-sm"
             >
@@ -735,6 +777,79 @@ export default function EmployeeList({ onEmployeeSelect, onEdit }) {
           onClose={handleTerminationClose}
           onSuccess={handleTerminationSuccess}
         />
+      )}
+
+      {/* Bulk Edit Position Modal */}
+      {showBulkEditModal && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          onClick={() => setShowBulkEditModal(false)}
+        >
+          <div
+            className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold text-gray-900">Edit Position</h3>
+              <button
+                onClick={() => setShowBulkEditModal(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <p className="text-gray-600 mb-4">
+              Update position for {selectedEmployees.length} selected employee{selectedEmployees.length > 1 ? 's' : ''}:
+            </p>
+
+            <div className="mb-4 max-h-32 overflow-y-auto bg-gray-50 rounded p-2">
+              {employees
+                .filter(e => selectedEmployees.includes(e.id))
+                .map(e => (
+                  <div key={e.id} className="text-sm text-gray-700 py-1">
+                    {e.name} {e.position && <span className="text-gray-400">({e.position})</span>}
+                  </div>
+                ))
+              }
+            </div>
+
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                New Position
+              </label>
+              <select
+                value={bulkEditPositionId}
+                onChange={(e) => setBulkEditPositionId(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              >
+                <option value="">Select a position...</option>
+                {positions.map(pos => (
+                  <option key={pos.id} value={pos.id}>{pos.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowBulkEditModal(false);
+                  setBulkEditPositionId('');
+                }}
+                className="flex-1 bg-gray-100 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleBulkUpdatePosition}
+                disabled={!bulkEditPositionId}
+                className="flex-1 bg-indigo-600 text-white py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Apply
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

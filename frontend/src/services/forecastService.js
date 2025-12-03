@@ -42,6 +42,27 @@ const forecastService = {
   },
 
   /**
+   * Update a recurring expense pattern
+   * @param {number} id - Pattern ID
+   * @param {Object} data - Updated pattern data
+   * @returns {Promise<Object>} Updated pattern
+   */
+  async updatePattern(id, data) {
+    const response = await api.put(`/forecast/patterns/${id}`, data);
+    return response.data;
+  },
+
+  /**
+   * Delete a recurring expense pattern
+   * @param {number} id - Pattern ID
+   * @returns {Promise<Object>} Deletion result
+   */
+  async deletePattern(id) {
+    const response = await api.delete(`/forecast/patterns/${id}`);
+    return response.data;
+  },
+
+  /**
    * Get tax settings
    * @returns {Promise<Object>} Tax settings object
    */

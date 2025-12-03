@@ -18,6 +18,12 @@ router.get('/patterns', ForecastController.getSavedPatterns);
 // POST /api/forecast/patterns - Save a recurring expense pattern
 router.post('/patterns', ForecastController.savePattern);
 
+// PUT /api/forecast/patterns/:id - Update a recurring expense pattern
+router.put('/patterns/:id', ForecastController.updatePattern);
+
+// DELETE /api/forecast/patterns/:id - Delete a recurring expense pattern
+router.delete('/patterns/:id', ForecastController.deletePattern);
+
 // GET /api/forecast/tax-settings - Get tax settings
 router.get('/tax-settings', ForecastController.getTaxSettings);
 

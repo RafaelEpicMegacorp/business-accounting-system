@@ -10,6 +10,7 @@ router.use(authMiddleware);
 router.delete('/bulk', EmployeeController.bulkDelete);
 router.post('/bulk/terminate', EmployeeController.bulkTerminate);
 router.post('/bulk/reactivate', EmployeeController.bulkReactivate);
+router.post('/bulk/update-position', EmployeeController.bulkUpdatePosition);
 
 // Get all employees (with optional ?active=true/false filter)
 router.get('/', EmployeeController.getAll);

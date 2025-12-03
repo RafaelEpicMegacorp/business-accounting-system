@@ -401,6 +401,31 @@ const EmployeeModel = {
     return { affected, failed };
   },
 
+  // Bulk update position for employees
+  async bulkUpdatePosition(ids, positionId) {
+    const failed = [];
+    let affected = 0;
+
+    for (const id of ids) {
+      try {
+        const result = await pool.query(
+          'UPDATE employees SET position_id = $1 WHERE id = $2 RETURNING id',
+          [positionId, id]
+        );
+
+        if (result.rows.length > 0) {
+          affected++;
+        } else {
+          failed.push({ id, reason: 'Employee not found' });
+        }
+      } catch (error) {
+        failed.push({ id, reason: error.message });
+      }
+    }
+
+    return { affected, failed };
+  },
+
   // Get all employees with all their projects
   async getAllWithProjects(isActive = null) {
     let query = `

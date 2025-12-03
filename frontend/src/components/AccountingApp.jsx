@@ -17,6 +17,7 @@ import SearchBar from './SearchBar';
 import FilterPanel from './FilterPanel';
 import TransactionReview from './TransactionReview';
 import PayrollDashboard from './PayrollDashboard';
+import RecurringExpensesView from './RecurringExpensesView';
 import { exportEntriesToCSV, exportEmployeesToCSV, exportContractsToCSV } from '../utils/csvExport';
 import { formatCurrency } from '../utils/currencyFormatter';
 
@@ -30,6 +31,7 @@ export default function AccountingApp() {
     '/': 'dashboard',
     '/dashboard': 'dashboard',
     '/forecast': 'forecast',
+    '/recurring': 'recurring',
     '/income': 'income',
     '/expenses': 'expenses',
     '/salaries': 'salaries',
@@ -500,6 +502,16 @@ export default function AccountingApp() {
               Forecast
             </button>
             <button
+              onClick={() => navigate('/recurring')}
+              className={`px-4 py-2 font-medium transition ${
+                currentView === 'recurring'
+                  ? 'text-purple-600 border-b-2 border-purple-600'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Recurring
+            </button>
+            <button
               onClick={() => navigate('/income')}
               className={`px-4 py-2 font-medium transition ${
                 currentView === 'income'
@@ -846,6 +858,11 @@ export default function AccountingApp() {
         {/* Forecast View */}
         {currentView === 'forecast' && (
           <ForecastView />
+        )}
+
+        {/* Recurring Expenses View */}
+        {currentView === 'recurring' && (
+          <RecurringExpensesView />
         )}
 
         {/* Employee View */}

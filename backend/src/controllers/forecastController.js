@@ -55,6 +55,38 @@ const ForecastController = {
   },
 
   /**
+   * Update a recurring expense pattern
+   * PUT /api/forecast/patterns/:id
+   */
+  async updatePattern(req, res, next) {
+    try {
+      const pattern = await ForecastModel.updatePattern(req.params.id, req.body);
+      if (!pattern) {
+        return res.status(404).json({ error: 'Pattern not found' });
+      }
+      res.json(pattern);
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  /**
+   * Delete a recurring expense pattern
+   * DELETE /api/forecast/patterns/:id
+   */
+  async deletePattern(req, res, next) {
+    try {
+      const pattern = await ForecastModel.deletePattern(req.params.id);
+      if (!pattern) {
+        return res.status(404).json({ error: 'Pattern not found' });
+      }
+      res.json({ success: true, message: 'Pattern deleted', pattern });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  /**
    * Get tax settings
    * GET /api/forecast/tax-settings
    */
