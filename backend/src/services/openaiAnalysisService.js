@@ -44,9 +44,16 @@ const OpenAIAnalysisService = {
     if (!forceRefresh) {
       const cachedResult = await SettingsModel.getCachedResult(cacheKey);
       if (cachedResult) {
+        const suggestions = cachedResult.patterns || cachedResult;
+
+        // Save suggestions to DB even from cache (if saveToDb is true)
+        if (saveToDb && suggestions.length > 0) {
+          await this.saveSuggestions(suggestions);
+        }
+
         return {
           success: true,
-          suggestions: cachedResult.patterns || cachedResult,
+          suggestions,
           forecast: cachedResult.forecast || null,
           monthlySummary: cachedResult.monthly_summary || null,
           fromCache: true
