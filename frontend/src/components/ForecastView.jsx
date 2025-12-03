@@ -184,11 +184,6 @@ function ForecastView() {
                 </p>
               </div>
               <div>
-                <label className="text-sm font-medium text-gray-700">ZUS Employer Rate</label>
-                <p className="text-lg font-bold text-orange-700">{projection.taxSettings.zusRate}%</p>
-                <p className="text-xs text-gray-500">Applied to all salaries</p>
-              </div>
-              <div>
                 <label className="text-sm font-medium text-gray-700">Company Type</label>
                 <p className="text-lg font-bold text-orange-700">Sp. z o.o.</p>
                 <p className="text-xs text-gray-500">Polish LLC</p>
@@ -197,20 +192,13 @@ function ForecastView() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="bg-white rounded-lg p-4 border border-orange-200">
             <p className="text-sm text-gray-600">CIT (Corporate Tax)</p>
             <p className="text-xl font-bold text-orange-700">
               ${formatCurrency(projection.summary.totalCit || 0)}
             </p>
             <p className="text-xs text-gray-500">{projection.taxSettings.citRate}% on profit</p>
-          </div>
-          <div className="bg-white rounded-lg p-4 border border-orange-200">
-            <p className="text-sm text-gray-600">ZUS Employer</p>
-            <p className="text-xl font-bold text-orange-700">
-              ${formatCurrency(projection.summary.totalZus || 0)}
-            </p>
-            <p className="text-xs text-gray-500">{projection.taxSettings.zusRate}% on employee salaries</p>
           </div>
           <div className="bg-white rounded-lg p-4 border border-orange-200">
             <p className="text-sm text-gray-600">Total Tax Burden</p>
@@ -614,10 +602,6 @@ function ForecastView() {
                 <li>
                   <span className="font-semibold">CIT (Corporate Income Tax)</span> - {projection.taxSettings.citRate}% on taxable profit (income minus expenses)
                   {projection.taxSettings.isSmallTaxpayer && ' - Small taxpayer rate (revenue < 2M EUR)'}
-                </li>
-                <li>
-                  <span className="font-semibold">ZUS Employer Contributions</span> - {projection.taxSettings.zusRate}% on all employee salaries
-                  <span className="text-xs text-gray-500 ml-1">(pension 9.76% + disability 6.50% + accident 1.67% + labor fund 2.45% + FGSP 0.10%)</span>
                 </li>
                 <li>
                   <span className="font-semibold">Recurring Expenses</span> - Auto-detected from your historical expense patterns
