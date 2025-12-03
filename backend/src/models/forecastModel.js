@@ -274,11 +274,11 @@ const ForecastModel = {
     `);
     const contracts = contractsResult.rows;
 
-    // Get active employees for salary projection (including worker_type for ZUS calculation)
-    // Use COALESCE to handle missing worker_type column (backwards compatible)
+    // Get active employees for salary projection
+    // Note: worker_type removed until migration 020 is run (column doesn't exist yet)
+    // JS code defaults to 'contractor' for ZUS calculation
     const employeesResult = await pool.query(`
-      SELECT id, name, pay_type, pay_rate, pay_multiplier,
-             COALESCE(worker_type, 'contractor') as worker_type
+      SELECT id, name, pay_type, pay_rate, pay_multiplier
       FROM employees
       WHERE is_active = true
     `);
