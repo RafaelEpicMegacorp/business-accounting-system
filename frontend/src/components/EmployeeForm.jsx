@@ -10,6 +10,7 @@ export default function EmployeeForm({ employee, onClose, onSuccess }) {
     name: '',
     email: '',
     positionId: '',
+    workerType: 'contractor',
     payType: 'monthly',
     payRate: '',
     payMultiplier: '1.12',
@@ -80,6 +81,7 @@ export default function EmployeeForm({ employee, onClose, onSuccess }) {
         name: employee.name || '',
         email: employee.email || '',
         positionId: employee.position_id || '',
+        workerType: employee.worker_type || 'contractor',
         payType: employee.pay_type || 'monthly',
         payRate: employee.pay_rate || '',
         payMultiplier: employee.pay_multiplier || '1.12',
@@ -248,6 +250,28 @@ export default function EmployeeForm({ employee, onClose, onSuccess }) {
                   ))}
                 </select>
               )}
+            </div>
+
+            {/* Worker Type */}
+            <div>
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-1">
+                <User size={16} />
+                Worker Type *
+              </label>
+              <select
+                name="workerType"
+                value={formData.workerType}
+                onChange={handleChange}
+                required
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="contractor">Contractor</option>
+                <option value="employee">Employee</option>
+              </select>
+              <p className="mt-1 text-xs text-gray-500">
+                {formData.workerType === 'contractor' && 'Contractor - handles their own taxes (no ZUS)'}
+                {formData.workerType === 'employee' && 'Employee - company pays employer ZUS contributions'}
+              </p>
             </div>
 
             {/* Pay Type */}

@@ -274,9 +274,9 @@ const ForecastModel = {
     `);
     const contracts = contractsResult.rows;
 
-    // Get active employees for salary projection
+    // Get active employees for salary projection (including worker_type for ZUS calculation)
     const employeesResult = await pool.query(`
-      SELECT id, name, pay_type, pay_rate, pay_multiplier
+      SELECT id, name, pay_type, pay_rate, pay_multiplier, worker_type
       FROM employees
       WHERE is_active = true
     `);
@@ -315,11 +315,14 @@ const ForecastModel = {
       });
 
       // Calculate expected salary expenses
+      // Track employee salaries separately for ZUS (contractors excluded from ZUS)
       let salaryExpenses = 0;
+      let employeeSalariesForZUS = 0; // Only actual employees, not contractors
       const salaryDetails = [];
       employees.forEach(emp => {
         const rate = parseFloat(emp.pay_rate);
         const multiplier = parseFloat(emp.pay_multiplier || 1.0);
+        const workerType = emp.worker_type || 'contractor';
         let monthlyAmount = 0;
 
         if (emp.pay_type === 'monthly') {
@@ -333,7 +336,13 @@ const ForecastModel = {
         }
 
         salaryExpenses += monthlyAmount;
-        salaryDetails.push({ name: emp.name, amount: monthlyAmount, type: emp.pay_type });
+
+        // Only employees (not contractors) are subject to employer ZUS contributions
+        if (workerType === 'employee') {
+          employeeSalariesForZUS += monthlyAmount;
+        }
+
+        salaryDetails.push({ name: emp.name, amount: monthlyAmount, type: emp.pay_type, workerType });
       });
 
       // Add recurring expenses
@@ -342,11 +351,11 @@ const ForecastModel = {
       // Total expenses (salaries + recurring)
       const totalExpenses = salaryExpenses + monthlyRecurring;
 
-      // Calculate taxes
+      // Calculate taxes (ZUS only applies to employees, not contractors)
       const taxes = this.calculateTaxes({
         income: expectedIncome,
         expenses: totalExpenses,
-        salaryExpenses: salaryExpenses
+        salaryExpenses: employeeSalariesForZUS  // Only employee salaries for ZUS, not contractors
       }, taxSettings);
 
       // Calculate ending balance
