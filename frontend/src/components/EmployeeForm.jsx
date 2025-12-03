@@ -127,6 +127,8 @@ export default function EmployeeForm({ employee, onClose, onSuccess }) {
       if (employeeId) {
         // Updating existing employee using stored employeeId
         console.log('Updating employee with ID:', employeeId);
+        console.log('Form data being sent:', JSON.stringify(formData, null, 2));
+        console.log('positionId value:', formData.positionId, 'type:', typeof formData.positionId);
         await employeeService.update(employeeId, formData);
       } else {
         // Creating new employee

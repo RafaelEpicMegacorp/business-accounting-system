@@ -11,6 +11,7 @@ const payrollRoutes = require('./routes/payrollRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
 const wiseImportRoutes = require('./routes/wiseImport');
 const currencyRoutes = require('./routes/currencyRoutes');
+const forecastRoutes = require('./routes/forecastRoutes');
 const wiseTestRoutes = require('./routes/wiseTestRoutes');
 const wiseDebugRoutes = require('./routes/wiseDebug');
 const wiseTransactionReviewRoutes = require('./routes/wiseTransactionReview');
@@ -55,6 +56,7 @@ app.use('/api/wise', wiseImportRoutes); // CSV upload only
 app.use('/api/wise', wiseTransactionReviewRoutes); // Transaction review endpoints
 app.use('/api/wise', wiseSyncRoutes); // Wise API sync endpoints
 app.use('/api/currency', currencyRoutes);
+app.use('/api/forecast', forecastRoutes);
 app.use('/api/wise-test', wiseTestRoutes); // Wise API testing endpoints
 app.use('/api/wise/debug', wiseDebugRoutes); // Wise profile debugging endpoints
 
