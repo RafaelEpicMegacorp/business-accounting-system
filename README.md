@@ -196,8 +196,22 @@ accounting/
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/dashboard/stats` | Get dashboard statistics |
+| GET | `/api/dashboard/stats` | Get dashboard statistics (excludes Transfers) |
+| GET | `/api/dashboard/monthly-stats` | Monthly income/expense breakdown |
+| GET | `/api/dashboard/top-expenses` | Top 10 expenses with currency info |
+| GET | `/api/dashboard/vendor-breakdown` | Expenses grouped by vendor |
+| GET | `/api/dashboard/category-breakdown` | Pie chart data by category |
+| GET | `/api/dashboard/category-comparison` | Month-over-month comparison |
 | GET | `/health` | Health check |
+
+### Wise Integration
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/wise/sync` | Full historical transaction sync |
+| POST | `/api/wise/sync/manual` | Incremental transaction sync |
+| POST | `/api/wise/backfill-amount-usd` | Migrate existing entries with USD equivalents |
+| GET | `/api/wise/test-connection` | Test database connection |
 
 ## 💾 Database Schema
 
@@ -213,6 +227,9 @@ CREATE TABLE entries (
     detail TEXT,
     base_amount DECIMAL(12, 2) NOT NULL,
     total DECIMAL(12, 2) NOT NULL,
+    currency VARCHAR(3) DEFAULT 'USD',           -- Original currency (USD, PLN, EUR, GBP)
+    amount_usd DECIMAL(12, 2),                   -- USD equivalent for comparison
+    exchange_rate DECIMAL(10, 6),                -- Rate applied for conversion
     entry_date DATE NOT NULL DEFAULT CURRENT_DATE,
     status VARCHAR(20) DEFAULT 'completed' CHECK (status IN ('completed', 'pending')),
     employee_id INTEGER REFERENCES employees(id),
@@ -287,7 +304,7 @@ VITE_API_URL=http://localhost:3001/api
 ## 🎯 Future Enhancements
 
 ### Planned Features
-- [ ] Multi-currency support
+- [x] Multi-currency support (Completed November 2025)
 - [ ] Tax calculation and reporting
 - [ ] Invoice generation (PDF)
 - [ ] Export to CSV/Excel
@@ -380,7 +397,34 @@ For issues:
 
 ## 📝 Development Status & Current Work
 
-### Recent Progress (October 2025)
+### Recent Progress (November 2025)
+
+#### ✅ Critical Bug Fixes (November 29, 2025)
+
+**Currency Conversion in Dashboard**
+- Fixed multi-currency comparison bug where amounts in different currencies (USD, PLN, EUR) were compared without conversion
+- A 14,499 PLN expense (~$3,973 USD) was incorrectly ranking above actual $5,000 USD expenses
+- Updated all dashboard queries to use `COALESCE(amount_usd, total)` for proper comparison
+- Added exchange rate API integration with 1-hour caching
+- Frontend now shows original currency below USD equivalent (e.g., "14,499 PLN")
+
+**Cash Flow Calculation Fix**
+- Fixed incorrect cash flow showing -$276,476 instead of -$2,305
+- Root cause: Internal "Transfers" (Wise currency conversions) were counted as business expenses
+- $274,171 in Transfers were incorrectly inflating expenses
+- Added `category != 'Transfers'` filter to exclude internal account movements
+
+**Wise Sync Enhancement**
+- All new transactions now automatically populate `amount_usd` and `exchange_rate`
+- Added `/api/wise/backfill-amount-usd` endpoint for migrating existing data
+- Successfully backfilled 323 existing entries with USD equivalents
+
+**Files Modified:**
+- `backend/src/models/dashboardModel.js` - All queries updated for multi-currency
+- `backend/src/routes/wiseSync_new.js` - Exchange rate helper + backfill endpoint
+- `frontend/src/components/TopExpensesList.jsx` - Original currency display
+
+### Previous Progress (October 2025)
 
 #### ✅ Multi-Currency & Wise Integration
 - **Wise Balance Tracking** - Multi-currency balance display (USD, EUR, PLN) with conversion to USD

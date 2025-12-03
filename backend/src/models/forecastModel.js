@@ -268,7 +268,7 @@ const ForecastModel = {
 
     // Get active contracts for income projection
     const contractsResult = await pool.query(`
-      SELECT id, client_name, amount, frequency, payment_day, currency
+      SELECT id, client_name, amount, contract_type, payment_day, currency
       FROM contracts
       WHERE status = 'active'
     `);
@@ -301,14 +301,14 @@ const ForecastModel = {
       contracts.forEach(contract => {
         let monthlyAmount = parseFloat(contract.amount);
 
-        // Adjust for frequency
-        if (contract.frequency === 'yearly') {
+        // Adjust for contract_type
+        if (contract.contract_type === 'yearly') {
           // Only include if payment month matches
           if (contract.payment_day && projectionDate.getMonth() === new Date(contract.payment_day).getMonth()) {
             expectedIncome += monthlyAmount;
             incomeDetails.push({ name: contract.client_name, amount: monthlyAmount, type: 'yearly' });
           }
-        } else if (contract.frequency === 'monthly') {
+        } else if (contract.contract_type === 'monthly') {
           expectedIncome += monthlyAmount;
           incomeDetails.push({ name: contract.client_name, amount: monthlyAmount, type: 'monthly' });
         }
