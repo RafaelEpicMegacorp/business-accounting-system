@@ -1210,6 +1210,11 @@ export default function AccountingApp() {
         </>
         )}
       </div>
+
+      {/* Version badge - bottom right corner */}
+      <div className="fixed bottom-2 right-2 text-xs text-gray-400 bg-white/80 px-2 py-1 rounded shadow-sm border border-gray-200">
+        v{typeof __COMMIT_HASH__ !== 'undefined' ? __COMMIT_HASH__ : 'dev'}
+      </div>
     </div>
   );
 }

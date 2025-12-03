@@ -16,21 +16,31 @@ const ForecastModel = {
 
   /**
    * Get all tax settings
+   * Returns defaults if tax_settings table doesn't exist (migration 019 not run)
    */
   async getTaxSettings() {
-    const result = await pool.query(
-      'SELECT setting_key, setting_value, description FROM tax_settings'
-    );
+    try {
+      const result = await pool.query(
+        'SELECT setting_key, setting_value, description FROM tax_settings'
+      );
 
-    // Convert to object for easy access
-    const settings = {};
-    result.rows.forEach(row => {
-      settings[row.setting_key] = {
-        value: row.setting_value,
-        description: row.description
+      // Convert to object for easy access
+      const settings = {};
+      result.rows.forEach(row => {
+        settings[row.setting_key] = {
+          value: row.setting_value,
+          description: row.description
+        };
+      });
+      return settings;
+    } catch (error) {
+      // Table doesn't exist - return Poland LLC defaults
+      console.log('tax_settings table not found, using defaults');
+      return {
+        cit_rate: { value: '9', description: 'CIT rate (small taxpayer)' },
+        zus_employer_rate: { value: '20.48', description: 'Employer ZUS rate' }
       };
-    });
-    return settings;
+    }
   },
 
   /**
@@ -207,14 +217,21 @@ const ForecastModel = {
 
   /**
    * Get saved recurring expense patterns
+   * Returns empty array if table doesn't exist (migration 019 not run)
    */
   async getSavedPatterns() {
-    const result = await pool.query(`
-      SELECT * FROM recurring_expense_patterns
-      WHERE is_active = true
-      ORDER BY typical_amount DESC
-    `);
-    return result.rows;
+    try {
+      const result = await pool.query(`
+        SELECT * FROM recurring_expense_patterns
+        WHERE is_active = true
+        ORDER BY typical_amount DESC
+      `);
+      return result.rows;
+    } catch (error) {
+      // Table doesn't exist
+      console.log('recurring_expense_patterns table not found, returning empty');
+      return [];
+    }
   },
 
   /**
