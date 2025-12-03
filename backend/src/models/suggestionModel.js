@@ -1,5 +1,5 @@
 const pool = require('../config/database');
-const { v4: uuidv4 } = require('uuid');
+const crypto = require('crypto');
 
 const SuggestionModel = {
   /**
@@ -103,7 +103,7 @@ const SuggestionModel = {
    * Create multiple suggestions in batch
    */
   async createBatch(suggestions, batchId = null) {
-    const batch = batchId || uuidv4();
+    const batch = batchId || crypto.randomUUID();
     const created = [];
 
     for (const suggestion of suggestions) {
