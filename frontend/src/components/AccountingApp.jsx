@@ -18,6 +18,7 @@ import FilterPanel from './FilterPanel';
 import TransactionReview from './TransactionReview';
 import PayrollDashboard from './PayrollDashboard';
 import RecurringExpensesView from './RecurringExpensesView';
+import SettingsView from './SettingsView';
 import { exportEntriesToCSV, exportEmployeesToCSV, exportContractsToCSV } from '../utils/csvExport';
 import { formatCurrency } from '../utils/currencyFormatter';
 
@@ -39,7 +40,8 @@ export default function AccountingApp() {
     '/contracts': 'contracts',
     '/employees': 'employees',
     '/projects': 'projects',
-    '/review': 'transaction-review'
+    '/review': 'transaction-review',
+    '/settings': 'settings'
   };
   const currentView = pathToView[location.pathname] || 'dashboard';
   const [entries, setEntries] = useState([]);
@@ -594,6 +596,16 @@ export default function AccountingApp() {
             >
               Review
             </button>
+            <button
+              onClick={() => navigate('/settings')}
+              className={`px-4 py-2 font-medium transition ${
+                currentView === 'settings'
+                  ? 'text-gray-800 border-b-2 border-gray-800'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Settings
+            </button>
           </div>
 
           {(currentView === 'income' || currentView === 'expenses' || currentView === 'salaries') && (
@@ -866,6 +878,11 @@ export default function AccountingApp() {
         {/* Recurring Expenses View */}
         {currentView === 'recurring' && (
           <RecurringExpensesView />
+        )}
+
+        {/* Settings View */}
+        {currentView === 'settings' && (
+          <SettingsView />
         )}
 
         {/* Employee View */}

@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import {
   RefreshCw, Plus, Check, X, Edit2, Trash2, Sparkles, DollarSign,
-  AlertCircle, ChevronDown, ChevronUp, Save
+  AlertCircle, ChevronDown, ChevronUp, Save, Cpu
 } from 'lucide-react';
 import forecastService from '../services/forecastService';
+import settingsService from '../services/settingsService';
 
 function RecurringExpensesView() {
   const [suggestions, setSuggestions] = useState([]);
@@ -13,6 +14,9 @@ function RecurringExpensesView() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingPattern, setEditingPattern] = useState(null);
   const [dismissedPatterns, setDismissedPatterns] = useState([]);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [llmSuggestions, setLlmSuggestions] = useState([]);
+  const [aiError, setAiError] = useState(null);
 
   // Form state for adding/editing
   const [formData, setFormData] = useState({
@@ -40,6 +44,29 @@ function RecurringExpensesView() {
       console.error('Failed to load recurring expenses:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleAnalyzeWithAI = async () => {
+    try {
+      setAnalyzing(true);
+      setAiError(null);
+      const response = await settingsService.analyzeExpenses();
+
+      if (response.success) {
+        setLlmSuggestions(response.data.suggestions || []);
+        if (response.data.suggestions?.length === 0) {
+          setAiError('No recurring patterns detected in your expense history.');
+        }
+      } else {
+        setAiError(response.error || 'Analysis failed');
+      }
+    } catch (error) {
+      console.error('AI analysis error:', error);
+      const errorMsg = error.response?.data?.error || 'Failed to analyze expenses. Make sure OpenAI is configured in Settings.';
+      setAiError(errorMsg);
+    } finally {
+      setAnalyzing(false);
     }
   };
 
@@ -165,6 +192,15 @@ function RecurringExpensesView() {
     !savedPatterns.some(p => p.description?.toLowerCase() === s.description?.toLowerCase())
   );
 
+  // Filter LLM suggestions similarly
+  const filteredLlmSuggestions = llmSuggestions.filter(s =>
+    !dismissedPatterns.includes(s.description) &&
+    !savedPatterns.some(p => p.description?.toLowerCase() === s.description?.toLowerCase())
+  );
+
+  // Combined count for display
+  const totalSuggestions = filteredSuggestions.length + filteredLlmSuggestions.length;
+
   // Calculate totals
   const monthlyTotal = savedPatterns.reduce((sum, p) =>
     sum + getMonthlyEquivalent(p.typical_amount, p.frequency), 0
@@ -193,23 +229,37 @@ function RecurringExpensesView() {
               <p className="text-sm text-gray-500">Manage your recurring monthly expenses for accurate forecasting</p>
             </div>
           </div>
-          <button
-            onClick={() => {
-              setEditingPattern(null);
-              setFormData({
-                description: '',
-                category: '',
-                typical_amount: '',
-                frequency: 'monthly',
-                currency: 'USD'
-              });
-              setShowAddModal(true);
-            }}
-            className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700"
-          >
-            <Plus size={20} />
-            Add Manual
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleAnalyzeWithAI}
+              disabled={analyzing}
+              className="flex items-center gap-2 bg-amber-500 text-white px-4 py-2 rounded-lg hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {analyzing ? (
+                <RefreshCw size={20} className="animate-spin" />
+              ) : (
+                <Cpu size={20} />
+              )}
+              {analyzing ? 'Analyzing...' : 'Analyze with AI'}
+            </button>
+            <button
+              onClick={() => {
+                setEditingPattern(null);
+                setFormData({
+                  description: '',
+                  category: '',
+                  typical_amount: '',
+                  frequency: 'monthly',
+                  currency: 'USD'
+                });
+                setShowAddModal(true);
+              }}
+              className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700"
+            >
+              <Plus size={20} />
+              Add Manual
+            </button>
+          </div>
         </div>
       </div>
 
@@ -238,12 +288,106 @@ function RecurringExpensesView() {
             <h3 className="text-sm font-medium opacity-90">AI Suggestions</h3>
             <Sparkles size={20} className="opacity-80" />
           </div>
-          <p className="text-2xl font-bold">{filteredSuggestions.length}</p>
+          <p className="text-2xl font-bold">{totalSuggestions}</p>
           <p className="text-xs opacity-80 mt-1">Detected patterns to review</p>
         </div>
       </div>
 
-      {/* AI Suggestions Section */}
+      {/* AI Analysis Error */}
+      {aiError && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start gap-3">
+          <AlertCircle className="text-amber-500 flex-shrink-0 mt-0.5" size={20} />
+          <div>
+            <p className="text-amber-800 font-medium">AI Analysis Result</p>
+            <p className="text-amber-700 text-sm">{aiError}</p>
+          </div>
+          <button
+            onClick={() => setAiError(null)}
+            className="ml-auto text-amber-500 hover:text-amber-700"
+          >
+            <X size={18} />
+          </button>
+        </div>
+      )}
+
+      {/* LLM AI Suggestions Section */}
+      {filteredLlmSuggestions.length > 0 && (
+        <div className="bg-gradient-to-r from-purple-50 to-indigo-50 rounded-lg shadow-lg p-6 border border-purple-200">
+          <div className="flex items-center gap-2 mb-4">
+            <Cpu className="text-purple-600" size={24} />
+            <h2 className="text-xl font-bold text-gray-900">OpenAI Suggestions</h2>
+            <span className="px-2 py-1 bg-purple-100 text-purple-800 text-xs font-medium rounded">
+              {filteredLlmSuggestions.length} patterns detected
+            </span>
+          </div>
+          <p className="text-sm text-gray-600 mb-4">
+            These patterns were detected by AI analysis of your expense history. Click "Confirm" to add them.
+          </p>
+          <div className="overflow-x-auto">
+            <table className="min-w-full">
+              <thead className="bg-purple-100">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-purple-800 uppercase">Description</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-purple-800 uppercase">Amount</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-purple-800 uppercase">Frequency</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-purple-800 uppercase">Confidence</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-purple-800 uppercase">Reasoning</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-purple-800 uppercase">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-purple-200">
+                {filteredLlmSuggestions.map((pattern, index) => (
+                  <tr key={`llm-${index}`} className="hover:bg-purple-50">
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900 capitalize">
+                      {pattern.description}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-900">
+                      {pattern.currency} ${formatCurrency(pattern.typical_amount)}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-700">
+                      {getFrequencyLabel(pattern.frequency)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-16 bg-purple-200 rounded-full h-2">
+                          <div
+                            className="bg-purple-600 h-2 rounded-full"
+                            style={{ width: `${pattern.confidence_score * 100}%` }}
+                          />
+                        </div>
+                        <span className="text-xs text-gray-600">{Math.round(pattern.confidence_score * 100)}%</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-xs text-gray-600 max-w-xs truncate" title={pattern.reasoning}>
+                      {pattern.reasoning}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => handleConfirmSuggestion(pattern)}
+                          className="p-1.5 text-green-600 hover:bg-green-50 rounded"
+                          title="Confirm"
+                        >
+                          <Check size={18} />
+                        </button>
+                        <button
+                          onClick={() => handleDismissSuggestion(pattern.description)}
+                          className="p-1.5 text-red-600 hover:bg-red-50 rounded"
+                          title="Dismiss"
+                        >
+                          <X size={18} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* SQL AI Suggestions Section */}
       {filteredSuggestions.length > 0 && (
         <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-lg shadow-lg p-6 border border-amber-200">
           <div
