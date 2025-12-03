@@ -472,6 +472,8 @@ const ForecastModel = {
       totalSalaries: projections.reduce((sum, p) => sum + p.salaryExpenses, 0),
       totalRecurring: projections.reduce((sum, p) => sum + p.recurringExpenses, 0),
       totalTaxes: projections.reduce((sum, p) => sum + p.taxes.total, 0),
+      totalZus: projections.reduce((sum, p) => sum + p.taxes.zus, 0),
+      totalCit: projections.reduce((sum, p) => sum + p.taxes.cit, 0),
       netPosition: projections.length > 0 ? projections[projections.length - 1].endingBalance - startingBalance : 0,
       finalBalance: projections.length > 0 ? projections[projections.length - 1].endingBalance : startingBalance
     };

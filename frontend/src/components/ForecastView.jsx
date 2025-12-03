@@ -201,16 +201,16 @@ function ForecastView() {
           <div className="bg-white rounded-lg p-4 border border-orange-200">
             <p className="text-sm text-gray-600">CIT (Corporate Tax)</p>
             <p className="text-xl font-bold text-orange-700">
-              ${formatCurrency(projection.summary.totalTaxes * (projection.taxSettings.citRate / (projection.taxSettings.citRate + projection.taxSettings.zusRate)))}
+              ${formatCurrency(projection.summary.totalCit || 0)}
             </p>
             <p className="text-xs text-gray-500">{projection.taxSettings.citRate}% on profit</p>
           </div>
           <div className="bg-white rounded-lg p-4 border border-orange-200">
             <p className="text-sm text-gray-600">ZUS Employer</p>
             <p className="text-xl font-bold text-orange-700">
-              ${formatCurrency(projection.summary.totalSalaries * (projection.taxSettings.zusRate / 100))}
+              ${formatCurrency(projection.summary.totalZus || 0)}
             </p>
-            <p className="text-xs text-gray-500">{projection.taxSettings.zusRate}% on salaries</p>
+            <p className="text-xs text-gray-500">{projection.taxSettings.zusRate}% on employee salaries</p>
           </div>
           <div className="bg-white rounded-lg p-4 border border-orange-200">
             <p className="text-sm text-gray-600">Total Tax Burden</p>
