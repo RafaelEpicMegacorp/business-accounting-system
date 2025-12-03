@@ -229,15 +229,16 @@ const classificationController = {
   },
 
   /**
-   * Reject a suggestion
+   * Reject a suggestion - Enhanced with structured rejection reason
    */
   async rejectSuggestion(req, res) {
     try {
       const { id } = req.params;
-      const { reason } = req.body;
+      const { reason, notes } = req.body;
       const userId = req.user?.id || null;
 
-      const result = await SuggestionModel.reject(id, userId, reason);
+      // Pass both reason and notes as rejection data
+      const result = await SuggestionModel.reject(id, userId, { reason, notes });
 
       res.json({ success: true, data: result, message: 'Suggestion rejected' });
     } catch (error) {
@@ -320,6 +321,80 @@ const classificationController = {
     } catch (error) {
       console.error('Error bulk rejecting suggestions:', error);
       res.status(400).json({ success: false, error: error.message });
+    }
+  },
+
+  // ============================================
+  // Decision History & Learning Endpoints
+  // ============================================
+
+  /**
+   * Get decision history with pagination and filtering
+   */
+  async getDecisionHistory(req, res) {
+    try {
+      const { decision, from_date, to_date, limit, offset } = req.query;
+
+      const history = await SuggestionModel.getDecisionHistory({
+        decision,
+        from_date,
+        to_date,
+        limit: parseInt(limit) || 50,
+        offset: parseInt(offset) || 0
+      });
+
+      res.json({ success: true, data: history });
+    } catch (error) {
+      console.error('Error getting decision history:', error);
+      res.status(500).json({ success: false, error: 'Failed to get decision history' });
+    }
+  },
+
+  /**
+   * Get decision statistics for learning insights
+   */
+  async getDecisionStats(req, res) {
+    try {
+      const stats = await SuggestionModel.getDecisionStats();
+      res.json({ success: true, data: stats });
+    } catch (error) {
+      console.error('Error getting decision stats:', error);
+      res.status(500).json({ success: false, error: 'Failed to get decision stats' });
+    }
+  },
+
+  /**
+   * Get learning context (what the AI learns from user decisions)
+   */
+  async getLearningContext(req, res) {
+    try {
+      const context = await SuggestionModel.getLearningContext();
+      res.json({ success: true, data: context });
+    } catch (error) {
+      console.error('Error getting learning context:', error);
+      res.status(500).json({ success: false, error: 'Failed to get learning context' });
+    }
+  },
+
+  /**
+   * Clear rejected decision history
+   */
+  async clearRejectedHistory(req, res) {
+    try {
+      const { description } = req.body;
+
+      const result = await SuggestionModel.clearRejectedHistory(description);
+
+      res.json({
+        success: true,
+        data: result,
+        message: description
+          ? `Cleared rejection history for "${description}"`
+          : `Cleared all rejection history (${result.cleared} records)`
+      });
+    } catch (error) {
+      console.error('Error clearing rejected history:', error);
+      res.status(500).json({ success: false, error: 'Failed to clear rejected history' });
     }
   }
 };

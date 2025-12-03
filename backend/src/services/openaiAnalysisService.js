@@ -208,6 +208,108 @@ const OpenAIAnalysisService = {
   },
 
   /**
+   * Build learning context from user decisions to improve AI suggestions
+   */
+  async buildLearningContextPrompt() {
+    const learningContext = await SuggestionModel.getLearningContext();
+
+    if (!learningContext ||
+        (learningContext.rejected_patterns.length === 0 &&
+         learningContext.classification_corrections.length === 0 &&
+         learningContext.amount_adjustments.length === 0)) {
+      return ''; // No learning data yet
+    }
+
+    let prompt = `\n## LEARNING FROM USER FEEDBACK
+**CRITICAL**: Use this feedback to improve your suggestions. These are real decisions from the user.
+
+`;
+
+    // Rejected patterns - DO NOT suggest these
+    if (learningContext.rejected_patterns.length > 0) {
+      prompt += `### REJECTED PATTERNS - DO NOT SUGGEST THESE AGAIN
+The user has rejected these suggestions before. Do NOT suggest them again unless you have very strong evidence they are now recurring.
+
+`;
+      const rejectedByReason = {};
+      learningContext.rejected_patterns.forEach(p => {
+        const reason = p.rejection_reason || 'unspecified';
+        if (!rejectedByReason[reason]) {
+          rejectedByReason[reason] = [];
+        }
+        rejectedByReason[reason].push(p);
+      });
+
+      Object.entries(rejectedByReason).forEach(([reason, patterns]) => {
+        const reasonLabel = {
+          'not_recurring': 'Not a recurring expense',
+          'wrong_amount': 'Incorrect amount',
+          'wrong_classification': 'Wrong category',
+          'already_tracked': 'Already being tracked',
+          'duplicate': 'Duplicate suggestion',
+          'other': 'Other reasons',
+          'unspecified': 'Unspecified reason'
+        }[reason] || reason;
+
+        prompt += `**${reasonLabel}:**\n`;
+        patterns.slice(0, 10).forEach(p => {
+          prompt += `- "${p.description}" (rejected ${p.rejection_count}x)\n`;
+        });
+        prompt += '\n';
+      });
+    }
+
+    // Classification corrections - learn user preferences
+    if (learningContext.classification_corrections.length > 0) {
+      prompt += `### USER CLASSIFICATION CORRECTIONS
+When you suggested one category, the user chose a different one. Learn from these corrections:
+
+`;
+      learningContext.classification_corrections.slice(0, 15).forEach(c => {
+        prompt += `- "${c.description}": You suggested "${c.suggested_classification_name}", user changed to "${c.final_classification_name}" (${c.correction_count}x)\n`;
+      });
+      prompt += '\n';
+    }
+
+    // Amount adjustments - learn better amounts
+    if (learningContext.amount_adjustments.length > 0) {
+      prompt += `### AMOUNT ADJUSTMENTS
+The user corrected your amount estimates. Use these to improve accuracy:
+
+`;
+      learningContext.amount_adjustments.slice(0, 10).forEach(a => {
+        const suggestedAmt = parseFloat(a.avg_suggested_amount).toFixed(2);
+        const finalAmt = parseFloat(a.avg_final_amount).toFixed(2);
+        const diff = ((parseFloat(a.avg_final_amount) - parseFloat(a.avg_suggested_amount)) / parseFloat(a.avg_suggested_amount) * 100).toFixed(0);
+        prompt += `- "${a.description}": You suggested $${suggestedAmt}, user corrected to $${finalAmt} (${diff > 0 ? '+' : ''}${diff}%)\n`;
+      });
+      prompt += '\n';
+    }
+
+    // Overall stats for context
+    if (learningContext.stats) {
+      const stats = learningContext.stats;
+      const acceptanceRate = stats.total > 0
+        ? ((parseInt(stats.accepted) / parseInt(stats.total)) * 100).toFixed(0)
+        : 0;
+
+      if (parseInt(stats.total) > 5) {
+        prompt += `### YOUR HISTORICAL PERFORMANCE
+- Total suggestions reviewed: ${stats.total}
+- Acceptance rate: ${acceptanceRate}%
+- Average confidence of accepted suggestions: ${parseFloat(stats.avg_accepted_confidence || 0.7).toFixed(2)}
+
+`;
+        if (acceptanceRate < 50) {
+          prompt += `**Note**: Acceptance rate is below 50%. Be more conservative with suggestions and focus on clear patterns.\n\n`;
+        }
+      }
+    }
+
+    return prompt;
+  },
+
+  /**
    * Enhanced OpenAI API call with month-by-month analysis
    */
   async callEnhancedOpenAI(expenses, config) {
@@ -221,6 +323,9 @@ const OpenAIAnalysisService = {
 
     // Get classification taxonomy
     const taxonomy = await this.getClassificationTaxonomy();
+
+    // Get learning context from user decisions
+    const learningContext = await this.buildLearningContextPrompt();
 
     // Calculate next month for forecasting
     const now = new Date();
@@ -242,7 +347,7 @@ Your task is to analyze expense data organized by month and identify ALL potenti
 - **Fuzzy match descriptions**: "AWS" and "Amazon Web Services" are the same vendor.
 - **Flag new patterns**: Expenses appearing only 2-3 times are "potential new recurring".
 - **Detect cancelled subscriptions**: If something stopped appearing, note it.
-
+${learningContext}
 ## Classification Taxonomy
 ${taxonomy}
 

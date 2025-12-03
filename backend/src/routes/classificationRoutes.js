@@ -16,17 +16,8 @@ router.get('/', classificationController.getAll);
 // GET /api/classifications/search - Search classifications
 router.get('/search', classificationController.search);
 
-// GET /api/classifications/:id - Get classification by ID
-router.get('/:id', classificationController.getById);
-
 // POST /api/classifications - Create classification
 router.post('/', classificationController.create);
-
-// PUT /api/classifications/:id - Update classification
-router.put('/:id', classificationController.update);
-
-// DELETE /api/classifications/:id - Delete classification
-router.delete('/:id', classificationController.delete);
 
 // ============================================
 // Suggestion Routes (also under /api/classifications)
@@ -55,5 +46,34 @@ router.post('/suggestions/bulk-accept', classificationController.bulkAcceptSugge
 
 // POST /api/classifications/suggestions/bulk-reject - Bulk reject
 router.post('/suggestions/bulk-reject', classificationController.bulkRejectSuggestions);
+
+// ============================================
+// Decision History & Learning Routes
+// ============================================
+
+// GET /api/classifications/decisions/history - Get decision history with pagination
+router.get('/decisions/history', classificationController.getDecisionHistory);
+
+// GET /api/classifications/decisions/stats - Get decision statistics
+router.get('/decisions/stats', classificationController.getDecisionStats);
+
+// GET /api/classifications/decisions/learning-context - Get what AI learns from decisions
+router.get('/decisions/learning-context', classificationController.getLearningContext);
+
+// DELETE /api/classifications/decisions/rejected - Clear rejected history
+router.delete('/decisions/rejected', classificationController.clearRejectedHistory);
+
+// ============================================
+// Parametric Routes (MUST be last to avoid conflicts)
+// ============================================
+
+// GET /api/classifications/:id - Get classification by ID
+router.get('/:id', classificationController.getById);
+
+// PUT /api/classifications/:id - Update classification
+router.put('/:id', classificationController.update);
+
+// DELETE /api/classifications/:id - Delete classification
+router.delete('/:id', classificationController.delete);
 
 module.exports = router;
