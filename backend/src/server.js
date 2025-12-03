@@ -17,7 +17,14 @@ const wiseDebugRoutes = require('./routes/wiseDebug');
 const wiseTransactionReviewRoutes = require('./routes/wiseTransactionReview');
 const wiseSyncRoutes = require('./routes/wiseSync_new');
 const settingsRoutes = require('./routes/settingsRoutes');
-const classificationRoutes = require('./routes/classificationRoutes');
+let classificationRoutes;
+try {
+  classificationRoutes = require('./routes/classificationRoutes');
+  console.log('✓ classificationRoutes loaded successfully');
+} catch (err) {
+  console.error('✗ Failed to load classificationRoutes:', err.message);
+  classificationRoutes = require('express').Router(); // Empty router as fallback
+}
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 
 const app = express();
@@ -69,7 +76,7 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
-    version: '1.0.3-validation-system'
+    version: '1.0.4-uuid-fix'
   });
 });
 
