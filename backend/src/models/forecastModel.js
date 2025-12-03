@@ -275,8 +275,10 @@ const ForecastModel = {
     const contracts = contractsResult.rows;
 
     // Get active employees for salary projection (including worker_type for ZUS calculation)
+    // Use COALESCE to handle missing worker_type column (backwards compatible)
     const employeesResult = await pool.query(`
-      SELECT id, name, pay_type, pay_rate, pay_multiplier, worker_type
+      SELECT id, name, pay_type, pay_rate, pay_multiplier,
+             COALESCE(worker_type, 'contractor') as worker_type
       FROM employees
       WHERE is_active = true
     `);

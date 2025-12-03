@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Plus, Trash2, Edit2, DollarSign, TrendingUp, TrendingDown, CheckSquare, Square, Download, X, Filter, LogOut } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import entryService from '../services/entryService';
@@ -21,7 +22,24 @@ import { formatCurrency } from '../utils/currencyFormatter';
 
 export default function AccountingApp() {
   const { user, logout } = useAuth();
-  const [currentView, setCurrentView] = useState('dashboard'); // 'dashboard', 'forecast', 'income', 'expenses', 'salaries', 'employees', 'contracts', 'projects', 'transaction-review'
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // Derive currentView from URL path
+  const pathToView = {
+    '/': 'dashboard',
+    '/dashboard': 'dashboard',
+    '/forecast': 'forecast',
+    '/income': 'income',
+    '/expenses': 'expenses',
+    '/salaries': 'salaries',
+    '/payroll': 'payroll',
+    '/contracts': 'contracts',
+    '/employees': 'employees',
+    '/projects': 'projects',
+    '/review': 'transaction-review'
+  };
+  const currentView = pathToView[location.pathname] || 'dashboard';
   const [entries, setEntries] = useState([]);
   const [totals, setTotals] = useState({
     total_income: '0',
@@ -462,7 +480,7 @@ export default function AccountingApp() {
           {/* Navigation Tabs */}
           <div className="flex gap-2 border-b border-gray-200">
             <button
-              onClick={() => setCurrentView('dashboard')}
+              onClick={() => navigate('/')}
               className={`px-4 py-2 font-medium transition ${
                 currentView === 'dashboard'
                   ? 'text-blue-600 border-b-2 border-blue-600'
@@ -472,7 +490,17 @@ export default function AccountingApp() {
               Dashboard
             </button>
             <button
-              onClick={() => setCurrentView('income')}
+              onClick={() => navigate('/forecast')}
+              className={`px-4 py-2 font-medium transition ${
+                currentView === 'forecast'
+                  ? 'text-blue-600 border-b-2 border-blue-600'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Forecast
+            </button>
+            <button
+              onClick={() => navigate('/income')}
               className={`px-4 py-2 font-medium transition ${
                 currentView === 'income'
                   ? 'text-blue-600 border-b-2 border-blue-600'
@@ -482,7 +510,7 @@ export default function AccountingApp() {
               Income
             </button>
             <button
-              onClick={() => setCurrentView('expenses')}
+              onClick={() => navigate('/expenses')}
               className={`px-4 py-2 font-medium transition ${
                 currentView === 'expenses'
                   ? 'text-blue-600 border-b-2 border-blue-600'
@@ -492,7 +520,7 @@ export default function AccountingApp() {
               Expenses
             </button>
             <button
-              onClick={() => setCurrentView('salaries')}
+              onClick={() => navigate('/salaries')}
               className={`px-4 py-2 font-medium transition ${
                 currentView === 'salaries'
                   ? 'text-blue-600 border-b-2 border-blue-600'
@@ -502,7 +530,7 @@ export default function AccountingApp() {
               Salaries
             </button>
             <button
-              onClick={() => setCurrentView('payroll')}
+              onClick={() => navigate('/payroll')}
               className={`px-4 py-2 font-medium transition ${
                 currentView === 'payroll'
                   ? 'text-blue-600 border-b-2 border-blue-600'
@@ -512,7 +540,7 @@ export default function AccountingApp() {
               Payroll
             </button>
             <button
-              onClick={() => setCurrentView('contracts')}
+              onClick={() => navigate('/contracts')}
               className={`px-4 py-2 font-medium transition ${
                 currentView === 'contracts'
                   ? 'text-blue-600 border-b-2 border-blue-600'
@@ -522,7 +550,7 @@ export default function AccountingApp() {
               Contracts
             </button>
             <button
-              onClick={() => setCurrentView('employees')}
+              onClick={() => navigate('/employees')}
               className={`px-4 py-2 font-medium transition ${
                 currentView === 'employees'
                   ? 'text-blue-600 border-b-2 border-blue-600'
@@ -532,7 +560,7 @@ export default function AccountingApp() {
               Employees
             </button>
             <button
-              onClick={() => setCurrentView('projects')}
+              onClick={() => navigate('/projects')}
               className={`px-4 py-2 font-medium transition ${
                 currentView === 'projects'
                   ? 'text-blue-600 border-b-2 border-blue-600'
@@ -542,14 +570,14 @@ export default function AccountingApp() {
               Projects
             </button>
             <button
-              onClick={() => setCurrentView('transaction-review')}
+              onClick={() => navigate('/review')}
               className={`px-4 py-2 font-medium transition ${
                 currentView === 'transaction-review'
                   ? 'text-blue-600 border-b-2 border-blue-600'
                   : 'text-gray-600 hover:text-gray-900'
               }`}
             >
-              Review Transactions
+              Review
             </button>
           </div>
 
@@ -812,7 +840,7 @@ export default function AccountingApp() {
 
         {/* Dashboard View */}
         {currentView === 'dashboard' && (
-          <DashboardView onNavigateToForecast={() => setCurrentView('forecast')} />
+          <DashboardView onNavigateToForecast={() => navigate('/forecast')} />
         )}
 
         {/* Forecast View */}
