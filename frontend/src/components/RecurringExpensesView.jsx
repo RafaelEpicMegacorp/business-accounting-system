@@ -1,14 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import {
   RefreshCw, Plus, Check, X, Edit2, Trash2, Sparkles, DollarSign,
-  AlertCircle, ChevronDown, ChevronUp, Save, Cpu
+  AlertCircle, ChevronDown, ChevronUp, Save, Cpu, TrendingUp, TrendingDown,
+  Minus, Eye, Calendar
 } from 'lucide-react';
 import forecastService from '../services/forecastService';
 import settingsService from '../services/settingsService';
+import classificationService from '../services/classificationService';
+import ExpenseClassificationModal from './ExpenseClassificationModal';
 
 function RecurringExpensesView() {
   const [suggestions, setSuggestions] = useState([]);
   const [savedPatterns, setSavedPatterns] = useState([]);
+  const [aiSuggestions, setAiSuggestions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showSuggestions, setShowSuggestions] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -17,6 +21,9 @@ function RecurringExpensesView() {
   const [analyzing, setAnalyzing] = useState(false);
   const [llmSuggestions, setLlmSuggestions] = useState([]);
   const [aiError, setAiError] = useState(null);
+  const [selectedSuggestion, setSelectedSuggestion] = useState(null);
+  const [forecast, setForecast] = useState(null);
+  const [selectedForBulk, setSelectedForBulk] = useState([]);
 
   // Form state for adding/editing
   const [formData, setFormData] = useState({
@@ -34,12 +41,14 @@ function RecurringExpensesView() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [recurringData, patternsData] = await Promise.all([
+      const [recurringData, patternsData, pendingSuggestions] = await Promise.all([
         forecastService.getRecurringExpenses(),
-        forecastService.getSavedPatterns()
+        forecastService.getSavedPatterns(),
+        classificationService.getPendingSuggestions().catch(() => ({ data: [] }))
       ]);
       setSuggestions(recurringData.patterns || []);
       setSavedPatterns(patternsData || []);
+      setAiSuggestions(pendingSuggestions.data || []);
     } catch (error) {
       console.error('Failed to load recurring expenses:', error);
     } finally {
@@ -55,6 +64,11 @@ function RecurringExpensesView() {
 
       if (response.success) {
         setLlmSuggestions(response.data.suggestions || []);
+        setForecast(response.data.forecast || null);
+
+        // Reload to get pending suggestions from DB
+        await loadData();
+
         if (response.data.suggestions?.length === 0) {
           setAiError('No recurring patterns detected in your expense history.');
         }
@@ -98,6 +112,84 @@ function RecurringExpensesView() {
     }
   };
 
+  const getTrendIcon = (trend) => {
+    switch (trend) {
+      case 'increasing':
+        return <TrendingUp className="w-4 h-4 text-red-500" title="Increasing" />;
+      case 'decreasing':
+        return <TrendingDown className="w-4 h-4 text-green-500" title="Decreasing" />;
+      default:
+        return <Minus className="w-4 h-4 text-gray-400" title="Stable" />;
+    }
+  };
+
+  const getConfidenceBadge = (score) => {
+    const pct = Math.round(score * 100);
+    if (pct >= 80) return { color: 'bg-green-100 text-green-700', label: `${pct}%` };
+    if (pct >= 60) return { color: 'bg-yellow-100 text-yellow-700', label: `${pct}%` };
+    return { color: 'bg-orange-100 text-orange-700', label: `${pct}%` };
+  };
+
+  const handleAcceptSuggestion = async (id, modifications) => {
+    try {
+      await classificationService.acceptSuggestion(id, modifications);
+      setSelectedSuggestion(null);
+      await loadData();
+    } catch (error) {
+      console.error('Failed to accept suggestion:', error);
+      alert('Failed to accept suggestion. Please try again.');
+    }
+  };
+
+  const handleRejectSuggestion = async (id, reason) => {
+    try {
+      await classificationService.rejectSuggestion(id, reason);
+      setSelectedSuggestion(null);
+      await loadData();
+    } catch (error) {
+      console.error('Failed to reject suggestion:', error);
+      alert('Failed to reject suggestion. Please try again.');
+    }
+  };
+
+  const handleBulkAccept = async () => {
+    if (selectedForBulk.length === 0) return;
+    try {
+      await classificationService.bulkAcceptSuggestions(selectedForBulk);
+      setSelectedForBulk([]);
+      await loadData();
+    } catch (error) {
+      console.error('Failed to bulk accept:', error);
+      alert('Failed to accept suggestions. Please try again.');
+    }
+  };
+
+  const handleBulkReject = async () => {
+    if (selectedForBulk.length === 0) return;
+    try {
+      await classificationService.bulkRejectSuggestions(selectedForBulk);
+      setSelectedForBulk([]);
+      await loadData();
+    } catch (error) {
+      console.error('Failed to bulk reject:', error);
+      alert('Failed to reject suggestions. Please try again.');
+    }
+  };
+
+  const toggleBulkSelect = (id) => {
+    setSelectedForBulk(prev =>
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    );
+  };
+
+  const selectAllSuggestions = () => {
+    if (selectedForBulk.length === aiSuggestions.length) {
+      setSelectedForBulk([]);
+    } else {
+      setSelectedForBulk(aiSuggestions.map(s => s.id));
+    }
+  };
+
   const handleConfirmSuggestion = async (pattern) => {
     try {
       await forecastService.savePattern({
@@ -105,7 +197,7 @@ function RecurringExpensesView() {
         category: pattern.category,
         typical_amount: pattern.typical_amount,
         currency: pattern.currency || 'USD',
-        frequency: pattern.detected_frequency,
+        frequency: pattern.detected_frequency || pattern.frequency,
         confidence_score: pattern.confidence_score
       });
       await loadData();
@@ -199,7 +291,7 @@ function RecurringExpensesView() {
   );
 
   // Combined count for display
-  const totalSuggestions = filteredSuggestions.length + filteredLlmSuggestions.length;
+  const totalSuggestions = aiSuggestions.length + filteredSuggestions.length + filteredLlmSuggestions.length;
 
   // Calculate totals
   const monthlyTotal = savedPatterns.reduce((sum, p) =>
@@ -226,14 +318,14 @@ function RecurringExpensesView() {
             <RefreshCw className="text-purple-600" size={28} />
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Recurring Expenses</h1>
-              <p className="text-sm text-gray-500">Manage your recurring monthly expenses for accurate forecasting</p>
+              <p className="text-sm text-gray-500">AI-powered pattern detection and forecasting</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
             <button
               onClick={handleAnalyzeWithAI}
               disabled={analyzing}
-              className="flex items-center gap-2 bg-amber-500 text-white px-4 py-2 rounded-lg hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-4 py-2 rounded-lg hover:from-purple-700 hover:to-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
             >
               {analyzing ? (
                 <RefreshCw size={20} className="animate-spin" />
@@ -254,7 +346,7 @@ function RecurringExpensesView() {
                 });
                 setShowAddModal(true);
               }}
-              className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700"
+              className="flex items-center gap-2 bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700"
             >
               <Plus size={20} />
               Add Manual
@@ -264,7 +356,7 @@ function RecurringExpensesView() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-lg shadow-lg p-5">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-sm font-medium opacity-90">Monthly Total</h3>
@@ -285,12 +377,25 @@ function RecurringExpensesView() {
 
         <div className="bg-gradient-to-br from-amber-500 to-amber-600 text-white rounded-lg shadow-lg p-5">
           <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm font-medium opacity-90">AI Suggestions</h3>
+            <h3 className="text-sm font-medium opacity-90">Pending Review</h3>
             <Sparkles size={20} className="opacity-80" />
           </div>
-          <p className="text-2xl font-bold">{totalSuggestions}</p>
-          <p className="text-xs opacity-80 mt-1">Detected patterns to review</p>
+          <p className="text-2xl font-bold">{aiSuggestions.length}</p>
+          <p className="text-xs opacity-80 mt-1">AI suggestions to review</p>
         </div>
+
+        {forecast && (
+          <div className="bg-gradient-to-br from-green-500 to-green-600 text-white rounded-lg shadow-lg p-5">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-medium opacity-90">Next Month Forecast</h3>
+              <Calendar size={20} className="opacity-80" />
+            </div>
+            <p className="text-2xl font-bold">${formatCurrency(forecast.expected_total)}</p>
+            <p className="text-xs opacity-80 mt-1">
+              {Math.round((forecast.confidence || 0) * 100)}% confidence
+            </p>
+          </div>
+        )}
       </div>
 
       {/* AI Analysis Error */}
@@ -310,84 +415,156 @@ function RecurringExpensesView() {
         </div>
       )}
 
-      {/* LLM AI Suggestions Section */}
-      {filteredLlmSuggestions.length > 0 && (
+      {/* AI Suggestions from Database (New System) */}
+      {aiSuggestions.length > 0 && (
         <div className="bg-gradient-to-r from-purple-50 to-indigo-50 rounded-lg shadow-lg p-6 border border-purple-200">
-          <div className="flex items-center gap-2 mb-4">
-            <Cpu className="text-purple-600" size={24} />
-            <h2 className="text-xl font-bold text-gray-900">OpenAI Suggestions</h2>
-            <span className="px-2 py-1 bg-purple-100 text-purple-800 text-xs font-medium rounded">
-              {filteredLlmSuggestions.length} patterns detected
-            </span>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Cpu className="text-purple-600" size={24} />
+              <h2 className="text-xl font-bold text-gray-900">AI Suggestions</h2>
+              <span className="px-2 py-1 bg-purple-100 text-purple-800 text-xs font-medium rounded">
+                {aiSuggestions.length} patterns to review
+              </span>
+            </div>
+            {aiSuggestions.length > 0 && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={selectAllSuggestions}
+                  className="text-sm text-purple-600 hover:text-purple-800"
+                >
+                  {selectedForBulk.length === aiSuggestions.length ? 'Deselect All' : 'Select All'}
+                </button>
+                {selectedForBulk.length > 0 && (
+                  <>
+                    <button
+                      onClick={handleBulkAccept}
+                      className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700"
+                    >
+                      Accept ({selectedForBulk.length})
+                    </button>
+                    <button
+                      onClick={handleBulkReject}
+                      className="px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700"
+                    >
+                      Reject ({selectedForBulk.length})
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
           </div>
+
           <p className="text-sm text-gray-600 mb-4">
-            These patterns were detected by AI analysis of your expense history. Click "Confirm" to add them.
+            Review and confirm these AI-detected patterns. Click on a row to see details and modify before accepting.
           </p>
+
           <div className="overflow-x-auto">
             <table className="min-w-full">
               <thead className="bg-purple-100">
                 <tr>
+                  <th className="px-2 py-3 text-left text-xs font-semibold text-purple-800 uppercase w-8">
+                    <input
+                      type="checkbox"
+                      checked={selectedForBulk.length === aiSuggestions.length}
+                      onChange={selectAllSuggestions}
+                      className="rounded"
+                    />
+                  </th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-purple-800 uppercase">Description</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-purple-800 uppercase">Amount</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-purple-800 uppercase">Frequency</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-purple-800 uppercase">Confidence</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-purple-800 uppercase">Reasoning</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-purple-800 uppercase">Classification</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-purple-800 uppercase">Amount</th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-purple-800 uppercase">Frequency</th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-purple-800 uppercase">Trend</th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-purple-800 uppercase">Confidence</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-purple-800 uppercase">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-purple-200">
-                {filteredLlmSuggestions.map((pattern, index) => (
-                  <tr key={`llm-${index}`} className="hover:bg-purple-50">
-                    <td className="px-4 py-3 text-sm font-medium text-gray-900 capitalize">
-                      {pattern.description}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-900">
-                      {pattern.currency} ${formatCurrency(pattern.typical_amount)}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-700">
-                      {getFrequencyLabel(pattern.frequency)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <div className="w-16 bg-purple-200 rounded-full h-2">
-                          <div
-                            className="bg-purple-600 h-2 rounded-full"
-                            style={{ width: `${pattern.confidence_score * 100}%` }}
-                          />
+                {aiSuggestions.map((suggestion) => {
+                  const confidence = getConfidenceBadge(suggestion.confidence_score);
+                  return (
+                    <tr
+                      key={suggestion.id}
+                      className="hover:bg-purple-50 cursor-pointer"
+                      onClick={() => setSelectedSuggestion(suggestion)}
+                    >
+                      <td className="px-2 py-3" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={selectedForBulk.includes(suggestion.id)}
+                          onChange={() => toggleBulkSelect(suggestion.id)}
+                          className="rounded"
+                        />
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="font-medium text-gray-900">{suggestion.description}</div>
+                        {suggestion.occurrence_count && (
+                          <div className="text-xs text-gray-500">{suggestion.occurrence_count}x occurrences</div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-600">
+                        {suggestion.suggested_classification_parent
+                          ? `${suggestion.suggested_classification_parent} > ${suggestion.suggested_classification_name}`
+                          : suggestion.suggested_classification_name || '-'}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="font-medium text-gray-900">
+                          {suggestion.currency} {formatCurrency(suggestion.typical_amount)}
                         </div>
-                        <span className="text-xs text-gray-600">{Math.round(pattern.confidence_score * 100)}%</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-gray-600 max-w-xs truncate" title={pattern.reasoning}>
-                      {pattern.reasoning}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          onClick={() => handleConfirmSuggestion(pattern)}
-                          className="p-1.5 text-green-600 hover:bg-green-50 rounded"
-                          title="Confirm"
-                        >
-                          <Check size={18} />
-                        </button>
-                        <button
-                          onClick={() => handleDismissSuggestion(pattern.description)}
-                          className="p-1.5 text-red-600 hover:bg-red-50 rounded"
-                          title="Dismiss"
-                        >
-                          <X size={18} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                        {suggestion.amount_variance > 0 && (
+                          <div className="text-xs text-gray-500">
+                            ±{formatCurrency(suggestion.amount_variance)}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded">
+                          {getFrequencyLabel(suggestion.frequency)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        {getTrendIcon(suggestion.trend)}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={`px-2 py-1 text-xs font-medium rounded ${confidence.color}`}>
+                          {confidence.label}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => setSelectedSuggestion(suggestion)}
+                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"
+                            title="Review"
+                          >
+                            <Eye size={16} />
+                          </button>
+                          <button
+                            onClick={() => handleAcceptSuggestion(suggestion.id, null)}
+                            className="p-1.5 text-green-600 hover:bg-green-50 rounded"
+                            title="Accept"
+                          >
+                            <Check size={16} />
+                          </button>
+                          <button
+                            onClick={() => handleRejectSuggestion(suggestion.id, null)}
+                            className="p-1.5 text-red-600 hover:bg-red-50 rounded"
+                            title="Reject"
+                          >
+                            <X size={16} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         </div>
       )}
 
-      {/* SQL AI Suggestions Section */}
+      {/* SQL Pattern Suggestions (Legacy) */}
       {filteredSuggestions.length > 0 && (
         <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-lg shadow-lg p-6 border border-amber-200">
           <div
@@ -396,9 +573,9 @@ function RecurringExpensesView() {
           >
             <div className="flex items-center gap-2">
               <Sparkles className="text-amber-600" size={24} />
-              <h2 className="text-xl font-bold text-gray-900">AI Suggestions</h2>
+              <h2 className="text-xl font-bold text-gray-900">Pattern Suggestions</h2>
               <span className="px-2 py-1 bg-amber-100 text-amber-800 text-xs font-medium rounded">
-                {filteredSuggestions.length} patterns detected
+                {filteredSuggestions.length} detected
               </span>
             </div>
             {showSuggestions ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
@@ -406,9 +583,6 @@ function RecurringExpensesView() {
 
           {showSuggestions && (
             <div className="mt-4">
-              <p className="text-sm text-gray-600 mb-4">
-                These patterns were detected from your expense history. Click "Confirm" to add them to your recurring expenses.
-              </p>
               <div className="overflow-x-auto">
                 <table className="min-w-full">
                   <thead className="bg-amber-100">
@@ -570,10 +744,20 @@ function RecurringExpensesView() {
           <div className="text-center py-8 text-gray-500">
             <AlertCircle size={48} className="mx-auto mb-4 text-gray-300" />
             <p>No saved recurring expenses yet.</p>
-            <p className="text-sm mt-2">Confirm AI suggestions above or add expenses manually.</p>
+            <p className="text-sm mt-2">Click "Analyze with AI" to detect patterns or add expenses manually.</p>
           </div>
         )}
       </div>
+
+      {/* Suggestion Review Modal */}
+      {selectedSuggestion && (
+        <ExpenseClassificationModal
+          suggestion={selectedSuggestion}
+          onClose={() => setSelectedSuggestion(null)}
+          onAccept={handleAcceptSuggestion}
+          onReject={handleRejectSuggestion}
+        />
+      )}
 
       {/* Add/Edit Modal */}
       {showAddModal && (

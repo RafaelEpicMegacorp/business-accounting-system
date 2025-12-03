@@ -17,6 +17,7 @@ const wiseDebugRoutes = require('./routes/wiseDebug');
 const wiseTransactionReviewRoutes = require('./routes/wiseTransactionReview');
 const wiseSyncRoutes = require('./routes/wiseSync_new');
 const settingsRoutes = require('./routes/settingsRoutes');
+const classificationRoutes = require('./routes/classificationRoutes');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 
 const app = express();
@@ -61,6 +62,7 @@ app.use('/api/forecast', forecastRoutes);
 app.use('/api/wise-test', wiseTestRoutes); // Wise API testing endpoints
 app.use('/api/wise/debug', wiseDebugRoutes); // Wise profile debugging endpoints
 app.use('/api/settings', settingsRoutes); // App settings and OpenAI configuration
+app.use('/api/classifications', classificationRoutes); // Expense classifications and AI suggestions
 
 // Health check
 app.get('/health', (req, res) => {

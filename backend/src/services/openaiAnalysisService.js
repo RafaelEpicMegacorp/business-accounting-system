@@ -1,13 +1,21 @@
 const OpenAI = require('openai');
 const pool = require('../config/database');
 const SettingsModel = require('../models/settingsModel');
+const ClassificationModel = require('../models/classificationModel');
+const SuggestionModel = require('../models/suggestionModel');
 const crypto = require('crypto');
+const { v4: uuidv4 } = require('uuid');
+
+// Confidence threshold - lower to capture more suggestions
+const MIN_CONFIDENCE = 0.40;
 
 const OpenAIAnalysisService = {
   /**
-   * Analyze expenses using OpenAI to detect recurring patterns
+   * Enhanced expense analysis with month-by-month breakdown
    */
-  async analyzeExpenses() {
+  async analyzeExpenses(options = {}) {
+    const { forceRefresh = false, saveToDb = true } = options;
+
     // Get OpenAI configuration
     const config = await SettingsModel.getOpenAIConfig();
 
@@ -33,26 +41,38 @@ const OpenAIAnalysisService = {
     // Generate cache key based on expense data hash
     const cacheKey = this.generateCacheKey(expenses);
 
-    // Check cache first
-    const cachedResult = await SettingsModel.getCachedResult(cacheKey);
-    if (cachedResult) {
-      return {
-        success: true,
-        suggestions: cachedResult,
-        fromCache: true
-      };
+    // Check cache first (unless force refresh)
+    if (!forceRefresh) {
+      const cachedResult = await SettingsModel.getCachedResult(cacheKey);
+      if (cachedResult) {
+        return {
+          success: true,
+          suggestions: cachedResult.patterns || cachedResult,
+          forecast: cachedResult.forecast || null,
+          monthlySummary: cachedResult.monthly_summary || null,
+          fromCache: true
+        };
+      }
     }
 
     // Call OpenAI for analysis
     try {
-      const suggestions = await this.callOpenAI(expenses, config);
+      const result = await this.callEnhancedOpenAI(expenses, config);
 
       // Cache the result
-      await SettingsModel.setCachedResult(cacheKey, suggestions, config.cacheHours);
+      await SettingsModel.setCachedResult(cacheKey, result, config.cacheHours);
+
+      // Save suggestions to database if requested
+      if (saveToDb && result.patterns && result.patterns.length > 0) {
+        await this.saveSuggestions(result.patterns);
+      }
 
       return {
         success: true,
-        suggestions,
+        suggestions: result.patterns || [],
+        forecast: result.next_month_forecast || null,
+        monthlySummary: result.monthly_summary || null,
+        anomalies: result.anomalies || [],
         fromCache: false
       };
     } catch (error) {
@@ -98,50 +118,190 @@ const OpenAIAnalysisService = {
   },
 
   /**
-   * Call OpenAI API for expense analysis
+   * Organize expenses by month for AI analysis
    */
-  async callOpenAI(expenses, config) {
+  organizeByMonth(expenses) {
+    const monthlyData = {};
+
+    expenses.forEach(e => {
+      const monthKey = e.entry_date.toISOString().substring(0, 7); // YYYY-MM
+      if (!monthlyData[monthKey]) {
+        monthlyData[monthKey] = {
+          expenses: [],
+          total: 0,
+          count: 0
+        };
+      }
+      monthlyData[monthKey].expenses.push({
+        id: e.id,
+        description: e.description,
+        amount: parseFloat(e.amount),
+        category: e.category,
+        date: e.entry_date,
+        currency: e.currency
+      });
+      monthlyData[monthKey].total += parseFloat(e.amount);
+      monthlyData[monthKey].count++;
+    });
+
+    return monthlyData;
+  },
+
+  /**
+   * Format monthly data for prompt
+   */
+  formatMonthlyDataForPrompt(monthlyData) {
+    let formatted = '';
+
+    // Sort months chronologically
+    const sortedMonths = Object.keys(monthlyData).sort();
+
+    sortedMonths.forEach(month => {
+      const data = monthlyData[month];
+      formatted += `\n### ${month} (${data.count} expenses, total: $${data.total.toFixed(2)})\n`;
+
+      // Group by vendor within month
+      const byVendor = {};
+      data.expenses.forEach(e => {
+        const key = e.description.toLowerCase().trim();
+        if (!byVendor[key]) {
+          byVendor[key] = {
+            description: e.description,
+            items: [],
+            total: 0
+          };
+        }
+        byVendor[key].items.push(e);
+        byVendor[key].total += e.amount;
+      });
+
+      // Sort by total amount
+      const sortedVendors = Object.values(byVendor)
+        .sort((a, b) => b.total - a.total)
+        .slice(0, 20); // Limit per month
+
+      sortedVendors.forEach(vendor => {
+        formatted += `- ${vendor.description}: ${vendor.items.length}x, $${vendor.total.toFixed(2)}\n`;
+      });
+    });
+
+    return formatted;
+  },
+
+  /**
+   * Get classification taxonomy for prompt
+   */
+  async getClassificationTaxonomy() {
+    const hierarchy = await ClassificationModel.getHierarchy();
+
+    let taxonomy = '';
+    hierarchy.forEach(parent => {
+      taxonomy += `- ${parent.name}\n`;
+      if (parent.children && parent.children.length > 0) {
+        parent.children.forEach(child => {
+          taxonomy += `  - ${parent.name} > ${child.name}\n`;
+        });
+      }
+    });
+
+    return taxonomy;
+  },
+
+  /**
+   * Enhanced OpenAI API call with month-by-month analysis
+   */
+  async callEnhancedOpenAI(expenses, config) {
     const openai = new OpenAI({
       apiKey: config.apiKey
     });
 
-    // Prepare expense summary for the prompt
-    const expenseSummary = this.prepareExpenseSummary(expenses);
+    // Organize data by month
+    const monthlyData = this.organizeByMonth(expenses);
+    const formattedMonthlyData = this.formatMonthlyDataForPrompt(monthlyData);
 
-    const prompt = `You are a financial analyst AI. Analyze the following business expenses and identify recurring expense patterns.
+    // Get classification taxonomy
+    const taxonomy = await this.getClassificationTaxonomy();
 
-## Expense Data (Last 12 months)
-${expenseSummary}
+    // Calculate next month for forecasting
+    const now = new Date();
+    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const nextMonthStr = nextMonth.toISOString().substring(0, 7);
 
-## Task
-Identify expenses that appear to be recurring (monthly, weekly, quarterly, or yearly). For each pattern found:
-1. Identify the vendor/description
-2. Determine the typical amount
-3. Estimate the frequency (weekly, monthly, quarterly, yearly)
-4. Calculate confidence score (0.5 to 1.0)
-5. Provide brief reasoning
+    const prompt = `You are a financial analyst AI specializing in business expense pattern detection.
+Your task is to analyze expense data organized by month and identify ALL potential recurring patterns.
 
-## Response Format
-Respond with a JSON array of recurring expense patterns. Each pattern should have:
-- description: string (vendor/expense name)
-- category: string (expense category)
-- typical_amount: number (average amount)
-- currency: string (USD, EUR, PLN, etc.)
-- frequency: string (weekly, monthly, quarterly, yearly)
-- confidence_score: number (0.5 to 1.0)
-- reasoning: string (brief explanation of why this is recurring)
-- occurrence_count: number (how many times it appeared)
+## Your Analysis Goals
+1. **Detect ALL recurring patterns** - Be liberal in detection. Include anything that appears 2+ times.
+2. **Classify each expense** - Assign to the most appropriate category from the taxonomy below.
+3. **Detect trends** - Is this expense increasing, decreasing, or stable over time?
+4. **Forecast next occurrence** - When and how much should this expense be next?
 
-Only include patterns with confidence >= 0.6. Return empty array if no clear patterns found.
+## Important Considerations
+- **Variable amounts are OK**: Utility bills vary month to month but are still recurring.
+- **Timing variations are OK**: An expense on the 1st one month and 5th the next is still monthly.
+- **Fuzzy match descriptions**: "AWS" and "Amazon Web Services" are the same vendor.
+- **Flag new patterns**: Expenses appearing only 2-3 times are "potential new recurring".
+- **Detect cancelled subscriptions**: If something stopped appearing, note it.
 
-Return ONLY the JSON array, no other text.`;
+## Classification Taxonomy
+${taxonomy}
+
+## Expense Data by Month
+${formattedMonthlyData}
+
+## Required Response Format (JSON)
+{
+  "patterns": [
+    {
+      "description": "Vendor/expense name",
+      "classification": "Parent Category > Subcategory",
+      "typical_amount": 99.99,
+      "amount_variance": 5.00,
+      "currency": "USD",
+      "frequency": "monthly",
+      "confidence_score": 0.85,
+      "trend": "stable",
+      "trend_rate": 0.05,
+      "occurrence_count": 6,
+      "last_occurrence": "2025-11-15",
+      "next_expected_date": "${nextMonthStr}-15",
+      "next_expected_amount": 99.99,
+      "reasoning": "Brief explanation of why this is recurring",
+      "status": "established"
+    }
+  ],
+  "monthly_summary": {
+    "2025-11": { "total": 1500.00, "recurring_total": 1200.00, "one_time_total": 300.00 }
+  },
+  "next_month_forecast": {
+    "month": "${nextMonthStr}",
+    "expected_total": 1450.00,
+    "confidence": 0.82,
+    "breakdown": [
+      { "description": "Netflix", "amount": 15.99, "expected_date": "${nextMonthStr}-15", "confidence": 0.95 }
+    ]
+  },
+  "anomalies": [
+    { "description": "Unusual expense", "month": "2025-11", "amount": 500.00, "reason": "Not seen before" }
+  ]
+}
+
+## Important Rules
+1. Include patterns with confidence >= ${MIN_CONFIDENCE} (we want more suggestions, users will confirm)
+2. frequency must be one of: weekly, monthly, quarterly, yearly
+3. trend must be one of: increasing, decreasing, stable
+4. status must be one of: established (6+ occurrences), new (2-5 occurrences), cancelled (missing 2+ months)
+5. Always provide next_expected_date and next_expected_amount for active patterns
+6. Return empty arrays if no patterns found (valid response)
+
+Return ONLY valid JSON, no markdown or explanation outside the JSON.`;
 
     const response = await openai.chat.completions.create({
       model: config.model,
       messages: [
         {
           role: 'system',
-          content: 'You are a financial analyst AI that identifies recurring expense patterns. Always respond with valid JSON arrays only.'
+          content: 'You are a financial analyst AI that identifies recurring expense patterns and forecasts future expenses. Always respond with valid JSON only, no markdown code blocks.'
         },
         {
           role: 'user',
@@ -149,7 +309,7 @@ Return ONLY the JSON array, no other text.`;
         }
       ],
       temperature: 0.3,
-      max_tokens: 2000,
+      max_tokens: 4000,
       response_format: { type: 'json_object' }
     });
 
@@ -162,21 +322,17 @@ Return ONLY the JSON array, no other text.`;
     // Parse the response
     try {
       const parsed = JSON.parse(content);
-      // Handle both direct array and object with patterns array
-      const patterns = Array.isArray(parsed) ? parsed : (parsed.patterns || parsed.suggestions || []);
 
       // Validate and normalize patterns
-      return patterns.map(p => ({
-        description: String(p.description || '').substring(0, 255),
-        category: String(p.category || 'Other').substring(0, 100),
-        typical_amount: parseFloat(p.typical_amount) || 0,
-        currency: String(p.currency || 'USD').substring(0, 3),
-        frequency: ['weekly', 'monthly', 'quarterly', 'yearly'].includes(p.frequency) ? p.frequency : 'monthly',
-        confidence_score: Math.min(1, Math.max(0.5, parseFloat(p.confidence_score) || 0.7)),
-        reasoning: String(p.reasoning || '').substring(0, 500),
-        occurrence_count: parseInt(p.occurrence_count) || 1,
-        source: 'llm'
-      })).filter(p => p.confidence_score >= 0.6 && p.typical_amount > 0);
+      const patterns = (parsed.patterns || []).map(p => this.normalizePattern(p))
+        .filter(p => p.confidence_score >= MIN_CONFIDENCE && p.typical_amount > 0);
+
+      return {
+        patterns,
+        monthly_summary: parsed.monthly_summary || {},
+        next_month_forecast: parsed.next_month_forecast || null,
+        anomalies: parsed.anomalies || []
+      };
     } catch (parseError) {
       console.error('Failed to parse OpenAI response:', content);
       throw new Error('Failed to parse OpenAI response as JSON');
@@ -184,39 +340,230 @@ Return ONLY the JSON array, no other text.`;
   },
 
   /**
-   * Prepare expense summary for OpenAI prompt
+   * Normalize a pattern from AI response
    */
-  prepareExpenseSummary(expenses) {
-    // Group expenses by description/vendor
-    const grouped = {};
-    expenses.forEach(e => {
-      const key = e.description.toLowerCase().trim();
-      if (!grouped[key]) {
-        grouped[key] = {
-          description: e.description,
-          category: e.category,
-          currency: e.currency,
-          entries: []
-        };
+  normalizePattern(p) {
+    return {
+      description: String(p.description || '').substring(0, 255),
+      classification: String(p.classification || 'Other').substring(0, 100),
+      typical_amount: parseFloat(p.typical_amount) || 0,
+      amount_variance: parseFloat(p.amount_variance) || 0,
+      currency: String(p.currency || 'USD').substring(0, 3).toUpperCase(),
+      frequency: ['weekly', 'monthly', 'quarterly', 'yearly'].includes(p.frequency) ? p.frequency : 'monthly',
+      confidence_score: Math.min(1, Math.max(0, parseFloat(p.confidence_score) || 0.5)),
+      trend: ['increasing', 'decreasing', 'stable'].includes(p.trend) ? p.trend : 'stable',
+      trend_rate: parseFloat(p.trend_rate) || 0,
+      occurrence_count: parseInt(p.occurrence_count) || 1,
+      last_occurrence: p.last_occurrence || null,
+      next_expected_date: p.next_expected_date || null,
+      next_expected_amount: parseFloat(p.next_expected_amount) || parseFloat(p.typical_amount) || 0,
+      reasoning: String(p.reasoning || '').substring(0, 500),
+      status: ['established', 'new', 'cancelled'].includes(p.status) ? p.status : 'new',
+      source: 'llm'
+    };
+  },
+
+  /**
+   * Save suggestions to database
+   */
+  async saveSuggestions(patterns) {
+    const batchId = uuidv4();
+
+    // Clear old pending suggestions
+    await SuggestionModel.clearPending();
+
+    for (const pattern of patterns) {
+      // Find classification ID
+      let classificationId = null;
+      if (pattern.classification) {
+        const classification = await ClassificationModel.getByPath(pattern.classification);
+        if (classification) {
+          classificationId = classification.id;
+        }
       }
-      grouped[key].entries.push({
-        amount: parseFloat(e.amount),
-        date: e.entry_date
+
+      await SuggestionModel.create({
+        description: pattern.description,
+        suggested_classification_id: classificationId,
+        typical_amount: pattern.typical_amount,
+        amount_variance: pattern.amount_variance,
+        currency: pattern.currency,
+        frequency: pattern.frequency,
+        confidence_score: pattern.confidence_score,
+        trend: pattern.trend,
+        trend_rate: pattern.trend_rate,
+        reasoning: pattern.reasoning,
+        source_entry_ids: null,
+        occurrence_count: pattern.occurrence_count,
+        last_occurrence: pattern.last_occurrence,
+        next_expected_date: pattern.next_expected_date,
+        next_expected_amount: pattern.next_expected_amount,
+        analysis_batch_id: batchId
       });
+    }
+
+    return batchId;
+  },
+
+  /**
+   * Get next month forecast
+   */
+  async getNextMonthForecast() {
+    // First try to get from cached analysis
+    const config = await SettingsModel.getOpenAIConfig();
+    if (!config.isConfigured || !config.enabled) {
+      return this.getSQLBasedForecast();
+    }
+
+    // Run analysis which includes forecast
+    const result = await this.analyzeExpenses({ saveToDb: false });
+
+    if (result.success && result.forecast) {
+      return {
+        success: true,
+        forecast: result.forecast
+      };
+    }
+
+    // Fallback to SQL-based forecast
+    return this.getSQLBasedForecast();
+  },
+
+  /**
+   * SQL-based forecast (fallback when AI not available)
+   */
+  async getSQLBasedForecast() {
+    const now = new Date();
+    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const nextMonthStr = nextMonth.toISOString().substring(0, 7);
+
+    const result = await pool.query(`
+      SELECT
+        p.description,
+        p.typical_amount as amount,
+        p.frequency,
+        p.next_expected_date as expected_date,
+        p.confidence_score as confidence
+      FROM recurring_expense_patterns p
+      WHERE p.is_active = true
+        AND (p.next_expected_date IS NULL OR p.next_expected_date >= CURRENT_DATE)
+      ORDER BY p.typical_amount DESC
+    `);
+
+    const breakdown = result.rows;
+    const total = breakdown.reduce((sum, item) => sum + parseFloat(item.amount), 0);
+    const avgConfidence = breakdown.length > 0
+      ? breakdown.reduce((sum, item) => sum + parseFloat(item.confidence || 0.7), 0) / breakdown.length
+      : 0;
+
+    return {
+      success: true,
+      forecast: {
+        month: nextMonthStr,
+        expected_total: total,
+        confidence: avgConfidence,
+        breakdown
+      }
+    };
+  },
+
+  /**
+   * Compare two months
+   */
+  async compareMonths(month1, month2) {
+    const config = await SettingsModel.getOpenAIConfig();
+
+    if (!config.isConfigured || !config.enabled) {
+      return {
+        success: false,
+        error: 'OpenAI is not configured or enabled'
+      };
+    }
+
+    // Get expenses for both months
+    const expenses1 = await this.getExpensesForMonth(month1);
+    const expenses2 = await this.getExpensesForMonth(month2);
+
+    const openai = new OpenAI({ apiKey: config.apiKey });
+
+    const prompt = `Compare expenses between two months and identify changes.
+
+## Previous Month: ${month1}
+${this.formatExpensesSimple(expenses1)}
+
+## Current Month: ${month2}
+${this.formatExpensesSimple(expenses2)}
+
+## Analysis Required
+1. **New expenses**: What appeared this month that wasn't last month?
+2. **Missing expenses**: What was expected but didn't appear?
+3. **Amount changes**: Significant increases or decreases (>20%)
+4. **Category shifts**: Expenses that might need re-classification
+
+## Response Format (JSON)
+{
+  "new_expenses": [
+    { "description": "...", "amount": 99.99, "assessment": "likely recurring" }
+  ],
+  "missing_expected": [
+    { "description": "...", "expected_amount": 99.99, "last_seen": "${month1}", "concern_level": "high" }
+  ],
+  "significant_changes": [
+    { "description": "...", "previous_amount": 100, "current_amount": 150, "change_percent": 50 }
+  ],
+  "summary": {
+    "total_change": 250.00,
+    "change_percent": 15.5,
+    "assessment": "Brief assessment"
+  }
+}`;
+
+    const response = await openai.chat.completions.create({
+      model: config.model,
+      messages: [
+        { role: 'system', content: 'You are a financial analyst. Respond with valid JSON only.' },
+        { role: 'user', content: prompt }
+      ],
+      temperature: 0.3,
+      max_tokens: 2000,
+      response_format: { type: 'json_object' }
     });
 
-    // Format summary
-    const lines = Object.values(grouped)
-      .sort((a, b) => b.entries.length - a.entries.length)
-      .slice(0, 100) // Limit to top 100 vendors
-      .map(g => {
-        const amounts = g.entries.map(e => e.amount);
-        const avg = amounts.reduce((a, b) => a + b, 0) / amounts.length;
-        const dates = g.entries.map(e => new Date(e.date).toISOString().split('T')[0]);
-        return `- ${g.description} (${g.category}): ${g.entries.length}x, avg ${g.currency} ${avg.toFixed(2)}, dates: ${dates.slice(0, 5).join(', ')}${dates.length > 5 ? '...' : ''}`;
-      });
+    const parsed = JSON.parse(response.choices[0]?.message?.content || '{}');
 
-    return lines.join('\n');
+    return {
+      success: true,
+      comparison: parsed
+    };
+  },
+
+  /**
+   * Get expenses for a specific month
+   */
+  async getExpensesForMonth(month) {
+    const result = await pool.query(`
+      SELECT description, category, total as amount, currency, entry_date
+      FROM entries
+      WHERE type = 'expense'
+        AND to_char(entry_date, 'YYYY-MM') = $1
+        AND category NOT IN ('salary', 'Employee')
+      ORDER BY total DESC
+    `, [month]);
+    return result.rows;
+  },
+
+  /**
+   * Format expenses simply for comparison prompt
+   */
+  formatExpensesSimple(expenses) {
+    if (!expenses || expenses.length === 0) return 'No expenses';
+
+    const total = expenses.reduce((sum, e) => sum + parseFloat(e.amount), 0);
+    const lines = expenses.map(e =>
+      `- ${e.description}: $${parseFloat(e.amount).toFixed(2)}`
+    );
+
+    return `Total: $${total.toFixed(2)}\n${lines.join('\n')}`;
   },
 
   /**
